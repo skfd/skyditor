@@ -162,10 +162,10 @@ export class World {
     });
     this.index.load(this.atoms.map((a) => ({ ...a.bbox, atom: a })));
     this.totalLand = this.atoms.reduce((s, a) => s + a.area, 0);
-    // SNAP-109
+    // SNAP-109; BLD-006: the footprint only, never the look.
     this.buildingIndex.load(
-      features.buildings.map((r) => {
-        const shape = union([floatRing(r)]);
+      features.buildings.map((b) => {
+        const shape = union([floatRing(b.ring)]);
         return { ...bbox(shape), shape, area: area(shape) };
       }),
     );

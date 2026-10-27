@@ -1,7 +1,7 @@
 // Turns raw OSM data into the features the lattice and the importer need (LOAD-005/006, LAT-001..004).
 import { type BBox, type Ring, type Shape, area as shapeArea, toI, union } from "../geo/clip";
 import { Projection, type LonLatBounds } from "../geo/project";
-import { type AreaClass, classifyArea } from "../model/kinds";
+import { type AreaClass, type BuildingLook, buildingLook, classifyArea } from "../model/kinds";
 import { TUNE } from "../tuning";
 import ClipperLib from "clipper-lib";
 import { dataBounds, type OsmData, type OsmWay, type Tags } from "./parse";
@@ -18,6 +18,10 @@ export interface Barrier {
   line: Ring;
   halfWidth: number; // m
 }
+export interface BuildingFeature {
+  ring: Float32Array; // closed ring, x,y metres
+  look: BuildingLook | null; // BLD-001
+}
 export interface MinorLine {
   pts: Float32Array; // x,y metres
   major: boolean;
@@ -29,7 +33,7 @@ export interface Features {
   barriers: Barrier[];
   streetAreas: Shape[];
   areas: AreaFeature[];
-  buildings: Float32Array[]; // closed rings, x,y metres
+  buildings: BuildingFeature[];
   minorLines: MinorLine[];
   report: { skippedRings: number; ways: number; relations: number };
 }
@@ -137,7 +141,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     const pts = coords(w);
     if (!pts) continue;
     if (t.building && t.building !== "no") {
-      f.buildings.push(new Float32Array(pts.flat()));
+      f.buildings.push({ ring: new Float32Array(pts.flat()), look: buildingLook(t) });
       continue;
     }
     addArea(`way/${w.id}`, t, [toRing(pts)]);

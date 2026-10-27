@@ -247,6 +247,54 @@ the user has changed it.
 **IMP-009** Where the "original outlines" view is on (key `O`), the editor shall draw the unmodified OSM
 outlines of paintable features on top of the map.
 
+### Buildings
+
+**BLD-001** The editor shall give each loaded building one *look*: a paintable kind (§5), unspecified
+residential, civic, or unknown, from the first of BLD-002, BLD-004 and BLD-005 that applies, then adjusted
+by BLD-003.
+  Why: a building says what the land around it should be. When buildings and land share colours, the map
+  reads without a legend, and a building that disagrees with its land shows where landuse is wrong or
+  missing.
+
+**BLD-002** The editor shall map `building=*` values to looks as follows:
+
+| Look | `building=*` |
+|------|--------------|
+| R1 | farm, farmhouse, cabin, static_caravan |
+| R2 | house, detached, bungalow |
+| R3 | semidetached_house |
+| R4 | terrace |
+| R5 | apartments, dormitory |
+| Unspecified residential | residential |
+| Commercial | commercial, office, hotel |
+| Retail | retail, supermarket, kiosk |
+| Industrial | industrial, warehouse, manufacture, factory, hangar |
+| Civic | school, university, college, kindergarten, hospital, church, cathedral, chapel, mosque, synagogue, temple, public, government, civic, fire_station, train_station |
+
+  Why: an explicit building type wins over everything else. A block of flats with shops downstairs is
+  still residential land.
+
+**BLD-003** When a building has the look R5 or unspecified residential and at least TUNE-HIGHRISE-LEVELS
+levels, the editor shall give it the look R6. Its levels are `building:levels`, or else `height` in metres
+÷ TUNE-LEVEL-HEIGHT.
+  Why: R6 has no tag of its own (Q-002); the number of floors is the only honest signal. Other looks keep
+  their type whatever the height: a 12-storey "house" is a tagging mistake, not a high-rise.
+
+**BLD-004** When a building's `building=*` value is not listed in BLD-002, the editor shall take its look
+from its other tags, in this order: `shop=*` → retail; `office=*` → commercial; `amenity` = school,
+university, college, kindergarten, hospital, place_of_worship, townhall, library, fire_station, police →
+civic.
+
+**BLD-005** The editor shall give every other building the look unknown, including `building` = yes,
+roof, garage, garages, shed, carport, greenhouse, construction and ruins, and shall not guess a look from
+the landuse around the building.
+  Why: most buildings in OSM have no type. A guess from the land would only echo the land's colour back
+  and pass a guess off as data. Garages next to houses are not industrial.
+
+**BLD-006** The editor shall use building looks only for drawing (REN-009, REN-010), not for snapping,
+piece kinds or the district mix.
+  Why: looks are hints for the eye. Using them to decide anything is Q-004 and Q-005.
+
 ---
 
 ## 7. Painting — general
@@ -444,8 +492,8 @@ northern slabs.
 **REN-004** The editor shall draw a thin gap (TUNE-PIECE-GAP) between neighbouring pieces of different
 kinds within an atom.
 
-**REN-005** Where the building layer is on, the editor shall draw OSM building footprints as faint shapes
-over the landuse.
+~~**REN-005** Where the building layer is on, the editor shall draw OSM building footprints as faint shapes
+over the landuse.~~ Retired: replaced by REN-009 and REN-010.
 
 **REN-006** While a paint tool is selected and the cursor is over the map, the editor shall faintly outline
 the atoms within TUNE-HINT-RADIUS × brush radius of the cursor.
@@ -455,6 +503,15 @@ the atoms within TUNE-HINT-RADIUS × brush radius of the cursor.
 
 **REN-008** The editor shall keep 60 frames per second on the demo area on a typical laptop, and shall
 redraw only when something changed or is animating.
+
+**REN-009** Where the building layer is on, the editor shall draw each building whose look (BLD-001) is
+not unknown in its look's colour mixed TUNE-BUILDING-SHADE of the way towards the neutral building colour,
+at opacity TUNE-BUILDING-ALPHA. A look's colour is its kind's colour (§5), or the civic context colour.
+  Why: on land of its own kind a building reads as the same family, a shade darker; on the wrong land it
+  stands out.
+
+**REN-010** Where the building layer is on, the editor shall draw buildings with the look unknown as faint
+shapes in the neutral building colour.
 
 ### 14.2 Feel
 
@@ -542,6 +599,10 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-SNAP-FACTOR | 0.6 | Leftover swallow radius ÷ brush radius. |
 | TUNE-CELL-TAKE | 0.5 | Covered fraction at which a cell is taken whole. |
 | TUNE-BUILDING-MARGIN | 2.5 m | Yard kept around buildings by freeform results. |
+| TUNE-HIGHRISE-LEVELS | 9 | Levels from which a residential building looks high-rise. |
+| TUNE-LEVEL-HEIGHT | 3 m | Height of one level, for buildings with only `height`. |
+| TUNE-BUILDING-SHADE | 0.35 | How far a building's colour is mixed towards the neutral building colour. |
+| TUNE-BUILDING-ALPHA | 0.85 | Opacity of buildings with a known look. |
 | TUNE-SIMPLIFY | 0.4 m | Simplification tolerance of committed freeform shapes. |
 | TUNE-SLIVER-AREA | 40 m² | Pieces smaller than this get merged after a change. |
 | TUNE-PREVIEW-INTERVAL | 50 ms | Maximum freeform preview staleness. |
@@ -583,3 +644,11 @@ lattice stops at the kerb, which matches the common "don't glue landuse to roads
 
 **Q-004** Should painting suggest a tier from the buildings underneath (count, footprint, levels)? Good
 candidate for M1.
+
+**Q-005** Should buildings with the look unknown get an inferred look, drawn fainter than a tagged one?
+Candidate signals, strongest first: footprint shape (two buildings sharing a wall → semi-detached, a row
+of narrow buildings sharing walls → terraced, small detached footprint → house, very large plain footprint
+→ industrial or retail); then address and entrance nodes (several house numbers on one footprint, many
+`addr:unit`/`addr:flats`/`entrance=*` → apartments). Address mapping differs a lot between cities
+(on the outline, inside it, or imported points at the plot centre), and fetching tagged nodes makes area
+downloads bigger. The same inference should feed Q-004, so colours and suggestions never disagree.

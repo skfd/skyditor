@@ -116,6 +116,57 @@ export function classifyArea(tags: Tags): AreaClass | null {
   return null;
 }
 
+/** BLD-001: what a building says about its land. null = unknown. */
+export type BuildingLook = PaintKind | "RU" | "CIVIC";
+
+const BUILDING_LOOK: Record<string, BuildingLook> = {
+  // BLD-002
+  farm: "R1", farmhouse: "R1", cabin: "R1", static_caravan: "R1",
+  house: "R2", detached: "R2", bungalow: "R2",
+  semidetached_house: "R3",
+  terrace: "R4",
+  apartments: "R5", dormitory: "R5",
+  residential: "RU",
+  commercial: "COM", office: "COM", hotel: "COM",
+  retail: "RET", supermarket: "RET", kiosk: "RET",
+  industrial: "IND", warehouse: "IND", manufacture: "IND", factory: "IND", hangar: "IND",
+  school: "CIVIC", university: "CIVIC", college: "CIVIC", kindergarten: "CIVIC", hospital: "CIVIC",
+  church: "CIVIC", cathedral: "CIVIC", chapel: "CIVIC", mosque: "CIVIC", synagogue: "CIVIC", temple: "CIVIC",
+  public: "CIVIC", government: "CIVIC", civic: "CIVIC", fire_station: "CIVIC", train_station: "CIVIC",
+};
+
+const CIVIC_AMENITY = new Set([
+  // BLD-004
+  "school", "university", "college", "kindergarten", "hospital", "place_of_worship", "townhall", "library",
+  "fire_station", "police",
+]);
+
+/** BLD-003: levels from `building:levels`, else `height` in metres. */
+function levelsOf(tags: Tags): number | undefined {
+  const lv = /^\s*(\d+(?:\.\d+)?)/.exec(tags["building:levels"] ?? "");
+  if (lv) return Number(lv[1]);
+  const h = /^\s*(\d+(?:\.\d+)?)\s*(?:m)?\s*$/.exec(tags.height ?? "");
+  if (h) return Number(h[1]) / TUNE.LEVEL_HEIGHT;
+  return undefined;
+}
+
+/** BLD-001..BLD-005 */
+export function buildingLook(tags: Tags): BuildingLook | null {
+  let look: BuildingLook | null = BUILDING_LOOK[tags.building ?? ""] ?? null;
+  if (!look) {
+    // BLD-004
+    if (tags.shop) look = "RET";
+    else if (tags.office) look = "COM";
+    else if (CIVIC_AMENITY.has(tags.amenity ?? "")) look = "CIVIC";
+  }
+  // BLD-003
+  if ((look === "R5" || look === "RU") && (levelsOf(tags) ?? 0) >= TUNE.HIGHRISE_LEVELS) look = "R6";
+  return look; // BLD-005: anything else stays unknown
+}
+
+/** REN-009: base colour of a look, before shading. */
+export const lookColor = (look: BuildingLook) => (look === "CIVIC" ? CTX_COLORS.civic : KINDS[look].color);
+
 /** Human-readable OSM tags for a kind (HUD-002). */
 export const tagString = (k: Kind) =>
   Object.entries(KINDS[k].tags)

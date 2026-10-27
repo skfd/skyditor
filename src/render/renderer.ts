@@ -1,6 +1,6 @@
 // Canvas renderer (REN-001..REN-008).
 import { type Shape, offset, toI, toM } from "../geo/clip";
-import { CTX_COLORS, type Kind, KINDS } from "../model/kinds";
+import { type BuildingLook, CTX_COLORS, type Kind, KINDS, lookColor } from "../model/kinds";
 import type { Piece, World } from "../model/world";
 import type { Stroke } from "../paint/stroke";
 import type { Tool } from "../paint/snap";
@@ -8,12 +8,14 @@ import { TUNE } from "../tuning";
 import type { Anims } from "./anim";
 import type { Camera } from "./camera";
 
+const BUILDING_INK = [74, 52, 40];
+
 export const COLORS = {
   street: "#e3dccf",
   lot: "#f7f3eb",
   lotEdge: "#ebe4d7",
   water: "#93c9e8",
-  building: "rgba(74, 52, 40, 0.17)",
+  building: `rgba(${BUILDING_INK}, 0.17)`, // REN-010
   minor: "rgba(255, 255, 255, 0.75)",
   hint: "rgba(80, 64, 48, 0.55)",
   eraser: "#f4f1ea",
@@ -51,6 +53,14 @@ export function darken(hex: string, f = 0.74): string {
   return `rgb(${r},${g},${b})`;
 }
 
+/** REN-009: a look's colour, mixed TUNE-BUILDING-SHADE towards the neutral building colour. */
+export function buildingColor(look: BuildingLook): string {
+  const n = parseInt(lookColor(look).slice(1), 16);
+  const t = TUNE.BUILDING_SHADE;
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => Math.round(v * (1 - t) + BUILDING_INK[i] * t));
+  return `rgb(${r},${g},${b})`;
+}
+
 export function pathOf(shape: Shape): Path2D {
   const p = new Path2D();
   for (const ring of shape) {
@@ -79,7 +89,8 @@ export class Renderer {
   private readonly atomPaths = new Map<number, Path2D>();
   private lots!: Path2D;
   private water!: Path2D;
-  private buildings!: Path2D;
+  private buildings!: Path2D; // REN-010: unknown look
+  private lookedBuildings!: [string, Path2D][]; // REN-009: by colour
   private minorMajor!: Path2D;
   private minorPaths!: Path2D;
   private overlay!: [string, Path2D][];
@@ -103,7 +114,19 @@ export class Renderer {
     }
     this.lots = lots;
     this.water = pathOf(world.water);
-    this.buildings = pathOfFloatRings(world.features.buildings, true);
+    const unknown: Float32Array[] = [];
+    const byLook = new Map<string, Float32Array[]>();
+    for (const b of world.features.buildings) {
+      if (!b.look) {
+        unknown.push(b.ring);
+        continue;
+      }
+      const c = buildingColor(b.look);
+      if (!byLook.has(c)) byLook.set(c, []);
+      byLook.get(c)!.push(b.ring);
+    }
+    this.buildings = pathOfFloatRings(unknown, true);
+    this.lookedBuildings = [...byLook].map(([c, rings]) => [c, pathOfFloatRings(rings, true)]);
     this.minorMajor = pathOfFloatRings(world.features.minorLines.filter((l) => l.major).map((l) => l.pts), false);
     this.minorPaths = pathOfFloatRings(world.features.minorLines.filter((l) => !l.major).map((l) => l.pts), false);
     const byCtx = new Map<string, Path2D>();
@@ -217,10 +240,17 @@ export class Renderer {
     slabs.sort((a, b) => a.bbox.maxY - b.bbox.maxY);
     for (const p of slabs) this.drawSlab(p, s, now, st.anims, p === st.hover);
 
-    // REN-005
     if (st.showBuildings) {
+      // REN-010
       ctx.fillStyle = COLORS.building;
       ctx.fill(this.buildings, "nonzero");
+      // REN-009
+      ctx.globalAlpha = TUNE.BUILDING_ALPHA;
+      for (const [color, path] of this.lookedBuildings) {
+        ctx.fillStyle = color;
+        ctx.fill(path, "nonzero");
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
