@@ -54,4 +54,10 @@ tests/              vitest, synthetic map sketches (tests/helpers.ts)
 scripts/            fixture builder, traceability
 ```
 
-Map data © OpenStreetMap contributors, ODbL.
+## Licence
+
+The code is public domain: [CC0 1.0](LICENSE). Use it for anything, no credit needed.
+
+Map data is not. Everything under `public/fixtures/`, and anything the app loads from OSM, is
+© OpenStreetMap contributors and licensed under the [ODbL](https://www.openstreetmap.org/copyright).
+Bundled libraries keep their own licences: rbush (MIT), quickselect (ISC), clipper-lib (Boost).
