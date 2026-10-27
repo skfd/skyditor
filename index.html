@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skyditor</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='12' height='16' rx='2' fill='%23dc874e'/%3E%3Crect x='17' y='4' width='12' height='24' rx='2' fill='%23a2423b'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <canvas id="map"></canvas>
+
+    <header id="topbar">
+      <div class="pill brand">
+        <span class="logo" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="name">Skyditor</span>
+        <span id="place" class="place"></span>
+        <button id="btn-place" class="ghost" title="Choose another place">Change</button>
+      </div>
+      <div class="pill right">
+        <div id="mix" title="District mix"><div class="bar"></div></div>
+        <button id="btn-sound" class="icon" title="Sound (M)"></button>
+        <button id="btn-help" class="icon" title="Keys (H)">?</button>
+      </div>
+    </header>
+
+    <nav id="palette" aria-label="Tools"></nav>
+    <div id="tooltip" role="tooltip"></div>
+    <div id="toast" role="status"></div>
+    <!-- HUD-005 -->
+    <div id="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+
+    <aside id="help">
+      <h3>Paint the city</h3>
+      <p>Drag to paint. Small blocks fill up and snap in whole; big open land is painted freely and snaps to roads and neighbours. Zoom in for finer control.</p>
+      <dl>
+        <dt><kbd>1</kbd>–<kbd>6</kbd></dt><dd>Residential, rural → high-rise</dd>
+        <dt><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd></dt><dd>Commercial · Retail · Industrial</dd>
+        <dt><kbd>A</kbd> <kbd>Z</kbd></dt><dd>Density up / down</dd>
+        <dt><kbd>X</kbd></dt><dd>Eraser</dd>
+        <dt>Click</dt><dd>Fill one block</dd>
+        <dt><kbd>Alt</kbd> + click</dt><dd>Pick a colour from the map</dd>
+        <dt><kbd>[</kbd> <kbd>]</kbd> · <kbd>Shift</kbd>+wheel</dt><dd>Brush size</dd>
+        <dt>Wheel</dt><dd>Zoom</dd>
+        <dt>Right-drag · <kbd>Space</kbd>+drag · arrows</dt><dd>Pan</dd>
+        <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></dt><dd>Undo / redo</dd>
+        <dt><kbd>F</kbd></dt><dd>Fit area</dd>
+        <dt><kbd>B</kbd> · <kbd>O</kbd> · <kbd>M</kbd></dt><dd>Buildings · original outlines · sound</dd>
+      </dl>
+      <p class="muted">Nothing is saved or uploaded — this is a toy.</p>
+    </aside>
+
+    <section id="start">
+      <div class="card">
+        <button id="start-close" class="close ghost" title="Back to the map">×</button>
+        <div class="hero" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <h1>Skyditor</h1>
+        <p class="sub">Paint the city's landuse. It snaps into place.</p>
+        <button id="btn-demo" class="primary">Play the demo district</button>
+        <div class="or">or load a real place</div>
+        <form id="search">
+          <input type="search" placeholder="Search a place, or lat, lon" autocomplete="off" />
+          <button type="submit">Go</button>
+        </form>
+        <div id="sizes"><span>Area</span>
+          <button data-side="800" type="button">S · 0.8 km</button>
+          <button data-side="1200" type="button">M · 1.2 km</button>
+          <button data-side="2000" type="button">L · 2 km</button>
+        </div>
+        <ul id="results"></ul>
+        <div class="or">or drop an <code>.osm</code> / Overpass JSON file anywhere — <button id="btn-file" class="link" type="button">browse</button></div>
+        <input id="file" type="file" accept=".osm,.xml,.json" hidden />
+      </div>
+    </section>
+
+    <section id="loading">
+      <div class="card">
+        <div class="spinner" aria-hidden="true"><i></i><i></i><i></i></div>
+        <ul>
+          <li>Fetching map data</li>
+          <li>Reading</li>
+          <li>Laying out blocks</li>
+          <li>Reading landuse</li>
+        </ul>
+      </div>
+    </section>
+
+    <div id="drop">Drop to load</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

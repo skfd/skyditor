@@ -1,0 +1,48 @@
+// Mirror of REQUIREMENTS.md §16. Change the table first, then this file.
+
+export const TUNE = {
+  GEOM_SCALE: 100, // TUNE-GEOM-SCALE, integer units per metre
+  AREA_SIDE: 1200, // TUNE-AREA-SIDE, m
+  HALFWIDTH: {
+    // TUNE-HALFWIDTH, m
+    motorway: 12, trunk: 10, primary: 9, secondary: 8, tertiary: 7, unclassified: 5,
+    residential: 5, living_street: 4, pedestrian: 4, road: 5, link: 5,
+    rail: 4, light_rail: 3, narrow_gauge: 3, river: 10, canal: 8,
+  } as Record<string, number>,
+  ATOM_MIN_AREA: 150, // TUNE-ATOM-MIN-AREA, m²
+  ATOM_MIN_RADIUS: 2.5, // TUNE-ATOM-MIN-RADIUS, m
+  IMPORT_MIN_FRAGMENT: 60, // TUNE-IMPORT-MIN-FRAGMENT, m²
+  IMPORT_SNAP: 6, // TUNE-IMPORT-SNAP, m
+  BRUSH_DEFAULT: 30, // TUNE-BRUSH-DEFAULT, px
+  BRUSH_MIN: 8, // TUNE-BRUSH-MIN, px
+  BRUSH_MAX: 120, // TUNE-BRUSH-MAX, px
+  TRAIL_STEP: 0.2, // TUNE-TRAIL-STEP, × brush radius
+  UNIT_FACTOR: 14, // TUNE-UNIT-FACTOR, × brush disc area
+  UNIT_ABS_MAX: 150_000, // TUNE-UNIT-ABS-MAX, m²
+  UNIT_SAMPLES: 120, // TUNE-UNIT-SAMPLES
+  CLAIM_COVERAGE: 0.3, // TUNE-CLAIM-COVERAGE
+  SMOOTH_FACTOR: 0.35, // TUNE-SMOOTH-FACTOR
+  SNAP_FACTOR: 0.6, // TUNE-SNAP-FACTOR
+  CELL_TAKE: 0.5, // TUNE-CELL-TAKE
+  BUILDING_MARGIN: 2.5, // TUNE-BUILDING-MARGIN, m
+  SIMPLIFY: 0.4, // TUNE-SIMPLIFY, m
+  SLIVER_AREA: 40, // TUNE-SLIVER-AREA, m²
+  PREVIEW_INTERVAL: 50, // TUNE-PREVIEW-INTERVAL, ms
+  TAP_MOVE: 6, // TUNE-TAP-MOVE, px
+  TAP_TIME: 350, // TUNE-TAP-TIME, ms
+  LIFT: { R1: 1, R2: 2, R3: 3, R4: 4, R5: 6, R6: 9 } as Record<string, number>, // TUNE-LIFT, px at 1 px/m
+  LIFT_NONRES: 3, // TUNE-LIFT-NONRES, px
+  LIFT_ZOOM_CLAMP: [0.5, 1.6] as const, // TUNE-LIFT-ZOOM-CLAMP
+  PIECE_GAP: 0.6, // TUNE-PIECE-GAP, m
+  HINT_RADIUS: 3, // TUNE-HINT-RADIUS, × brush radius
+  POP_DURATION: 340, // TUNE-POP-DURATION, ms
+  POP_OVERSHOOT: 1.7, // TUNE-POP-OVERSHOOT
+  POP_FLASH: 200, // TUNE-POP-FLASH, ms
+  POP_STAGGER: 14, // TUNE-POP-STAGGER, ms per 10 m
+  REVEAL_MAX: 900, // TUNE-REVEAL-MAX, ms
+  ZOOM_MIN: 0.08, // TUNE-ZOOM-MIN, px/m
+  ZOOM_MAX: 12, // TUNE-ZOOM-MAX, px/m
+  ZOOM_HALFLIFE: 70, // TUNE-ZOOM-HALFLIFE, ms
+  PAN_HALFLIFE: 160, // TUNE-PAN-HALFLIFE, ms
+  REDUCED_MOTION: 0.3, // TUNE-REDUCED-MOTION
+};
