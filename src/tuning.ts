@@ -16,6 +16,7 @@ export const TUNE = {
   BRUSH_DEFAULT: 30, // TUNE-BRUSH-DEFAULT, px
   BRUSH_MIN: 8, // TUNE-BRUSH-MIN, px
   BRUSH_MAX: 120, // TUNE-BRUSH-MAX, px
+  BRUSH_STEP: 1.15, // TUNE-BRUSH-STEP, factor per press
   TRAIL_STEP: 0.2, // TUNE-TRAIL-STEP, × brush radius
   UNIT_FACTOR: 14, // TUNE-UNIT-FACTOR, × brush disc area
   UNIT_ABS_MAX: 150_000, // TUNE-UNIT-ABS-MAX, m²
@@ -46,6 +47,7 @@ export const TUNE = {
   REVEAL_MAX: 900, // TUNE-REVEAL-MAX, ms
   ZOOM_MIN: 0.08, // TUNE-ZOOM-MIN, px/m
   ZOOM_MAX: 12, // TUNE-ZOOM-MAX, px/m
+  ZOOM_STEP: 1.6, // TUNE-ZOOM-STEP, factor per button press
   ZOOM_HALFLIFE: 70, // TUNE-ZOOM-HALFLIFE, ms
   PAN_HALFLIFE: 160, // TUNE-PAN-HALFLIFE, ms
   REDUCED_MOTION: 0.3, // TUNE-REDUCED-MOTION

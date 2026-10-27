@@ -151,6 +151,59 @@ button.icon svg {
   width: 20px;
   height: 20px;
 }
+button.icon:disabled {
+  opacity: 0.3;
+  cursor: default;
+  background: transparent;
+}
+/* HUD-007: a layer that is off looks faded. */
+button.icon.toggle[aria-pressed="false"] {
+  opacity: 0.45;
+}
+button.icon.toggle[aria-pressed="true"] {
+  color: var(--ink);
+}
+
+/* ---------- map controls (HUD-006) ---------- */
+#controls {
+  position: fixed;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+#controls .pill {
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+}
+#controls button.icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+#controls button.icon:active:not(:disabled) {
+  transform: scale(0.92);
+}
+#brush-size {
+  --c: var(--ink-soft);
+  width: 40px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+}
+#brush-size i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--c);
+  background: color-mix(in srgb, var(--c) 25%, transparent);
+  transition: width 160ms var(--spring), height 160ms var(--spring), border-color 160ms;
+}
 
 /* HUD-003: district mix */
 #mix {
@@ -376,12 +429,12 @@ button.icon svg {
 }
 #help dl {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(110px, 1fr);
   gap: 6px 12px;
   margin: 0 0 10px;
 }
 #help dt {
-  white-space: nowrap;
+  max-width: 170px;
 }
 #help dd {
   margin: 0;

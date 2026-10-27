@@ -56,6 +56,10 @@ export class App {
   private showOriginals = false;
   private pan: { id: number; x: number; y: number; t: number; vx: number; vy: number } | null = null;
   private space = false;
+  // CAM-006: touch pointers on the map, the two-finger gesture, and PAINT-011's lock until all fingers lift.
+  private touches = new Map<number, [number, number]>();
+  private pinch: { mid: [number, number]; dist: number; t: number; vx: number; vy: number } | null = null;
+  private touchLock = false;
   private arrows = new Set<string>();
   private dirty = true;
   private lastFrame = performance.now();
@@ -65,6 +69,8 @@ export class App {
     this.hud = new Hud((id) => this.selectTool(id));
     this.hud.selectTool(this.toolId);
     this.hud.setSound(this.sound.enabled, { on: ICONS.SOUND_ON, off: ICONS.SOUND_OFF });
+    this.hud.setBrush(this.brushPx);
+    this.hud.setLayers(this.showBuildings, this.showOriginals);
     this.bindInput();
     this.bindStart();
     window.addEventListener("resize", () => this.resize());
@@ -134,6 +140,7 @@ export class App {
   private setWorld(world: World, place: string) {
     this.world = world;
     this.history = new History();
+    this.syncHistory();
     this.stroke = null;
     this.hover = null;
     if (this.renderer) this.renderer.setWorld(world);
@@ -216,6 +223,17 @@ export class App {
     document.getElementById("start-close")!.addEventListener("click", () => this.world && this.hud.showStart(false));
     document.getElementById("btn-help")!.addEventListener("click", () => this.hud.toggleHelp());
     document.getElementById("btn-sound")!.addEventListener("click", () => this.toggleSound());
+    // HUD-006 / HUD-007 (GEN-005): every key has a button.
+    const on = (id: string, f: () => void) => document.getElementById(id)!.addEventListener("click", f);
+    on("btn-undo", () => this.undo());
+    on("btn-redo", () => this.redo());
+    on("btn-zoom-in", () => this.zoomStep(1));
+    on("btn-zoom-out", () => this.zoomStep(-1));
+    on("btn-fit", () => this.fitArea());
+    on("btn-brush-up", () => this.setBrush(this.brushPx * TUNE.BRUSH_STEP));
+    on("btn-brush-down", () => this.setBrush(this.brushPx / TUNE.BRUSH_STEP));
+    on("btn-buildings", () => this.toggleBuildings());
+    on("btn-outlines", () => this.toggleOriginals());
   }
 
   // ---------- tools ----------
@@ -238,6 +256,35 @@ export class App {
 
   private setBrush(px: number) {
     this.brushPx = Math.max(TUNE.BRUSH_MIN, Math.min(TUNE.BRUSH_MAX, px)); // INP-001
+    this.hud.setBrush(this.brushPx);
+    this.dirty = true;
+  }
+
+  private toggleBuildings() {
+    this.showBuildings = !this.showBuildings;
+    store.set("buildings", this.showBuildings ? "on" : "off");
+    this.hud.setLayers(this.showBuildings, this.showOriginals);
+    this.dirty = true;
+  }
+
+  private toggleOriginals() {
+    this.showOriginals = !this.showOriginals; // IMP-009
+    this.hud.setLayers(this.showBuildings, this.showOriginals);
+    this.hud.toast(this.showOriginals ? "Showing original OSM outlines" : "Original outlines hidden");
+    this.dirty = true;
+  }
+
+  /** CAM-007 */
+  private zoomStep(dir: 1 | -1) {
+    this.camera.zoomBy(dir > 0 ? TUNE.ZOOM_STEP : 1 / TUNE.ZOOM_STEP, this.camera.width / 2, this.camera.height / 2);
+    this.dirty = true;
+  }
+
+  /** CAM-004 */
+  private fitArea() {
+    if (!this.world) return;
+    const f = this.world.features.frame;
+    this.camera.fit({ minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) }, this.anims.dur(600), performance.now());
     this.dirty = true;
   }
 
@@ -290,6 +337,11 @@ export class App {
     const [sx, sy] = this.local(e);
     this.cursor = [sx, sy];
     this.dirty = true;
+    if (e.pointerType === "touch") {
+      this.touches.set(e.pointerId, [sx, sy]);
+      if (this.touches.size >= 2) return this.startPinch();
+      if (this.touchLock) return; // PAINT-011
+    }
     if (e.button === 1 || e.button === 2 || (e.button === 0 && this.space)) {
       // CAM-002
       this.pan = { id: e.pointerId, x: sx, y: sy, t: performance.now(), vx: 0, vy: 0 };
@@ -317,6 +369,13 @@ export class App {
     const [sx, sy] = this.local(e);
     this.cursor = [sx, sy];
     this.dirty = true;
+    if (this.touches.has(e.pointerId)) {
+      this.touches.set(e.pointerId, [sx, sy]);
+      if (this.touchLock) {
+        if (this.pinch) this.movePinch();
+        return;
+      }
+    }
     if (this.pan && e.pointerId === this.pan.id) {
       const now = performance.now();
       const dt = Math.max(1, now - this.pan.t);
@@ -344,6 +403,14 @@ export class App {
   }
 
   private onUp(e: PointerEvent) {
+    if (this.touches.delete(e.pointerId) && this.touchLock) {
+      if (this.touches.size === 0) this.touchLock = false;
+      if (this.pinch) {
+        if (this.touches.size >= 2) Object.assign(this.pinch, this.pinchFrame());
+        else this.endPinch();
+      }
+      return;
+    }
     if (this.pan && e.pointerId === this.pan.id) {
       const idle = performance.now() - this.pan.t > 80;
       this.camera.release(idle ? 0 : this.pan.vx, idle ? 0 : this.pan.vy);
@@ -359,7 +426,50 @@ export class App {
     const [sx, sy] = this.local(e);
     this.handle(events, this.camera.toWorld(sx, sy));
     if (step) this.history.push(step); // PAINT-005 / PAINT-006
+    this.syncHistory();
     this.dirty = true;
+  }
+
+  /** CAM-006 / PAINT-010: a second finger turns whatever the first one started into a pan and zoom. */
+  private startPinch() {
+    if (this.stroke) {
+      const reverted = this.stroke.cancel();
+      this.stroke = null;
+      if (reverted) this.settle(reverted, "before");
+    }
+    this.pan = null;
+    this.hover = null;
+    this.touchLock = true;
+    this.pinch = { ...this.pinchFrame(), t: performance.now(), vx: 0, vy: 0 };
+    document.body.classList.add("panning");
+  }
+
+  private pinchFrame() {
+    const [[ax, ay], [bx, by]] = [...this.touches.values()];
+    return { mid: [(ax + bx) / 2, (ay + by) / 2] as [number, number], dist: Math.hypot(bx - ax, by - ay) };
+  }
+
+  private movePinch() {
+    const p = this.pinch!;
+    const { mid, dist } = this.pinchFrame();
+    const now = performance.now();
+    const dt = Math.max(1, now - p.t);
+    const dx = mid[0] - p.mid[0], dy = mid[1] - p.mid[1];
+    this.camera.panBy(dx, dy);
+    if (p.dist > 0 && dist > 0) this.camera.zoomNow(dist / p.dist, mid[0], mid[1]);
+    // Smoothed release velocity for coasting, as for a mouse pan.
+    p.vx = p.vx * 0.6 + (dx / dt) * 0.4;
+    p.vy = p.vy * 0.6 + (dy / dt) * 0.4;
+    Object.assign(p, { mid, dist, t: now });
+    this.dirty = true;
+  }
+
+  private endPinch() {
+    const p = this.pinch!;
+    const idle = performance.now() - p.t > 80;
+    this.camera.release(idle ? 0 : p.vx, idle ? 0 : p.vy);
+    this.pinch = null;
+    document.body.classList.remove("panning");
   }
 
   private onWheel(e: WheelEvent) {
@@ -411,21 +521,15 @@ export class App {
     // INP-003 and friends
     switch (k) {
       case "[":
-        return this.setBrush(this.brushPx / 1.15);
+        return this.setBrush(this.brushPx / TUNE.BRUSH_STEP);
       case "]":
-        return this.setBrush(this.brushPx * 1.15);
+        return this.setBrush(this.brushPx * TUNE.BRUSH_STEP);
       case "b":
       case "B":
-        this.showBuildings = !this.showBuildings;
-        store.set("buildings", this.showBuildings ? "on" : "off");
-        this.dirty = true;
-        return;
+        return this.toggleBuildings();
       case "o":
       case "O":
-        this.showOriginals = !this.showOriginals; // IMP-009
-        this.hud.toast(this.showOriginals ? "Showing original OSM outlines" : "Original outlines hidden");
-        this.dirty = true;
-        return;
+        return this.toggleOriginals();
       case "m":
       case "M":
         return this.toggleSound();
@@ -435,12 +539,7 @@ export class App {
         return this.hud.toggleHelp();
       case "f":
       case "F":
-        if (this.world) {
-          const f = this.world.features.frame;
-          this.camera.fit({ minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) }, this.anims.dur(600), performance.now());
-          this.dirty = true;
-        }
-        return;
+        return this.fitArea();
       case "Escape":
         this.hud.toggleHelp(false);
         return;
@@ -453,11 +552,16 @@ export class App {
     if (this.stroke) return;
     const s = this.history.undo(); // UNDO-001
     if (s) this.settle(s, "before");
+    this.syncHistory();
   }
   private redo() {
     if (this.stroke) return;
     const s = this.history.redo(); // UNDO-002
     if (s) this.settle(s, "after");
+    this.syncHistory();
+  }
+  private syncHistory() {
+    this.hud.setHistory(this.history.canUndo, this.history.canRedo); // HUD-006
   }
 
   /** UNDO-004 / FEEL-006 */
@@ -568,7 +672,7 @@ export class App {
           showBuildings: this.showBuildings,
           showOriginals: this.showOriginals,
           anims: this.anims,
-          panning: !!this.pan || this.space,
+          panning: !!this.pan || this.touchLock || this.space,
         },
         now,
       );

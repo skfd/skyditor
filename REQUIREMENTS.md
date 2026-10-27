@@ -106,6 +106,11 @@ the loaded area.
 TUNE-GEOM-SCALE.
   Why: robust polygon operations. The landuse lattice is useless if it develops cracks.
 
+**GEN-005** The editor shall let the user do everything with a pointer alone (mouse, pen or touch), without
+a keyboard. Keys are shortcuts, never the only way to do something.
+  Why: people paint with a mouse or a finger and may have no hand, or no keyboard, for keys. Alt-click
+  picking (PAINT-008) is a shortcut for choosing a palette tile, so the palette covers it.
+
 ---
 
 ## 3. Loading OSM data
@@ -325,6 +330,15 @@ tool. For unspecified residential, or an empty spot, nothing changes.
 editor shall play the *reject* feedback (FEEL-004), at most once per stroke.
   Why: protected land must not change, but silence reads as "broken".
 
+**PAINT-010** If a second finger touches the map while a stroke is active, then the editor shall cancel
+the stroke, restoring everything it changed without creating an undo step, and start the two-finger
+gesture (CAM-006).
+  Why: every two-finger pan starts with one finger. Without this, each pan would leave a dab of paint.
+
+**PAINT-011** While any finger of a two-finger gesture is still on the map, the editor shall not start a
+stroke.
+  Why: lifting the fingers one at a time must not paint with the last one.
+
 ---
 
 ## 8. Snapping — unit pieces
@@ -454,14 +468,15 @@ holding Space, the editor shall pan the map. After release, it shall coast to a 
 
 **CAM-003** When the user presses an arrow key, the editor shall pan the map smoothly in that direction.
 
-**CAM-004** When an area finishes loading, or the user presses `F`, the editor shall move the camera to fit
+**CAM-004** When an area finishes loading, or the user presses `F` or the fit button (HUD-006), the editor shall move the camera to fit
 the whole area.
 
 **CAM-005** The editor shall keep the zoom within TUNE-ZOOM-MIN..TUNE-ZOOM-MAX pixels per metre, and keep the
 view centre within the area.
 
-**INP-001** When the user presses `[` or `]`, or turns the wheel while holding Shift, the editor shall
-shrink or grow the brush within TUNE-BRUSH-MIN..TUNE-BRUSH-MAX pixels.
+**INP-001** When the user presses `[` or `]`, presses a brush size button (HUD-006), or turns the wheel
+while holding Shift, the editor shall shrink or grow the brush within TUNE-BRUSH-MIN..TUNE-BRUSH-MAX
+pixels, by TUNE-BRUSH-STEP per press.
 
 **INP-002** When the user presses a tool key (KIND-001, KIND-007, DENS-001), the editor shall select that
 tool.
@@ -470,6 +485,14 @@ tool.
 `M`, it shall toggle sound. When the user presses `H` or `?`, it shall toggle the help panel.
 
 **INP-004** The editor shall not open the browser context menu over the map.
+
+**CAM-006** When the user drags two fingers on the map, the editor shall pan and zoom at once: the map point
+under the fingers' midpoint stays under it, and the zoom follows the change in the fingers' spread. After
+release, it shall coast to a stop (TUNE-PAN-*).
+  Why: the map should feel stuck to the fingers, like every other map on a touch screen.
+
+**CAM-007** When the user presses the zoom-in or zoom-out button (HUD-006), the editor shall zoom by
+TUNE-ZOOM-STEP towards the centre of the view, with smooth motion.
 
 ---
 
@@ -562,6 +585,17 @@ following the brush size.
 **HUD-005** The editor shall show the OSM attribution "© OpenStreetMap contributors" whenever OSM data is
 on screen.
 
+**HUD-006** The editor shall show map controls at the side of the map: undo and redo (UNDO-001, UNDO-002),
+zoom in and out (CAM-007), fit area (CAM-004), and brush grow and shrink (INP-001) around a dot that shows
+the brush size. Undo and redo shall look disabled while there is nothing to undo or redo.
+  Why: GEN-005. Each control does exactly what its key does.
+
+**HUD-007** The editor shall show toggle buttons for the building layer (INP-003) and the original
+outlines (IMP-009), each showing whether its layer is on.
+
+**HUD-008** The editor shall list, in the help panel, the pointer or touch way of doing each action next to
+its key.
+
 ---
 
 ## 15. Non-goals for M0
@@ -590,6 +624,7 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-IMPORT-SNAP | 6 m | Leftover radius closed around imported pieces. |
 | TUNE-BRUSH-DEFAULT | 30 px | Initial brush radius. |
 | TUNE-BRUSH-MIN / MAX | 8 / 120 px | Brush radius limits. |
+| TUNE-BRUSH-STEP | 1.15 | Brush radius factor per key or button press. |
 | TUNE-TRAIL-STEP | 0.2 | Trail point spacing, as a fraction of brush radius. |
 | TUNE-UNIT-FACTOR | 14 | Unit piece limit, as a multiple of brush disc area. |
 | TUNE-UNIT-ABS-MAX | 150 000 m² | Unit piece limit, absolute. |
@@ -618,6 +653,7 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-POP-STAGGER | 14 ms per 10 m | Pop stagger for simultaneous claims. |
 | TUNE-REVEAL-MAX | 900 ms | Longest load reveal. |
 | TUNE-ZOOM-MIN / MAX | 0.08 / 12 px/m | Zoom limits. |
+| TUNE-ZOOM-STEP | 1.6 | Zoom factor per zoom button press. |
 | TUNE-ZOOM-HALFLIFE | 70 ms | Zoom smoothing half-life. |
 | TUNE-PAN-HALFLIFE | 160 ms | Pan coasting half-life. |
 | TUNE-REDUCED-MOTION | 0.3 | Duration factor with reduced motion. |

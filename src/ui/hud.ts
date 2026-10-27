@@ -1,7 +1,8 @@
-// HUD: palette, district mix, tooltip, help, start screen, loading and toasts (HUD-*, LOAD-007).
+// HUD: palette, map controls, district mix, tooltip, help, start screen, loading and toasts (HUD-*, LOAD-007).
 import { KINDS, type Kind, PAINT_KINDS, TIERS, tagString } from "../model/kinds";
 import type { Stage } from "../model/load";
 import type { Tool } from "../paint/snap";
+import { TUNE } from "../tuning";
 import { ICONS } from "./icons";
 
 export interface ToolDef {
@@ -46,6 +47,45 @@ export class Hud {
   constructor(private onTool: (id: string) => void) {
     this.buildPalette();
     this.buildMix();
+    this.buildControls();
+  }
+
+  /** HUD-006 / HUD-007 */
+  private buildControls() {
+    const icons: Record<string, string> = {
+      "btn-undo": ICONS.UNDO,
+      "btn-redo": ICONS.REDO,
+      "btn-zoom-in": ICONS.ZOOM_IN,
+      "btn-zoom-out": ICONS.ZOOM_OUT,
+      "btn-fit": ICONS.FIT,
+      "btn-brush-up": ICONS.PLUS,
+      "btn-brush-down": ICONS.MINUS,
+      "btn-buildings": ICONS.BUILDINGS,
+      "btn-outlines": ICONS.OUTLINES,
+    };
+    for (const [id, icon] of Object.entries(icons)) $(`#${id}`).innerHTML = icon;
+  }
+
+  /** HUD-006: undo and redo look disabled when there is nothing to do. */
+  setHistory(canUndo: boolean, canRedo: boolean) {
+    $<HTMLButtonElement>("#btn-undo").disabled = !canUndo;
+    $<HTMLButtonElement>("#btn-redo").disabled = !canRedo;
+  }
+
+  /** HUD-006: the dot grows with the brush. */
+  setBrush(px: number) {
+    const t = (px - TUNE.BRUSH_MIN) / (TUNE.BRUSH_MAX - TUNE.BRUSH_MIN);
+    const d = `${(6 + 20 * t).toFixed(1)}px`;
+    const dot = $("#brush-size i");
+    dot.style.width = dot.style.height = d;
+    $<HTMLButtonElement>("#btn-brush-up").disabled = px >= TUNE.BRUSH_MAX;
+    $<HTMLButtonElement>("#btn-brush-down").disabled = px <= TUNE.BRUSH_MIN;
+  }
+
+  /** HUD-007 */
+  setLayers(buildings: boolean, outlines: boolean) {
+    $("#btn-buildings").setAttribute("aria-pressed", String(buildings));
+    $("#btn-outlines").setAttribute("aria-pressed", String(outlines));
   }
 
   /** HUD-001 */
@@ -86,6 +126,8 @@ export class Hud {
 
   selectTool(id: string) {
     for (const [k, b] of this.tiles) b.classList.toggle("on", k === id);
+    const t = TOOLS.find((x) => x.id === id);
+    if (t) $("#brush-size").style.setProperty("--c", t.color); // the dot wears the tool's colour, like the cursor
     const b = this.tiles.get(id);
     if (b) {
       b.classList.remove("boing");

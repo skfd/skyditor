@@ -18,12 +18,32 @@
       </div>
       <div class="pill right">
         <div id="mix" title="District mix"><div class="bar"></div></div>
+        <!-- HUD-007 -->
+        <button id="btn-buildings" class="icon toggle" title="Buildings (B)" aria-label="Buildings" aria-pressed="true"></button>
+        <button id="btn-outlines" class="icon toggle" title="Original outlines (O)" aria-label="Original outlines" aria-pressed="false"></button>
         <button id="btn-sound" class="icon" title="Sound (M)"></button>
         <button id="btn-help" class="icon" title="Keys (H)">?</button>
       </div>
     </header>
 
     <nav id="palette" aria-label="Tools"></nav>
+    <!-- HUD-006 -->
+    <nav id="controls" aria-label="Map controls">
+      <div class="pill">
+        <button id="btn-undo" class="icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled></button>
+        <button id="btn-redo" class="icon" title="Redo (Ctrl+Y)" aria-label="Redo" disabled></button>
+      </div>
+      <div class="pill">
+        <button id="btn-zoom-in" class="icon" title="Zoom in" aria-label="Zoom in"></button>
+        <button id="btn-zoom-out" class="icon" title="Zoom out" aria-label="Zoom out"></button>
+        <button id="btn-fit" class="icon" title="Fit area (F)" aria-label="Fit area"></button>
+      </div>
+      <div class="pill">
+        <button id="btn-brush-up" class="icon" title="Bigger brush (])" aria-label="Bigger brush"></button>
+        <span id="brush-size" aria-hidden="true"><i></i></span>
+        <button id="btn-brush-down" class="icon" title="Smaller brush ([)" aria-label="Smaller brush"></button>
+      </div>
+    </nav>
     <div id="tooltip" role="tooltip"></div>
     <div id="toast" role="status"></div>
     <!-- HUD-005 -->
@@ -31,20 +51,22 @@
 
     <aside id="help">
       <h3>Paint the city</h3>
-      <p>Drag to paint. Small blocks fill up and snap in whole; big open land is painted freely and snaps to roads and neighbours. Zoom in for finer control.</p>
+      <p>Pick a tile below, then drag to paint. Small blocks fill up and snap in whole; big open land is painted freely and snaps to roads and neighbours. Zoom in for finer control.</p>
+      <p class="muted">Everything works with a mouse or a finger. Keys are shortcuts.</p>
+      <!-- HUD-008 -->
       <dl>
         <dt><kbd>1</kbd>–<kbd>6</kbd></dt><dd>Residential, rural → high-rise</dd>
         <dt><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd></dt><dd>Commercial · Retail · Industrial</dd>
         <dt><kbd>A</kbd> <kbd>Z</kbd></dt><dd>Density up / down</dd>
         <dt><kbd>X</kbd></dt><dd>Eraser</dd>
-        <dt>Click</dt><dd>Fill one block</dd>
+        <dt>Click · tap</dt><dd>Fill one block</dd>
         <dt><kbd>Alt</kbd> + click</dt><dd>Pick a colour from the map</dd>
-        <dt><kbd>[</kbd> <kbd>]</kbd> · <kbd>Shift</kbd>+wheel</dt><dd>Brush size</dd>
-        <dt>Wheel</dt><dd>Zoom</dd>
-        <dt>Right-drag · <kbd>Space</kbd>+drag · arrows</dt><dd>Pan</dd>
-        <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></dt><dd>Undo / redo</dd>
-        <dt><kbd>F</kbd></dt><dd>Fit area</dd>
-        <dt><kbd>B</kbd> · <kbd>O</kbd> · <kbd>M</kbd></dt><dd>Buildings · original outlines · sound</dd>
+        <dt>Side buttons · <kbd>[</kbd> <kbd>]</kbd> · <kbd>Shift</kbd>+wheel</dt><dd>Brush size</dd>
+        <dt>Wheel · pinch · side buttons</dt><dd>Zoom</dd>
+        <dt>Right-drag · two fingers · <kbd>Space</kbd>+drag · arrows</dt><dd>Pan</dd>
+        <dt>Side buttons · <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></dt><dd>Undo / redo</dd>
+        <dt>Side button · <kbd>F</kbd></dt><dd>Fit area</dd>
+        <dt>Top-right buttons · <kbd>B</kbd> <kbd>O</kbd> <kbd>M</kbd></dt><dd>Buildings · original outlines · sound</dd>
       </dl>
       <p class="muted">Nothing is saved or uploaded — this is a toy.</p>
     </aside>

@@ -45,6 +45,17 @@ export class Camera {
     this.anchor = { sx, sy, wx, wy };
   }
 
+  /** CAM-006: zooms at once (no smoothing), keeping the world point under (sx, sy) fixed. */
+  zoomNow(factor: number, sx: number, sy: number) {
+    this.fly = null;
+    this.anchor = null;
+    const [wx, wy] = this.toWorld(sx, sy);
+    this.scale = this.tScale = clamp(this.scale * factor, TUNE.ZOOM_MIN, TUNE.ZOOM_MAX);
+    this.cx = wx - (sx - this.width / 2) / this.scale;
+    this.cy = wy - (sy - this.height / 2) / this.scale;
+    this.clampCentre();
+  }
+
   /** CAM-002: direct drag; `release` hands over the last velocity for coasting. */
   panBy(dxPx: number, dyPx: number) {
     this.fly = null;

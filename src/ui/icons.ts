@@ -17,6 +17,16 @@ export const ICONS: Record<string, string> = {
   UP: svg(`<path d="M14 4l8 8h-5v4h-6v-4H6z"/><rect x="6" y="19" width="16" height="2.4" rx="1.2" opacity="0.6"/><rect x="6" y="23" width="16" height="2.4" rx="1.2" opacity="0.35"/>`),
   DOWN: svg(`<rect x="6" y="3" width="16" height="2.4" rx="1.2" opacity="0.35"/><rect x="6" y="7" width="16" height="2.4" rx="1.2" opacity="0.6"/><path d="M14 25l-8-8h5v-4h6v4h5z"/>`),
   ERASE: svg(`<path d="M15.5 5.5l7 7-10 10H8l-3.5-3.5z M8.6 13.4l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M14 22.5h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>`),
+  // Map controls (HUD-006) and layer toggles (HUD-007).
+  UNDO: svg(`<path d="M10 6l-5 5 5 5M5.5 11h11a6 6 0 0 1 0 12H12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`),
+  REDO: svg(`<path d="M18 6l5 5-5 5M22.5 11h-11a6 6 0 0 0 0 12H16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`),
+  ZOOM_IN: svg(`<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M17.5 17.5L24 24M8.5 12h7M12 8.5v7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>`),
+  ZOOM_OUT: svg(`<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M17.5 17.5L24 24M8.5 12h7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>`),
+  FIT: svg(`<path d="M4 10V4h6M18 4h6v6M24 18v6h-6M10 24H4v-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="10" y="10" width="8" height="8" rx="1.5" opacity="0.5"/>`),
+  PLUS: svg(`<path d="M14 7v14M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
+  MINUS: svg(`<path d="M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
+  BUILDINGS: svg(`${ground}<path d="M4 24V12h9v12z M15 24V5h9v19z M17.5 8h4v2h-4z M17.5 12h4v2h-4z M17.5 16h4v2h-4z M6.5 15h4v2h-4z"/>`),
+  OUTLINES: svg(`<path d="M5 9l9-5 9 6v12l-9 3-9-4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3.2 2.6" stroke-linejoin="round"/>`),
   SOUND_ON: svg(`<path d="M5 11h4l6-5v16l-6-5H5z"/><path d="M18.5 9.5a6 6 0 0 1 0 9M21.5 6.5a10 10 0 0 1 0 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`),
   SOUND_OFF: svg(`<path d="M5 11h4l6-5v16l-6-5H5z"/><path d="M19 11l6 6M25 11l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`),
 };
