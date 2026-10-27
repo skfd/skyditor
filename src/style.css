@@ -205,6 +205,47 @@ button.icon.toggle[aria-pressed="true"] {
   transition: width 160ms var(--spring), height 160ms var(--spring), border-color 160ms;
 }
 
+/* HUD-009: the count of places where the map disagrees, in the red of the spikes (REN-013). */
+button.disputes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 9px 0 6px;
+  border: 0;
+  border-radius: 9px;
+  background: #fbe4e2;
+  color: #d6363c;
+  font-weight: 800;
+}
+button.disputes[hidden] {
+  display: none;
+}
+button.disputes:hover {
+  background: #f8d3d0;
+}
+button.disputes:active {
+  transform: scale(0.94);
+}
+button.disputes svg {
+  width: 18px;
+  height: 18px;
+}
+button.disputes span {
+  color: #8a2c1c;
+  font-variant-numeric: tabular-nums;
+}
+button.disputes.boing svg {
+  animation: boing 360ms var(--spring);
+}
+
+/* On a phone the top bar is tight; the count (HUD-009) must not push the help button off screen. */
+@media (max-width: 520px) {
+  .pill.right {
+    gap: 2px;
+  }
+}
+
 /* HUD-003: district mix */
 #mix {
   width: min(320px, 30vw);

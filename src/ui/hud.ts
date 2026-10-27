@@ -82,6 +82,23 @@ export class Hud {
     $<HTMLButtonElement>("#btn-brush-down").disabled = px <= TUNE.BRUSH_MIN;
   }
 
+  /** HUD-009: how many places the map disagrees, hidden at none; the button jumps when the count changes. */
+  setDisputes(n: number) {
+    const b = $<HTMLButtonElement>("#btn-disputes");
+    const was = b.hidden ? 0 : Number(b.dataset.n ?? 0);
+    b.hidden = n === 0;
+    b.dataset.n = String(n);
+    b.innerHTML = `${ICONS.DISPUTE}<span>${n}</span>`;
+    const text = n === 1 ? "1 place where the map disagrees" : `${n} places where the map disagrees`;
+    b.title = `${text}. Show the next one (N)`;
+    b.setAttribute("aria-label", `${text}. Show the next one`);
+    if (n !== was && n > 0) {
+      b.classList.remove("boing");
+      void b.offsetWidth; // restart the CSS animation
+      b.classList.add("boing");
+    }
+  }
+
   /** HUD-007 */
   setLayers(buildings: boolean, outlines: boolean) {
     $("#btn-buildings").setAttribute("aria-pressed", String(buildings));

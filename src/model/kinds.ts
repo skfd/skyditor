@@ -172,3 +172,23 @@ export const tagString = (k: Kind) =>
   Object.entries(KINDS[k].tags)
     .map(([a, b]) => `${a}=${b}`)
     .join(" + ");
+
+/** Overlaps and disputes: kinds that say the same thing, differing at most in detail. */
+export function agree(a: Kind, b: Kind): boolean {
+  if (a === b) return true; // two exclusive-context kinds are both "CTX"
+  return (a === "RU" && tierOf(b) !== undefined) || (b === "RU" && tierOf(a) !== undefined);
+}
+
+/** BLD-007: residential, business or industrial; null when the kind says nothing about buildings. */
+function family(k: Kind | BuildingLook | null): "res" | "biz" | "ind" | null {
+  if (k === "RU" || (k && k in KINDS && KINDS[k as Kind].tier !== undefined)) return "res";
+  if (k === "COM" || k === "RET") return "biz";
+  if (k === "IND") return "ind";
+  return null;
+}
+
+/** BLD-007: whether a building with `look` disagrees with land of `kind`. */
+export function disagreesWithLand(look: BuildingLook | null, kind: Kind | null): boolean {
+  const a = family(look), b = family(kind);
+  return a !== null && b !== null && a !== b;
+}

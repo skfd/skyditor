@@ -87,6 +87,8 @@ has been absorbed into a rewritten requirement, it may be retired.
 | **Open piece** | A piece too large to be a unit piece. It gets painted freeform and then snapped (§9). |
 | **Claim** | Turning a whole piece into the stroke's kind. |
 | **Charge** | Visible progress towards claiming a unit piece during a stroke. |
+| **Disputed** | A piece where two imported features say different things (IMP-012). Shown to the user as "the map disagrees here". |
+| **Rival** | The kind a disputed piece's losing feature claimed. |
 
 ---
 
@@ -230,7 +232,7 @@ wetland, sand, beach, bare_rock.
   the lattice. They are drawn on top, as hints.
 
 **IMP-004** Where paintable and exclusive-context features overlap, the editor shall give the overlap to
-the feature with the smaller area.
+the feature with the smaller area. → see CORR-001
   Why: a retail area drawn inside a big residential polygon is the more specific statement.
 
 **IMP-005** The editor shall convert each paintable or exclusive-context feature into pieces by
@@ -251,6 +253,39 @@ the user has changed it.
 
 **IMP-009** Where the "original outlines" view is on (key `O`), the editor shall draw the unmodified OSM
 outlines of paintable features on top of the map.
+
+### Overlaps and disputes
+
+Two overlapping features are *nested* when CORR-001 says so. The rest are sorted by the shape of their
+overlap inside each block, and by whether their kinds *agree*: the same kind, unspecified residential and a
+tier, or two exclusive-context kinds.
+
+**IMP-010** If two features that are not nested overlap in a part of a block narrower than
+2 × TUNE-IMPORT-SNAP, then the editor shall split that part along its middle between them.
+  Why: an edge traced twice drifts by a few metres. Nobody meant the overlap, and the true boundary is
+  most likely between the two lines, not on the outer one.
+
+**IMP-011** Where two agreeing features that are not nested overlap in a wider part, the editor shall give
+that part to the tier over unspecified residential, and otherwise to the smaller feature.
+  Why: they say the same thing and differ only in detail, so the detail wins and nothing is wrong.
+
+**IMP-012** If two disagreeing features that are not nested overlap in a wider part, then the editor shall
+give that part to the smaller feature and mark it *disputed*, remembering the other feature's kind as its
+rival. A disputed part too small to keep as a fragment on its own (IMP-006) shall not be marked.
+  Why: two mappers disagree, and nothing in the data says who is right. The lattice still needs one kind
+  at every spot, but the editor must not pretend it knows.
+
+**DISP-001** When a paint stroke or a density step changes all or part of a disputed piece, the editor
+shall make the changed part undisputed and leave the rest of the piece disputed.
+  Why: painting over a disagreement is the user's answer to it. Undo brings the dispute back with the
+  pieces (UNDO-001).
+
+**DISP-002** The editor shall let paint tools claim a disputed piece even when it already has the stroke's
+kind, and even when it is exclusive context.
+  Why: agreeing with what is shown is an answer too, and the dispute may be decided against the context.
+
+**DISP-003** The editor shall not let the eraser or density tools change disputed exclusive context.
+  Why: the eraser takes painted landuse away. It has no way to say "this is a park" (Q-006).
 
 ### Buildings
 
@@ -296,9 +331,17 @@ the landuse around the building.
   Why: most buildings in OSM have no type. A guess from the land would only echo the land's colour back
   and pass a guess off as data. Garages next to houses are not industrial.
 
-**BLD-006** The editor shall use building looks only for drawing (REN-009, REN-010), not for snapping,
-piece kinds or the district mix.
+**BLD-006** The editor shall use building looks only for drawing (REN-009, REN-010, REN-011), not for
+snapping, piece kinds or the district mix.
   Why: looks are hints for the eye. Using them to decide anything is Q-004 and Q-005.
+
+**BLD-007** The editor shall treat a building as *disagreeing with its land* when its look is residential
+(a tier or unspecified), commercial, retail or industrial, the piece under its centre has a paintable kind
+or unspecified residential, and the two are in different families: residential (R1–R6 and unspecified),
+business (commercial and retail), or industrial.
+  Why: a house among flats is ordinary mixed housing, and offices above shops are ordinary business land.
+  A factory among houses, or houses on industrial land, says the landuse is wrong. Civic and unknown
+  buildings, void and context land say nothing either way.
 
 ---
 
@@ -314,14 +357,14 @@ cursor has moved at least TUNE-TRAIL-STEP × brush radius from the previous poin
 the kind's colour.
 
 **PAINT-004** The editor shall never change exclusive-context pieces or water by painting, erasing or
-density changes.
+density changes, except disputed exclusive context painted over (DISP-002).
 
 **PAINT-005** When a stroke ends, the editor shall commit all of the stroke's changes as one undo step.
 
 **PAINT-006** If a stroke changes nothing, then the editor shall not create an undo step.
 
 **PAINT-007** When a paint stroke would change a piece to the kind it already has, the editor shall leave
-that piece alone. It is not a claim.
+that piece alone, unless it is disputed (DISP-002). It is not a claim.
 
 **PAINT-008** When the user Alt-clicks a piece, the editor shall select that piece's kind as the current
 tool. For unspecified residential, or an empty spot, nothing changes.
@@ -373,7 +416,8 @@ claimed, with no change to the piece.
 (round caps and joins), smoothed by a morphological closing of radius TUNE-SMOOTH-FACTOR × brush radius.
 
 **SNAP-102** The editor shall limit the freeform result in each atom to the open pieces the stroke shape
-touches, excluding exclusive-context pieces and pieces already of the stroke's kind.
+touches, excluding exclusive-context pieces and pieces already of the stroke's kind, unless they are
+disputed (DISP-002).
 
 **SNAP-103** The editor shall swallow leftovers: within the touched open pieces, any part outside the
 stroke shape that is narrower than 2 × TUNE-SNAP-FACTOR × brush radius, and that touches the stroke shape,
@@ -404,8 +448,9 @@ in the stroke's colour, updated at least every TUNE-PREVIEW-INTERVAL.
 simplified with tolerance TUNE-SIMPLIFY, and it shall settle into place with the claim animation
 (FEEL-001).
 
-**SNAP-107** If applying a freeform result leaves a non-context piece in the same atom smaller than
-TUNE-SLIVER-AREA, touching the result, then the editor shall merge that piece into the result.
+**SNAP-107** If applying a freeform result leaves a piece in the same atom smaller than TUNE-SLIVER-AREA,
+touching the result, that the stroke could change (PAINT-004, DISP-002, DISP-003), then the editor shall
+merge that piece into the result.
 
 ---
 
@@ -501,7 +546,8 @@ TUNE-ZOOM-STEP towards the centre of the view, with smooth motion.
 ### 14.1 Rendering
 
 **REN-001** The editor shall draw, from bottom to top: street space, void land, water, exclusive context,
-overlay context, landuse slabs, buildings, the stroke trail and preview, and the brush cursor.
+overlay context, landuse slabs, buildings, the edges of disputed pieces (REN-013), the stroke trail and
+preview, and the brush cursor.
   Why: overlay context (grass, parking) lives inside landuse; painted land must look fully painted.
 
 **REN-002** The editor shall draw each landuse piece as a *slab*: the top face at its true position, and a
@@ -536,6 +582,24 @@ at opacity TUNE-BUILDING-ALPHA. A look's colour is its kind's colour (§5), or t
 **REN-010** Where the building layer is on, the editor shall draw buildings with the look unknown as faint
 shapes in the neutral building colour.
 
+**REN-011** Where the building layer is on, the editor shall draw each building that disagrees with its
+land (BLD-007) with a dark edge in its look's colour and a ripple: a copy of that edge that grows out of the
+footprint by TUNE-RIPPLE-REACH and fades, once every TUNE-RIPPLE-PERIOD, with neighbouring buildings out of
+step.
+  Why: the building calls out "I am not what this land says" without covering what the land is.
+
+**REN-012** The editor shall draw a disputed piece in its own kind, striped with its rival's colour
+(TUNE-DISPUTE-STRIPE).
+  Why: both claims stay visible. Stripes already read as "not settled" (KIND-004).
+
+**REN-013** The editor shall edge each disputed piece with small red spikes pointing outwards,
+TUNE-SPIKE-SPACING apart, that creep along the edge at TUNE-SPIKE-SPEED.
+  Why: a dispute is an error in the map. It should look sharp and alive, unlike anything the user paints.
+
+**REN-014** While the only motion on screen is the ripples (REN-011) and spikes (REN-013), the editor shall
+redraw at most once every TUNE-AMBIENT-INTERVAL.
+  Why: slow motion needs few frames. Constant full-rate redraws would cost battery for nothing (REN-008).
+
 ### 14.2 Feel
 
 **FEEL-001** When a piece is claimed, the editor shall play the *pop*: the slab rises from the ground to its
@@ -560,7 +624,8 @@ overshoot.
 wave from the centre outwards, lasting no longer than TUNE-REVEAL-MAX.
 
 **FEEL-008** Where the user prefers reduced motion, the editor shall scale every animation duration by
-TUNE-REDUCED-MOTION and leave out overshoot, shake and stagger.
+TUNE-REDUCED-MOTION and leave out overshoot, shake and stagger. Ripples (REN-011) become a steady outline,
+and spikes (REN-013) stand still.
 
 **FEEL-009** The editor shall never make the user wait for an animation: input stays live during every
 animation, and the model is updated before the animation starts.
@@ -596,6 +661,18 @@ outlines (IMP-009), each showing whether its layer is on.
 **HUD-008** The editor shall list, in the help panel, the pointer or touch way of doing each action next to
 its key.
 
+**HUD-009** While any piece is disputed, the editor shall show a button in the top bar with the number of
+places where the map disagrees (one per disputed piece). It is hidden while there are none.
+  Why: errors you can't find don't get fixed. The count turns them into a short list to work through.
+
+**HUD-010** When the user presses that button, or presses `N`, the editor shall move the camera to the next
+disputed piece, north to south, so that at least TUNE-DISPUTE-VIEW of land around it is in view, and
+flash it.
+
+**HUD-011** When a change settles the last disputed piece, the editor shall say briefly that the map no
+longer disagrees anywhere.
+  Why: finishing the list is a small win. It should feel like one.
+
 ---
 
 ## 15. Non-goals for M0
@@ -621,7 +698,9 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-ATOM-MIN-AREA | 150 m² | Smallest kept atom. |
 | TUNE-ATOM-MIN-RADIUS | 2.5 m | Smallest disc an atom or imported fragment must contain. |
 | TUNE-IMPORT-MIN-FRAGMENT | 60 m² | Smallest kept imported fragment. |
-| TUNE-IMPORT-SNAP | 6 m | Leftover radius closed around imported pieces. |
+| TUNE-IMPORT-SNAP | 6 m | Leftover radius closed around imported pieces; half the widest overlap split as drift (IMP-010). |
+| TUNE-NEST-INSIDE | 0.9 | Share of the smaller feature's land that must lie inside the larger one for nesting (CORR-001). |
+| TUNE-NEST-SIZE | 0.8 | Largest land area of the smaller feature, as a share of the larger one's, for nesting (CORR-001). |
 | TUNE-BRUSH-DEFAULT | 30 px | Initial brush radius. |
 | TUNE-BRUSH-MIN / MAX | 8 / 120 px | Brush radius limits. |
 | TUNE-BRUSH-STEP | 1.15 | Brush radius factor per key or button press. |
@@ -638,6 +717,14 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-LEVEL-HEIGHT | 3 m | Height of one level, for buildings with only `height`. |
 | TUNE-BUILDING-SHADE | 0.35 | How far a building's colour is mixed towards the neutral building colour. |
 | TUNE-BUILDING-ALPHA | 0.85 | Opacity of buildings with a known look. |
+| TUNE-RIPPLE-PERIOD | 2400 ms | Time between ripples of a disagreeing building. |
+| TUNE-RIPPLE-REACH | 12 px | How far a ripple grows out of the footprint. |
+| TUNE-DISPUTE-STRIPE | 12 px | Stripe period on disputed pieces (rival colour on half of it). |
+| TUNE-SPIKE-SPACING | 11 px | Distance between spikes on a disputed piece's edge. |
+| TUNE-SPIKE-SIZE | 5 px | Spike length. |
+| TUNE-SPIKE-SPEED | 6 px/s | How fast spikes creep along the edge. |
+| TUNE-AMBIENT-INTERVAL | 50 ms | Shortest time between redraws for ripples and spikes alone. |
+| TUNE-DISPUTE-VIEW | 160 m | Smallest stretch of land shown around a disputed piece the camera moves to. |
 | TUNE-SIMPLIFY | 0.4 m | Simplification tolerance of committed freeform shapes. |
 | TUNE-SLIVER-AREA | 40 m² | Pieces smaller than this get merged after a change. |
 | TUNE-PREVIEW-INTERVAL | 50 ms | Maximum freeform preview staleness. |
@@ -662,7 +749,13 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 
 ## 17. Corrections
 
-*(none yet)*
+**CORR-001** (corrects IMP-004) The editor shall give an overlap to the smaller feature by size alone only
+where the two are *nested*: at least TUNE-NEST-INSIDE of the smaller feature's land lies inside the larger
+one, and its land area is at most TUNE-NEST-SIZE of the larger one's. Every other overlap is settled by
+IMP-010 to IMP-012. Land areas and overlaps are measured inside atoms only.
+  Observed: smaller-wins also decided near-duplicates (a few square metres decided between commercial and
+  retail), gave whole drift strips to one side, and settled real disagreements silently.
+  Why: "the smaller one is more specific" is only true when one feature is clearly drawn inside the other.
 
 ---
 
@@ -688,3 +781,10 @@ of narrow buildings sharing walls → terraced, small detached footprint → hou
 `addr:unit`/`addr:flats`/`entrance=*` → apartments). Address mapping differs a lot between cities
 (on the outline, inside it, or imported points at the plot centre), and fetching tagged nodes makes area
 downloads bigger. The same inference should feed Q-004, so colours and suggestions never disagree.
+
+**Q-006** How does the user settle a dispute in favour of exclusive context ("it really is a park")? Paint
+tools can only answer with a paintable kind (DISP-003). Design together with Q-007.
+
+**Q-007** One feature with two landuse statements (for example `landuse=residential` + `leisure=park` on the
+same way) is an error of the same family as a dispute. IMP-001 currently picks one class quietly. How
+should the editor show it, and how does the user settle it?

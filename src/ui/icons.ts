@@ -27,6 +27,8 @@ export const ICONS: Record<string, string> = {
   MINUS: svg(`<path d="M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
   BUILDINGS: svg(`${ground}<path d="M4 24V12h9v12z M15 24V5h9v19z M17.5 8h4v2h-4z M17.5 12h4v2h-4z M17.5 16h4v2h-4z M6.5 15h4v2h-4z"/>`),
   OUTLINES: svg(`<path d="M5 9l9-5 9 6v12l-9 3-9-4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3.2 2.6" stroke-linejoin="round"/>`),
+  // HUD-009: the red spikes of a disputed piece (REN-013), round a small block.
+  DISPUTE: svg(`<path d="M14 2.5l2.6 4.9 5.5-1.3-1.3 5.5 4.9 2.6-4.9 2.6 1.3 5.5-5.5-1.3L14 25.5l-2.6-4.9-5.5 1.3 1.3-5.5L2.3 14l4.9-2.6-1.3-5.5 5.5 1.3z"/><rect x="10" y="10" width="8" height="8" rx="1.5" fill="#fff"/>`),
   SOUND_ON: svg(`<path d="M5 11h4l6-5v16l-6-5H5z"/><path d="M18.5 9.5a6 6 0 0 1 0 9M21.5 6.5a10 10 0 0 1 0 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`),
   SOUND_OFF: svg(`<path d="M5 11h4l6-5v16l-6-5H5z"/><path d="M19 11l6 6M25 11l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`),
 };

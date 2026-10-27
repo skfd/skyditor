@@ -16,6 +16,13 @@ export interface Piece {
   readonly bbox: BBox;
   readonly source?: string; // IMP-008: originating OSM element
   readonly modified: boolean; // IMP-008 / OVL-004
+  readonly rival?: Rival; // IMP-012: set while the piece is disputed
+}
+
+/** IMP-012: what the losing feature of a dispute said. */
+export interface Rival {
+  readonly kind: Kind;
+  readonly ctx?: CtxClass;
 }
 
 export interface Atom {
@@ -36,7 +43,7 @@ export function makePiece(
   atom: Atom | number,
   kind: Kind | null,
   shape: Shape,
-  extra: { ctx?: CtxClass; source?: string; modified?: boolean } = {},
+  extra: { ctx?: CtxClass; source?: string; modified?: boolean; rival?: Rival } = {},
 ): Piece {
   return {
     id: nextPieceId++,
@@ -48,11 +55,13 @@ export function makePiece(
     bbox: bbox(shape),
     source: extra.source,
     modified: extra.modified ?? false,
+    rival: extra.rival,
   };
 }
 
-export const isProtected = (p: Piece) => p.kind === "CTX"; // PAINT-004
-const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}`;
+export const isProtected = (p: Piece) => p.kind === "CTX" && !p.rival; // PAINT-004, DISP-002
+// Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013).
+const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}`;
 const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land
 const SOFT_LINE_HALF_WIDTH = 0.25; // m; just enough to separate cells, swallowed again by SNAP-103
 
@@ -95,6 +104,7 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
               ctx: biggest.ctx,
               source: biggest.source,
               modified: cluster.some((p) => p.modified) || !sameSource,
+              rival: biggest.rival,
             }),
           );
         }
@@ -215,6 +225,13 @@ export class World {
       if (contains(p.shape, x, y)) return p;
     }
     return null;
+  }
+
+  /** HUD-009 / HUD-010: every disputed piece, north to south, then west to east. */
+  disputed(): Piece[] {
+    const out: Piece[] = [];
+    for (const a of this.atoms) for (const p of a.pieces) if (p.rival) out.push(p);
+    return out.sort((a, b) => a.bbox.minY - b.bbox.minY || a.bbox.minX - b.bbox.minX);
   }
 
   /** Land area per kind ("void" for none), for the district mix (HUD-003). */

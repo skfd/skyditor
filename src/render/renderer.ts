@@ -1,12 +1,13 @@
-// Canvas renderer (REN-001..REN-008).
-import { type Shape, offset, toI, toM } from "../geo/clip";
-import { type BuildingLook, CTX_COLORS, type Kind, KINDS, lookColor } from "../model/kinds";
-import type { Piece, World } from "../model/world";
+// Canvas renderer (REN-001..REN-014).
+import { type Shape, contains, offset, toI, toM } from "../geo/clip";
+import { type BuildingLook, CTX_COLORS, type Kind, KINDS, disagreesWithLand, lookColor } from "../model/kinds";
+import type { Atom, Piece, Rival, World } from "../model/world";
 import type { Stroke } from "../paint/stroke";
 import type { Tool } from "../paint/snap";
 import { TUNE } from "../tuning";
 import type { Anims } from "./anim";
 import type { Camera } from "./camera";
+import { rippleT, spikePhase, spikesAlong } from "./marks";
 
 const BUILDING_INK = [74, 52, 40];
 
@@ -19,6 +20,7 @@ export const COLORS = {
   minor: "rgba(255, 255, 255, 0.75)",
   hint: "rgba(80, 64, 48, 0.55)",
   eraser: "#f4f1ea",
+  dispute: "#d6363c", // REN-013
 };
 
 export interface RenderState {
@@ -39,6 +41,19 @@ interface PieceGfx {
   cx: number;
   cy: number;
 }
+
+/** A building with a look, for REN-011. */
+interface LookedBuilding {
+  path: Path2D;
+  look: BuildingLook;
+  color: string;
+  x: number; // centre, integer units
+  y: number;
+  r: number; // half its larger side, m
+}
+
+/** REN-012: the colour a rival kind would have. */
+const rivalColor = (r: Rival) => (r.kind === "CTX" ? CTX_COLORS[r.ctx ?? "green"] : KINDS[r.kind].color);
 
 export function toolColor(t: Tool): string {
   if (t.type === "paint") return KINDS[t.kind].color;
@@ -96,6 +111,9 @@ export class Renderer {
   private overlay!: [string, Path2D][];
   private originals!: Path2D;
   private hatch: CanvasPattern | null = null;
+  private readonly stripes = new Map<string, CanvasPattern | null>(); // REN-012, by rival colour
+  private lookedByAtom = new Map<number, LookedBuilding[]>(); // REN-011
+  private readonly disagreeing = new WeakMap<Piece[], LookedBuilding[]>(); // REN-011, per atom.pieces
   private dpr = 1;
 
   constructor(readonly canvas: HTMLCanvasElement, private world: World) {
@@ -116,6 +134,7 @@ export class Renderer {
     this.water = pathOf(world.water);
     const unknown: Float32Array[] = [];
     const byLook = new Map<string, Float32Array[]>();
+    this.lookedByAtom = new Map();
     for (const b of world.features.buildings) {
       if (!b.look) {
         unknown.push(b.ring);
@@ -124,6 +143,21 @@ export class Renderer {
       const c = buildingColor(b.look);
       if (!byLook.has(c)) byLook.set(c, []);
       byLook.get(c)!.push(b.ring);
+      // REN-011: which block each building stands in, found once.
+      let x = 0, y = 0, minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const n = b.ring.length / 2;
+      for (let i = 0; i < b.ring.length; i += 2) {
+        const [bx, by] = [b.ring[i], b.ring[i + 1]];
+        [x, y] = [x + bx, y + by];
+        [minX, minY, maxX, maxY] = [Math.min(minX, bx), Math.min(minY, by), Math.max(maxX, bx), Math.max(maxY, by)];
+      }
+      const [X, Y] = [toI(x / n), toI(y / n)];
+      const atom = world.atomAt(X, Y);
+      if (!atom) continue;
+      const list = this.lookedByAtom.get(atom.id) ?? [];
+      const r = Math.max(0.5, (maxX - minX) / 2, (maxY - minY) / 2);
+      list.push({ path: pathOfFloatRings([b.ring], true), look: b.look, color: darken(lookColor(b.look), 0.6), x: X, y: Y, r });
+      this.lookedByAtom.set(atom.id, list);
     }
     this.buildings = pathOfFloatRings(unknown, true);
     this.lookedBuildings = [...byLook].map(([c, rings]) => [c, pathOfFloatRings(rings, true)]);
@@ -180,6 +214,49 @@ export class Renderer {
     return this.hatch;
   }
 
+  /** REN-012: the rival's colour on half of each stripe, the piece's own colour showing through between. */
+  private stripePattern(color: string): CanvasPattern | null {
+    if (this.stripes.has(color)) return this.stripes.get(color)!;
+    const n = TUNE.DISPUTE_STRIPE;
+    const c = document.createElement("canvas");
+    c.width = c.height = n;
+    const g = c.getContext("2d")!;
+    g.strokeStyle = color;
+    g.lineWidth = n / (2 * Math.SQRT2);
+    g.beginPath();
+    for (const o of [-n, 0, n]) {
+      g.moveTo(o, 0);
+      g.lineTo(o + n, n);
+    }
+    g.stroke();
+    const pat = this.ctx.createPattern(c, "repeat");
+    this.stripes.set(color, pat);
+    return pat;
+  }
+
+  private fillStripes(p: Piece, path: Path2D, px: number) {
+    const pat = this.stripePattern(rivalColor(p.rival!));
+    if (!pat) return;
+    pat.setTransform(new DOMMatrix().scale(px, px)); // stripes keep their size on screen
+    this.ctx.fillStyle = pat;
+    this.ctx.fill(path, "evenodd");
+  }
+
+  /** BLD-007 / REN-011: the buildings in an atom that disagree with the land under them. */
+  private disagreeingIn(atom: Atom): LookedBuilding[] {
+    let out = this.disagreeing.get(atom.pieces);
+    if (!out) {
+      out = (this.lookedByAtom.get(atom.id) ?? []).filter((b) => {
+        const under = atom.pieces.find(
+          (p) => b.x >= p.bbox.minX && b.x <= p.bbox.maxX && b.y >= p.bbox.minY && b.y <= p.bbox.maxY && contains(p.shape, b.x, b.y),
+        );
+        return disagreesWithLand(b.look, under?.kind ?? null);
+      });
+      this.disagreeing.set(atom.pieces, out);
+    }
+    return out;
+  }
+
   /** REN-002 lift for a kind at the current zoom. */
   liftPx(kind: Kind | null, scale: number) {
     if (!kind || kind === "CTX") return 0;
@@ -187,7 +264,8 @@ export class Renderer {
     return KINDS[kind].lift * Math.max(lo, Math.min(hi, scale));
   }
 
-  draw(st: RenderState, now: number) {
+  /** Draws a frame. Returns true when ambient marks (REN-011, REN-013) are on screen and moving (REN-014). */
+  draw(st: RenderState, now: number): boolean {
     const { ctx, dpr } = this;
     const cam = st.camera;
     const s = cam.scale;
@@ -216,16 +294,19 @@ export class Renderer {
 
     const ctxPieces: Piece[] = [];
     const slabs: Piece[] = [];
+    const disputed: Piece[] = [];
     for (const a of atoms)
       for (const p of a.pieces) {
         if (p.kind === "CTX") ctxPieces.push(p);
         else if (p.kind !== null) slabs.push(p);
+        if (p.rival) disputed.push(p);
       }
 
     // Exclusive context: flat.
     for (const p of ctxPieces) {
       ctx.fillStyle = CTX_COLORS[p.ctx ?? "green"];
       ctx.fill(this.gfx(p).path, "evenodd");
+      if (p.rival) this.fillStripes(p, this.gfx(p).path, px); // REN-012
     }
 
     // Overlay context (IMP-003) sits under the landuse it belongs to.
@@ -240,6 +321,8 @@ export class Renderer {
     slabs.sort((a, b) => a.bbox.maxY - b.bbox.maxY);
     for (const p of slabs) this.drawSlab(p, s, now, st.anims, p === st.hover);
 
+    const moving = !st.anims.reduced;
+    let ambient = false;
     if (st.showBuildings) {
       // REN-010
       ctx.fillStyle = COLORS.building;
@@ -251,6 +334,33 @@ export class Renderer {
         ctx.fill(path, "nonzero");
       }
       ctx.globalAlpha = 1;
+      // REN-011: a steady edge, and an outline of the footprint growing out of it like a ping. With reduced
+      // motion only the edge is left (FEEL-008).
+      const odd = atoms.flatMap((a) => this.disagreeingIn(a));
+      ctx.lineJoin = "round";
+      for (const b of odd) {
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = (moving ? 1.5 : 2.5) * px;
+        ctx.stroke(b.path);
+        if (!moving) continue;
+        ambient = true;
+        const t = rippleT(now, b.x, b.y);
+        const k = 1 + (TUNE.RIPPLE_REACH * t * px) / b.r;
+        const [cx, cy] = [toM(b.x), toM(b.y)];
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(k, k);
+        ctx.translate(-cx, -cy);
+        // A light under-stroke keeps the ring readable on any land colour.
+        ctx.globalAlpha = Math.pow(1 - t, 1.3);
+        ctx.strokeStyle = "rgba(255, 252, 246, 0.8)";
+        ctx.lineWidth = (5 * px) / k;
+        ctx.stroke(b.path);
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = (2.5 * px) / k;
+        ctx.stroke(b.path);
+        ctx.restore();
+      }
     }
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -262,6 +372,30 @@ export class Renderer {
     ctx.lineWidth = Math.max(1 * px, 1);
     ctx.stroke(this.minorPaths);
     ctx.globalAlpha = 1;
+
+    // REN-013: red spikes creeping round each disputed piece; they stand still with reduced motion.
+    if (disputed.length) {
+      if (moving) ambient = true;
+      const spacing = TUNE.SPIKE_SPACING * px;
+      const phase = moving ? spikePhase(now, s) : 0;
+      const spikes = new Path2D();
+      const edges = new Path2D();
+      for (const p of disputed) {
+        edges.addPath(pathOf(p.shape));
+        for (const [ax, ay, bx, by, tx, ty] of spikesAlong(p.shape, spacing, TUNE.SPIKE_SIZE * px, phase)) {
+          spikes.moveTo(ax, ay);
+          spikes.lineTo(tx, ty);
+          spikes.lineTo(bx, by);
+          spikes.closePath();
+        }
+      }
+      ctx.strokeStyle = COLORS.dispute;
+      ctx.lineWidth = 1.5 * px;
+      ctx.lineJoin = "round";
+      ctx.stroke(edges);
+      ctx.fillStyle = COLORS.dispute;
+      ctx.fill(spikes, "nonzero");
+    }
 
     // IMP-009
     if (st.showOriginals) {
@@ -318,6 +452,7 @@ export class Renderer {
     // HUD-004: brush cursor, in screen space.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (st.cursor && !st.panning) this.drawCursor(st, now);
+    return ambient;
   }
 
   private drawSlab(p: Piece, s: number, now: number, anims: Anims, hovered: boolean) {
@@ -354,6 +489,7 @@ export class Renderer {
     } else ctx.fillStyle = kd.color;
     ctx.fill(g.path, "evenodd");
     ctx.globalAlpha = alpha;
+    if (p.rival) this.fillStripes(p, g.path, px); // REN-012
     // REN-007
     if (hovered) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.16)";

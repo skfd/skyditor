@@ -17,6 +17,8 @@
         <button id="btn-place" class="ghost" title="Choose another place">Change</button>
       </div>
       <div class="pill right">
+        <!-- HUD-009 / HUD-010 -->
+        <button id="btn-disputes" class="disputes" hidden></button>
         <div id="mix" title="District mix"><div class="bar"></div></div>
         <!-- HUD-007 -->
         <button id="btn-buildings" class="icon toggle" title="Buildings (B)" aria-label="Buildings" aria-pressed="true"></button>
@@ -52,6 +54,8 @@
     <aside id="help">
       <h3>Paint the city</h3>
       <p>Pick a tile below, then drag to paint. Small blocks fill up and snap in whole; big open land is painted freely and snaps to roads and neighbours. Zoom in for finer control.</p>
+      <p>Red spikes mark places where the map disagrees with itself. Paint over one to settle it. A pulsing
+        building doesn't match the land it stands on.</p>
       <p class="muted">Everything works with a mouse or a finger. Keys are shortcuts.</p>
       <!-- HUD-008 -->
       <dl>
@@ -67,6 +71,7 @@
         <dt>Side buttons · <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></dt><dd>Undo / redo</dd>
         <dt>Side button · <kbd>F</kbd></dt><dd>Fit area</dd>
         <dt>Top-right buttons · <kbd>B</kbd> <kbd>O</kbd> <kbd>M</kbd></dt><dd>Buildings · original outlines · sound</dd>
+        <dt>Red count, top right · <kbd>N</kbd></dt><dd>Next place where the map disagrees with itself</dd>
       </dl>
       <p class="muted">Nothing is saved or uploaded — this is a toy.</p>
     </aside>

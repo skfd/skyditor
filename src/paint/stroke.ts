@@ -60,7 +60,8 @@ export class Stroke {
     if (!this.rejected) {
       const p = this.world.pieceAt(toI(bx), toI(by));
       const onLand = p !== null || this.world.atomAt(toI(bx), toI(by)) !== null;
-      if ((p && p.kind === "CTX") || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
+      // DISP-002 / DISP-003: disputed context rejects only the tools that can't change it.
+      if ((p && p.kind === "CTX" && !changes(this.tool, p)) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
         this.rejected = true;
         events.push({ type: "reject", at: [bx, by] });
       }
@@ -122,6 +123,7 @@ export class Stroke {
       if (!p || p.kind === null || this.densityDone.has(p)) continue;
       this.densityDone.add(p);
       const tier = KINDS[p.kind].tier;
+      // DENS-004 / DISP-003: disputed context is rejected like any other non-residential land.
       if (tier === undefined) {
         if (!this.rejected) events.push({ type: "reject", at: [x, y] });
         this.rejected = true;
@@ -134,6 +136,7 @@ export class Stroke {
       }
       const atom = this.world.atoms[p.atom];
       this.snapshot(atom);
+      // DISP-001: a density step answers the dispute, so the stepped piece has no rival.
       const stepped = makePiece(atom, tierKind(next), p.shape, { source: p.source, modified: !!p.source });
       atom.pieces = normalize(atom, [...atom.pieces.filter((q) => q !== p), stepped]);
       const result = pieceCovering(atom, p, stepped.kind!);

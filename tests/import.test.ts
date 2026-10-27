@@ -24,7 +24,7 @@ describe("import", () => {
     expect(w.overlay.length).toBe(2);
   });
 
-  it("IMP-004: where landuse overlaps, the smaller feature wins", async () => {
+  it("IMP-004 / CORR-001: a feature drawn inside a bigger one wins the overlap, undisputed", async () => {
     const s = new Sketch(300).grid(200);
     s.rect(-300, -300, 300, 300, { landuse: "residential" });
     s.rect(-90, -90, 0, 0, { landuse: "retail" });
@@ -32,6 +32,7 @@ describe("import", () => {
     expect(at(w, -50, -50)?.kind).toBe("RET");
     expect(at(w, 50, 50)?.kind).toBe("RU");
     expect(at(w, -200, -200)?.kind).toBe("RU");
+    expect(w.disputed()).toEqual([]);
   });
 
   it("IMP-005 / IMP-008: one feature over several blocks becomes linked, unmodified pieces", async () => {

@@ -18,11 +18,11 @@ export const toolKind = (t: Tool): Kind | null => (t.type === "paint" ? t.kind :
 export const unitLimit = (radiusM: number) =>
   Math.min(TUNE.UNIT_ABS_MAX, TUNE.UNIT_FACTOR * Math.PI * radiusM * radiusM);
 
-/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007). */
+/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002, DISP-003). */
 export function changes(tool: Tool, p: Piece): boolean {
   if (isProtected(p)) return false;
-  if (tool.type === "paint") return p.kind !== tool.kind;
-  if (tool.type === "erase") return p.kind !== null;
+  if (tool.type === "paint") return p.kind !== tool.kind || !!p.rival;
+  if (tool.type === "erase") return p.kind !== null && p.kind !== "CTX";
   return false;
 }
 
@@ -105,8 +105,9 @@ export function applyRegion(atom: Atom, ff: Freeform, kind: Kind | null): { piec
       if (p.kind === null || isProtected(p)) return [p];
       const rest = difference(p.shape, take);
       if (Math.abs(area(rest) - p.area) < 0.01) return [p];
+      // DISP-001: what the region leaves of a disputed piece stays disputed.
       return components(rest).map((c) =>
-        makePiece(atom, p.kind, c, { ctx: p.ctx, source: p.source, modified: !!p.source }),
+        makePiece(atom, p.kind, c, { ctx: p.ctx, source: p.source, modified: !!p.source, rival: p.rival }),
       );
     });
   const build = (take: Shape) => {
@@ -116,8 +117,9 @@ export function applyRegion(atom: Atom, ff: Freeform, kind: Kind | null): { piec
   };
   let pieces = build(region);
   // SNAP-107
+  const tool: Tool = kind === null ? { type: "erase" } : { type: "paint", kind: kind as PaintKind };
   const slivers = pieces.filter(
-    (p) => !isProtected(p) && p.kind !== kind && p.area < TUNE.SLIVER_AREA && touches(p.shape, region, 0.1),
+    (p) => changes(tool, p) && p.area < TUNE.SLIVER_AREA && touches(p.shape, region, 0.1),
   );
   if (slivers.length === 0) return { pieces, region };
   const grown = union(region, ...slivers.map((p) => p.shape));

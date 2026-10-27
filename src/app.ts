@@ -62,6 +62,10 @@ export class App {
   private touchLock = false;
   private arrows = new Set<string>();
   private dirty = true;
+  private ambient = false; // REN-014: only slow marks are moving
+  private lastDraw = 0;
+  private disputes = 0; // HUD-009
+  private lastDispute: [number, number] | null = null; // HUD-010: where the last jump went
   private lastFrame = performance.now();
   private loadingBusy = false;
 
@@ -155,7 +159,8 @@ export class App {
     this.camera.fit(box, this.anims.dur(900), now);
     this.reveal(now);
     this.hud.setPlace(place);
-    this.updateMix();
+    this.lastDispute = null;
+    this.updateMix(true);
     this.dirty = true;
   }
 
@@ -234,6 +239,7 @@ export class App {
     on("btn-brush-down", () => this.setBrush(this.brushPx / TUNE.BRUSH_STEP));
     on("btn-buildings", () => this.toggleBuildings());
     on("btn-outlines", () => this.toggleOriginals());
+    on("btn-disputes", () => this.nextDispute());
   }
 
   // ---------- tools ----------
@@ -271,6 +277,26 @@ export class App {
     this.showOriginals = !this.showOriginals; // IMP-009
     this.hud.setLayers(this.showBuildings, this.showOriginals);
     this.hud.toast(this.showOriginals ? "Showing original OSM outlines" : "Original outlines hidden");
+    this.dirty = true;
+  }
+
+  /** HUD-010: flies to the next disputed piece, north to south, and flashes it. */
+  private nextDispute() {
+    if (!this.world) return;
+    const list = this.world.disputed();
+    if (!list.length) return;
+    const after = this.lastDispute;
+    const p =
+      (after && list.find((q) => q.bbox.minY > after[1] || (q.bbox.minY === after[1] && q.bbox.minX > after[0]))) || list[0];
+    this.lastDispute = [p.bbox.minX, p.bbox.minY];
+    const b = { minX: toM(p.bbox.minX), minY: toM(p.bbox.minY), maxX: toM(p.bbox.maxX), maxY: toM(p.bbox.maxY) };
+    const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    const hw = Math.max(TUNE.DISPUTE_VIEW, (b.maxX - b.minX) * 1.3) / 2;
+    const hh = Math.max(TUNE.DISPUTE_VIEW, (b.maxY - b.minY) * 1.3) / 2;
+    const now = performance.now();
+    const dur = this.anims.dur(600);
+    this.camera.fit({ minX: cx - hw, minY: cy - hh, maxX: cx + hw, maxY: cy + hh }, dur, now);
+    this.anims.flash({ path: pathOf(p.shape), color: "#fff", cx, cy, mode: "light" }, now, dur, 420);
     this.dirty = true;
   }
 
@@ -540,6 +566,9 @@ export class App {
       case "f":
       case "F":
         return this.fitArea();
+      case "n":
+      case "N":
+        return this.nextDispute(); // HUD-010
       case "Escape":
         this.hud.toggleHelp(false);
         return;
@@ -629,8 +658,14 @@ export class App {
     this.dirty = true;
   }
 
-  private updateMix() {
-    if (this.world) this.hud.updateMix(this.world.mix(), this.world.totalLand);
+  private updateMix(loaded = false) {
+    if (!this.world) return;
+    this.hud.updateMix(this.world.mix(), this.world.totalLand);
+    // HUD-009 / HUD-011
+    const n = this.world.disputed().length;
+    if (!loaded && this.disputes > 0 && n === 0) this.hud.toast("The map no longer disagrees with itself anywhere");
+    this.disputes = n;
+    this.hud.setDisputes(n);
   }
 
   // ---------- frame loop ----------
@@ -659,9 +694,12 @@ export class App {
       this.dirty = true;
     }
     const animating = this.anims.active(now) || !!this.stroke?.preview.size;
+    // REN-014: ripples and spikes alone get a slower frame rate.
+    const ambientDue = this.ambient && now - this.lastDraw >= TUNE.AMBIENT_INTERVAL;
     // REN-008: draw only when something changed or moves.
-    if (this.renderer && this.world && (this.dirty || moving || animating)) {
-      this.renderer.draw(
+    if (this.renderer && this.world && (this.dirty || moving || animating || ambientDue)) {
+      this.lastDraw = now;
+      this.ambient = this.renderer.draw(
         {
           camera: this.camera,
           stroke: this.stroke,
