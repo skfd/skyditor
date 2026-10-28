@@ -494,7 +494,7 @@ disputed (DISP-002).
 **SNAP-103** The editor shall swallow leftovers: within the touched open pieces, any part outside the
 stroke shape that is narrower than the snap distance (TUNE-SNAP-FACTOR of the brush's width), and that
 touches the stroke shape, shall join the result. The corners of a wider leftover belong to that leftover and
-are never swallowed.
+are never swallowed. → see CORR-003
   Why: this is what makes paint "snap". A gap narrower than the snap distance between the paint and a
   road, a neighbouring landuse, or a context area closes by itself. Wide leftovers stay.
 
@@ -962,6 +962,14 @@ of the pieces it shrinks, the void it leaves behind, and any piece these later m
   and let go with no change, every time.
   Why: unit pieces are the blocks and mapped areas the user finds on the map. A leftover shaped by the
   user's own paint is not one of them, and land the user has brushed over must take the paint.
+
+**CORR-003** (corrects SNAP-103) The editor shall swallow a narrow leftover only within TUNE-SWALLOW-REACH
+of the brush radius from the paint. Past that, the leftover stays as it was.
+  Observed: a Kyiv block (replay square `kyiv_1_4`) wraps around a motorway, and the strips between its
+  carriageways are narrow leftovers that touch the paint through each other. Painting the block took
+  21,000 m² of them, all far from every stroke.
+  Why: swallowing closes the gap between the paint and whatever it was painted up to. A strip that leads
+  away from the stroke is land the user never painted near.
 
 ---
 

@@ -134,8 +134,12 @@ export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, 
   }
 
   // SNAP-103 / SNAP-104: narrow leftovers that touch the paint are swallowed; corners of wide ones are not.
+  // CORR-003: only near the paint. Clipped after narrowParts, so the cut makes no new narrow bits.
   const leftover = difference(eligible, painted);
-  const swallowed = narrowParts(leftover, TUNE.SNAP_FACTOR * radiusM).filter((c) => touches(c, painted, 0.1));
+  const reach = offset(painted, TUNE.SWALLOW_REACH * radiusM);
+  const swallowed = narrowParts(leftover, TUNE.SNAP_FACTOR * radiusM)
+    .flatMap((c) => components(intersect(c, reach)))
+    .filter((c) => touches(c, painted, 0.1));
   return { region: union(painted, ...swallowed), eligible };
 }
 

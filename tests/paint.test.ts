@@ -67,6 +67,19 @@ describe("open pieces", () => {
     expect(at(w, 0, -90)?.kind).toBe(null);
   });
 
+  it("CORR-003: a long narrow leftover is swallowed only near the paint", async () => {
+    // A dead end off the east street runs 14 m inside the north edge of the centre block, leaving an 8 m strip
+    // that reaches 150 m east from where the paint is.
+    const s = grid();
+    s.road([[100, -80], [-60, -80]]);
+    const w = await s.world();
+    paint(w, R2, 10, [[-80, -110], [-80, 110]]);
+    const reach = TUNE.SWALLOW_REACH * 10;
+    expect(at(w, -70 + reach / 2, -90)?.kind).toBe("R2");
+    expect(at(w, -70 + reach + 10, -90)?.kind).toBe(null);
+    expect(at(w, 50, -90)?.kind).toBe(null);
+  });
+
   it("SNAP-104: corners of a wide leftover are never swallowed", async () => {
     const w = await grid().world();
     paint(w, R2, 10, [[-60, -80], [60, -80]]);

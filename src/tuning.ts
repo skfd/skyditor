@@ -48,6 +48,7 @@ export const TUNE = {
   // Snapping: freeform
   SMOOTH_FACTOR: 0.35, // TUNE-SMOOTH-FACTOR: stroke smoothing radius ÷ brush radius
   SNAP_FACTOR: 0.6, // TUNE-SNAP-FACTOR: leftover swallow radius ÷ brush radius
+  SWALLOW_REACH: 1.5, // TUNE-SWALLOW-REACH: farthest a swallowed leftover reaches from the paint, × brush radius
   CELL_TAKE: 0.5, // TUNE-CELL-TAKE: covered fraction at which a cell is taken whole
   BUILDING_MARGIN: 0.5, // TUNE-BUILDING-MARGIN: yard kept around buildings by freeform results, m
   STRAIGHTEN: 0.5, // TUNE-STRAIGHTEN: largest stray from a straight line, × brush radius, of an outline stretch that follows nothing
