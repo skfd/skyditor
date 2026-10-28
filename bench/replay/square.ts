@@ -23,7 +23,8 @@ export interface SquareMeta {
 
 export interface Truth {
   feature: AreaFeature;
-  shape: Shape; // inside the core
+  shape: Shape; // inside the core, where it is scored
+  paint: Shape; // inside the frame, where strokes go: stopping them at the core would draw an edge there
   full: Shape; // the whole feature, less context
   kind: PaintKind; // stand-in kind for scoring; touching truths never share one
 }
@@ -57,10 +58,10 @@ export function loadSquare(text: string, meta: SquareMeta): Square {
     const full = difference(f.shape, context);
     const shape = intersect(full, core);
     if (area(shape) < MIN_TRUTH) continue;
-    truth.push({ feature: f, shape, full, kind: PAINT_KINDS[0] });
+    truth.push({ feature: f, shape, paint: intersect(full, rect(features.frame)), full, kind: PAINT_KINDS[0] });
   }
   // Painted in this order, so smaller truth lands on top of larger truth it overlaps.
-  truth.sort((a, b) => area(b.shape) - area(a.shape));
+  truth.sort((a, b) => area(b.paint) - area(a.paint));
   colour(truth);
   return { meta, osm, features, world, truth, core };
 }
@@ -72,11 +73,11 @@ export function loadSquare(text: string, meta: SquareMeta): Square {
 function colour(truth: Truth[]) {
   const done: Truth[] = [];
   for (const t of truth) {
-    const used = new Set(done.filter((d) => touches(d.shape, t.shape, 1)).map((d) => d.kind));
+    const used = new Set(done.filter((d) => touches(d.paint, t.paint, 1)).map((d) => d.kind));
     t.kind = PAINT_KINDS.find((k) => !used.has(k)) ?? PAINT_KINDS[done.length % PAINT_KINDS.length];
     done.push(t);
   }
 }
 
-/** Components of a truth shape, largest first. */
-export const truthParts = (t: Truth) => components(t.shape).sort((a, b) => area(b) - area(a));
+/** Components of a truth's paint shape, largest first. */
+export const truthParts = (t: Truth) => components(t.paint).sort((a, b) => area(b) - area(a));

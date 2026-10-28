@@ -5,7 +5,7 @@ import type { World } from "../../src/model/world";
 import { Stroke } from "../../src/paint/stroke";
 import { TUNE } from "../../src/tuning";
 import { type Score, score, yardsticks } from "./score";
-import { type SquareMeta, loadSquare, truthParts } from "./square";
+import { type Square, type SquareMeta, loadSquare, truthParts } from "./square";
 import { DEFAULT_STROKES, type Pt, type StrokeOptions, hash, mulberry32, planPart } from "./strokes";
 
 export interface Replay {
@@ -24,9 +24,35 @@ export interface Replay {
 
 export function replay(text: string, meta: SquareMeta, opts: StrokeOptions = DEFAULT_STROKES, svg = false) {
   const t0 = performance.now();
+  const p = paintSquare(text, meta, opts);
+  const result: Replay = {
+    name: meta.name, city: meta.city, country: meta.country, style: meta.style,
+    ms: 0, truths: p.sq.truth.length, strokes: p.trails.length,
+    unreached_m2: p.unreached, whole_m2: p.whole, freeform_m2: p.freeform,
+    score: score(p.sq, yardsticks(p.sq)),
+  };
+  result.ms = Math.round(performance.now() - t0);
+  return { result, svg: svg ? drawSvg(p.sq, p.trails) : undefined };
+}
+
+/** Overrides tuning knobs for this module graph, for what-if runs (`npm run replay -- --tune SNAP_FACTOR=0`). */
+export function setTune(overrides: Record<string, number>) {
+  for (const [k, v] of Object.entries(overrides)) {
+    if (typeof (TUNE as Record<string, unknown>)[k] !== "number") throw new Error(`No numeric knob TUNE.${k}`);
+    (TUNE as Record<string, unknown>)[k] = v;
+  }
+}
+
+export interface Trail {
+  kind: PaintKind;
+  radius: number;
+  pts: Pt[];
+}
+
+/** Loads a square and paints every truth polygon, without scoring. */
+export function paintSquare(text: string, meta: SquareMeta, opts: StrokeOptions = DEFAULT_STROKES) {
   const sq = loadSquare(text, meta);
-  const ys = yardsticks(sq);
-  const trails: { kind: string; radius: number; pts: Pt[] }[] = [];
+  const trails: Trail[] = [];
   let unreached = 0, whole = 0, freeform = 0;
   sq.truth.forEach((t, i) => {
     const rand = mulberry32(hash(`${meta.name}/${i}`));
@@ -43,14 +69,7 @@ export function replay(text: string, meta: SquareMeta, opts: StrokeOptions = DEF
       }
     }
   });
-  const result: Replay = {
-    name: meta.name, city: meta.city, country: meta.country, style: meta.style,
-    ms: 0, truths: sq.truth.length, strokes: trails.length,
-    unreached_m2: unreached, whole_m2: whole, freeform_m2: freeform,
-    score: score(sq, ys),
-  };
-  result.ms = Math.round(performance.now() - t0);
-  return { result, svg: svg ? drawSvg(sq, trails) : undefined };
+  return { sq, trails, unreached, whole, freeform };
 }
 
 function paint(world: World, kind: PaintKind, r: number, pts: Pt[]) {
@@ -75,7 +94,7 @@ const path = (s: Shape) =>
   s.map((r) => "M" + r.map((p) => `${toM(p.X).toFixed(1)} ${toM(p.Y).toFixed(1)}`).join("L") + "Z").join("");
 
 /** Streets, context, the painted result, the truth outlines and the trails, in one picture. */
-function drawSvg(sq: ReturnType<typeof loadSquare>, trails: { kind: string; pts: Pt[] }[]): string {
+function drawSvg(sq: Square, trails: Trail[]): string {
   const out: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-350 -350 700 700" width="1400" height="1400">`,
     `<rect x="-350" y="-350" width="700" height="700" fill="#fff"/>`,

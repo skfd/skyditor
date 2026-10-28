@@ -2,6 +2,7 @@
 // and scores the snapped result against it. Usage:
 //   node scripts/replay.mjs [--only a,b] [--limit n] [--svg] [--jobs n] [--out dir] [--squares dir] [--list file]
 //   node scripts/replay.mjs --report results.json[.gz]
+// --tune KEY=value[,KEY=value] overrides tuning knobs (src/tuning.ts) for a what-if run.
 import { runnerImport } from "vite";
 import { gunzipSync } from "node:zlib";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -28,6 +29,10 @@ if (isMainThread && opt("report", null)) {
   const out = opt("out", join(study, "work/replay"));
   const only = opt("only", null)?.split(",");
   const svg = args.includes("--svg");
+  const tune = Object.fromEntries((opt("tune", "") || "").split(",").filter(Boolean).map((kv) => {
+    const [k, v] = kv.split("=");
+    return [k, Number(v)];
+  }));
   let metas = readFileSync(list, "utf8").split("\n").filter((l) => l.trim() && !l.startsWith("#")).map((l) => {
     const [name, lat, lon, city, country, style] = l.trim().split(/\s+/);
     return { name, lat: +lat, lon: +lon, city, country, style };
@@ -42,7 +47,7 @@ if (isMainThread && opt("report", null)) {
   let next = 0, done = 0;
   const t0 = Date.now();
   await Promise.all(Array.from({ length: jobs }, () => new Promise((resolve, reject) => {
-    const w = new Worker(fileURLToPath(import.meta.url), { workerData: { squares, out, svg } });
+    const w = new Worker(fileURLToPath(import.meta.url), { workerData: { squares, out, svg, tune } });
     const feed = () => (next < metas.length ? w.postMessage(metas[next++]) : w.postMessage(null));
     w.on("message", (m) => {
       if (m === "ready") return feed();
@@ -67,6 +72,7 @@ if (isMainThread && opt("report", null)) {
       // A fresh module graph per square: piece ids seed coverage samples, so they must not depend on
       // which squares a worker happened to replay before.
       const { module } = await runnerImport(join(root, "bench/replay/run.ts"));
+      module.setTune(workerData.tune);
       const text = gunzipSync(readFileSync(join(workerData.squares, `${meta.name}.osm.gz`))).toString("utf8");
       const { result, svg } = module.replay(text, meta, undefined, workerData.svg);
       if (svg) writeFileSync(join(workerData.out, `${meta.name}.svg`), svg);
