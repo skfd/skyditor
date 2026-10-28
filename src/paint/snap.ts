@@ -18,13 +18,44 @@ export const toolKind = (t: Tool): Kind | null => (t.type === "paint" ? t.kind :
 export const unitLimit = (radiusM: number) =>
   Math.min(TUNE.UNIT_ABS_MAX, TUNE.UNIT_FACTOR * Math.PI * radiusM * radiusM);
 
-/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002, DISP-003). */
+/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002). */
 export function changes(tool: Tool, p: Piece): boolean {
   if (isProtected(p)) return false;
   if (tool.type === "paint") return p.kind !== tool.kind || !!p.rival;
-  if (tool.type === "erase") return p.kind !== null && p.kind !== "CTX";
+  if (tool.type === "erase") return p.kind !== null;
   return false;
 }
+
+/** DISP-004: a tap on disputed context settles it for the context, with a paint tool or the eraser. */
+export const settles = (tool: Tool, p: Piece | null): p is Piece =>
+  tool.type !== "density" && !!p && p.kind === "CTX" && !!p.rival;
+
+/**
+ * DISP-004: the context keeps the piece, undisputed, and every piece of the rival feature counts as
+ * changed by the user. Returns the new piece list of each atom that changes.
+ */
+export function settleForContext(world: World, piece: Piece): Map<Atom, Piece[]> {
+  const out = new Map<Atom, Piece[]>();
+  const src = piece.rival?.source;
+  if (src)
+    for (const atom of world.atoms) {
+      if (!atom.pieces.some((p) => p.source === src && !p.modified)) continue;
+      out.set(atom, atom.pieces.map((p) => (p.source === src && !p.modified ? remake(atom, p, { modified: true }) : p)));
+    }
+  const atom = world.atoms[piece.atom];
+  const pieces = (out.get(atom) ?? atom.pieces).filter((p) => p !== piece);
+  out.set(atom, normalize(atom, [...pieces, remake(atom, piece, { rival: undefined })]));
+  return out;
+}
+
+/** A copy of `p` with some fields changed (pieces are immutable). */
+const remake = (atom: Atom, p: Piece, change: { modified?: boolean; rival?: undefined }) =>
+  makePiece(atom, p.kind, p.shape, {
+    ctx: p.ctx,
+    source: p.source,
+    modified: change.modified ?? p.modified,
+    rival: "rival" in change ? change.rival : p.rival,
+  });
 
 /** SNAP-101: the trail (as one or more runs) buffered by the brush radius, then smoothed. */
 export function strokeShape(runs: Ring[], radiusM: number): Shape {

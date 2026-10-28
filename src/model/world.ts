@@ -23,6 +23,7 @@ export interface Piece {
 export interface Rival {
   readonly kind: Kind;
   readonly ctx?: CtxClass;
+  readonly source?: string; // the losing feature's OSM element, marked changed when the dispute settles (DISP-004)
 }
 
 export interface Atom {
@@ -59,7 +60,7 @@ export function makePiece(
   };
 }
 
-export const isProtected = (p: Piece) => p.kind === "CTX" && !p.rival; // PAINT-004, DISP-002
+export const isProtected = (p: Piece) => p.kind === "CTX"; // PAINT-004
 // Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013).
 const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}`;
 const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land

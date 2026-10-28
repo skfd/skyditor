@@ -71,7 +71,26 @@ describe("overlaps", () => {
     s.rect(-30, -95, 95, 95, { landuse: "residential", residential: "detached" });
     const w = await s.world();
     expect(at(w, 0, 0)?.kind).toBe("CTX");
-    expect(at(w, 0, 0)?.rival).toEqual({ kind: "R2", ctx: undefined });
+    expect(at(w, 0, 0)?.rival).toMatchObject({ kind: "R2", ctx: undefined });
+  });
+
+  it("IMP-012: context holds the overlap even when it is the larger feature", async () => {
+    const s = new Sketch(300).grid(200);
+    s.rect(-95, -95, 40, 95, { leisure: "park" });
+    s.rect(-20, -95, 95, 95, { landuse: "residential", residential: "detached" });
+    const w = await s.world();
+    expect(at(w, 10, 0)?.kind).toBe("CTX");
+    expect(at(w, 10, 0)?.rival?.kind).toBe("R2");
+    expect(at(w, 70, 0)?.kind).toBe("R2");
+  });
+
+  it("CORR-001: landuse nested inside context still keeps its land, undisputed", async () => {
+    const s = new Sketch(300).grid(200);
+    s.rect(-95, -95, 95, 95, { landuse: "farmland" });
+    s.rect(-40, -40, 40, 40, { landuse: "residential", residential: "rural" });
+    const w = await s.world();
+    expect(at(w, 0, 0)?.kind).toBe("R1");
+    expect(w.disputed()).toEqual([]);
   });
 });
 
@@ -87,33 +106,70 @@ describe("settling disputes", () => {
     expect(w.disputed()).toEqual([]);
   });
 
-  it("DISP-002: disputed context can be painted over", async () => {
+  // A park and detached houses overlapping in x -30..20; the park holds the overlap (IMP-012).
+  const parkClash = () => {
     const s = new Sketch(300).grid(200);
     s.rect(-95, -95, 20, 95, { leisure: "park" });
     s.rect(-30, -95, 95, 95, { landuse: "residential", residential: "detached" });
-    const w = await s.world();
-    const settled = paint(w, { type: "paint", kind: "R2" }, 20, [[0, 0]], true);
-    expect(settled.events.some((e) => e.type === "reject")).toBe(false);
-    expect(at(w, 0, 0)?.kind).toBe("R2");
-    expect(at(w, 0, 0)?.rival).toBeUndefined();
-    // PAINT-004: the undisputed rest of the park stays protected.
-    const { events } = paint(w, { type: "paint", kind: "R2" }, 20, [[-70, 0]], true);
-    expect(at(w, -70, 0)?.kind).toBe("CTX");
-    expect(events.some((e) => e.type === "reject")).toBe(true);
+    return s.world();
+  };
+
+  it("PAINT-004 / DISP-005: dragging paint over disputed context rejects and changes nothing", async () => {
+    const w = await parkClash();
+    const { events } = paint(w, { type: "paint", kind: "R2" }, 4, [[0, -90], [0, 90]]);
+    expect(events.some((e) => e.type === "reject")).toBe(true); // PAINT-009
+    expect(at(w, 0, 0)?.kind).toBe("CTX");
+    expect(at(w, 0, 0)?.rival?.kind).toBe("R2");
   });
 
-  it("DISP-003: the eraser and density tools leave disputed context alone", async () => {
-    const s = new Sketch(300).grid(200);
-    s.rect(-95, -95, 20, 95, { leisure: "park" });
-    s.rect(-30, -95, 95, 95, { landuse: "residential", residential: "detached" });
-    const w = await s.world();
-    const erased = paint(w, { type: "erase" }, 20, [[0, 0]], true);
-    expect(erased.step).toBeNull();
-    expect(erased.events.some((e) => e.type === "reject")).toBe(true); // PAINT-009
+  it("DISP-005: a press held on disputed context without moving rejects and changes nothing", async () => {
+    const w = await parkClash();
+    const { events, step } = paint(w, { type: "paint", kind: "R2" }, 4, [[0, 0]]);
+    expect(step).toBeNull();
+    expect(events.filter((e) => e.type === "reject").length).toBe(1);
+    expect(at(w, 0, 0)?.rival?.kind).toBe("R2");
+  });
+
+  it("DISP-004: tapping disputed context settles it for the context and marks the rival changed", async () => {
+    const w = await parkClash();
+    const h = new History();
+    expect(at(w, 60, 0)?.modified).toBe(false);
+    const { events, step } = paint(w, { type: "paint", kind: "R2" }, 20, [[0, 0]], true);
+    expect(events.some((e) => e.type === "reject")).toBe(false); // PAINT-009
+    h.push(step!);
+    expect(at(w, 0, 0)?.kind).toBe("CTX");
+    expect(at(w, 0, 0)?.rival).toBeUndefined();
+    expect(w.disputed()).toEqual([]);
+    expect(at(w, 60, 0)?.kind).toBe("R2"); // the tap paints nothing else
+    expect(at(w, 60, 0)?.modified).toBe(true); // IMP-008: the houses' outline shrinks
+    h.undo();
+    expect(at(w, 0, 0)?.rival?.kind).toBe("R2");
+    expect(at(w, 60, 0)?.modified).toBe(false);
+  });
+
+  it("DISP-004: the eraser settles disputed context too", async () => {
+    const w = await parkClash();
+    const { events, step } = paint(w, { type: "erase" }, 20, [[0, 0]], true);
+    expect(step).not.toBeNull();
+    expect(events.some((e) => e.type === "reject")).toBe(false);
+    expect(at(w, 0, 0)?.kind).toBe("CTX");
+    expect(at(w, 0, 0)?.rival).toBeUndefined();
+  });
+
+  it("DISP-005: density tools leave disputed context alone", async () => {
+    const w = await parkClash();
     const { events, step } = paint(w, { type: "density", dir: 1 }, 5, [[0, -20], [0, 20]]);
     expect(step).toBeNull();
     expect(events.some((e) => e.type === "reject")).toBe(true);
     expect(at(w, 0, 0)?.rival?.kind).toBe("R2");
+  });
+
+  it("PAINT-004: undisputed context stays protected from taps", async () => {
+    const w = await parkClash();
+    const { events, step } = paint(w, { type: "paint", kind: "R2" }, 20, [[-70, 0]], true);
+    expect(step).toBeNull();
+    expect(at(w, -70, 0)?.kind).toBe("CTX");
+    expect(events.some((e) => e.type === "reject")).toBe(true);
   });
 
   it("DISP-001: painting part of a disputed piece settles that part; undo brings the dispute back", async () => {

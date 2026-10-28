@@ -270,22 +270,35 @@ that part to the tier over unspecified residential, and otherwise to the smaller
   Why: they say the same thing and differ only in detail, so the detail wins and nothing is wrong.
 
 **IMP-012** If two disagreeing features that are not nested overlap in a wider part, then the editor shall
-give that part to the smaller feature and mark it *disputed*, remembering the other feature's kind as its
-rival. A disputed part too small to keep as a fragment on its own (IMP-006) shall not be marked.
+give that part to the exclusive-context feature if one of them is exclusive context, and otherwise to the
+smaller feature, and mark it *disputed*, remembering the other feature and its kind as its rival. A
+disputed part too small to keep as a fragment on its own (IMP-006) shall not be marked.
   Why: two mappers disagree, and nothing in the data says who is right. The lattice still needs one kind
-  at every spot, but the editor must not pretend it knows.
+  at every spot, but the editor must not pretend it knows. Context always holds the part because the
+  editor never overwrites context (PAINT-004); it only asks the user to confirm the shrink (DISP-004).
 
 **DISP-001** When a paint stroke or a density step changes all or part of a disputed piece, the editor
 shall make the changed part undisputed and leave the rest of the piece disputed.
   Why: painting over a disagreement is the user's answer to it. Undo brings the dispute back with the
   pieces (UNDO-001).
 
-**DISP-002** The editor shall let paint tools claim a disputed piece even when it already has the stroke's
-kind, and even when it is exclusive context.
-  Why: agreeing with what is shown is an answer too, and the dispute may be decided against the context.
+**DISP-002** The editor shall let paint tools claim a disputed piece that is not exclusive context even
+when it already has the stroke's kind.
+  Why: agreeing with what is shown is an answer too.
 
-**DISP-003** The editor shall not let the eraser or density tools change disputed exclusive context.
-  Why: the eraser takes painted landuse away. It has no way to say "this is a park" (Q-006).
+~~**DISP-003** The editor shall not let the eraser or density tools change disputed exclusive context.~~
+Retired: replaced by DISP-004 and DISP-005.
+
+**DISP-004** When the user taps a disputed exclusive-context piece with a paint tool or the eraser, the
+editor shall settle the dispute in favour of the context: the piece keeps its kind and is no longer
+disputed, and the rival feature counts as changed by the user (IMP-008).
+  Why: parks, school grounds, cemeteries and the like are not this editor's to change, so the context
+  always wins. But the neighbouring feature only shrinks once the user has seen the overlap and said so.
+
+**DISP-005** If a stroke that is not a tap, or a density stroke, reaches disputed exclusive context, then
+the editor shall leave it unchanged and play the reject feedback (PAINT-009, DENS-004).
+  Why: painting past the overlap must not shrink a neighbouring feature as a side effect. Settling takes a
+  deliberate click.
 
 ### Buildings
 
@@ -356,8 +369,11 @@ cursor has moved at least TUNE-TRAIL-STEP × brush radius from the previous poin
 **PAINT-003** While a stroke is active, the editor shall draw the brush trail as a soft translucent band in
 the kind's colour.
 
-**PAINT-004** The editor shall never change exclusive-context pieces or water by painting, erasing or
-density changes, except disputed exclusive context painted over (DISP-002).
+**PAINT-004** The editor shall never change the kind or shape of exclusive-context pieces or water by
+painting, erasing or density changes. Settling a dispute in favour of the context (DISP-004) is the only
+change a tool makes to exclusive context.
+  Why: the editor reads parks, school grounds, cemeteries, construction sites and other context, but it
+  neither adds nor overwrites them.
 
 **PAINT-005** When a stroke ends, the editor shall commit all of the stroke's changes as one undo step.
 
@@ -370,7 +386,8 @@ that piece alone, unless it is disputed (DISP-002). It is not a claim.
 tool. For unspecified residential, or an empty spot, nothing changes.
 
 **PAINT-009** If the cursor enters exclusive context or water during a paint or eraser stroke, then the
-editor shall play the *reject* feedback (FEEL-004), at most once per stroke.
+editor shall play the *reject* feedback (FEEL-004), at most once per stroke. A tap that settles a dispute
+(DISP-004) is not rejected.
   Why: protected land must not change, but silence reads as "broken".
 
 **PAINT-010** If a second finger touches the map while a stroke is active, then the editor shall cancel
@@ -416,7 +433,7 @@ claimed, with no change to the piece.
 (round caps and joins), smoothed by a morphological closing of radius TUNE-SMOOTH-FACTOR × brush radius.
 
 **SNAP-102** The editor shall limit the freeform result in each atom to the open pieces the stroke shape
-touches, excluding exclusive-context pieces and pieces already of the stroke's kind, unless they are
+touches, excluding exclusive-context pieces, and pieces already of the stroke's kind unless they are
 disputed (DISP-002).
 
 **SNAP-103** The editor shall swallow leftovers: within the touched open pieces, any part outside the
@@ -449,7 +466,7 @@ simplified with tolerance TUNE-SIMPLIFY, and it shall settle into place with the
 (FEEL-001).
 
 **SNAP-107** If applying a freeform result leaves a piece in the same atom smaller than TUNE-SLIVER-AREA,
-touching the result, that the stroke could change (PAINT-004, DISP-002, DISP-003), then the editor shall
+touching the result, that the stroke could change (PAINT-004, DISP-002), then the editor shall
 merge that piece into the result.
 
 ---
@@ -782,8 +799,9 @@ of narrow buildings sharing walls → terraced, small detached footprint → hou
 (on the outline, inside it, or imported points at the plot centre), and fetching tagged nodes makes area
 downloads bigger. The same inference should feed Q-004, so colours and suggestions never disagree.
 
-**Q-006** How does the user settle a dispute in favour of exclusive context ("it really is a park")? Paint
-tools can only answer with a paintable kind (DISP-003). Design together with Q-007.
+~~**Q-006** How does the user settle a dispute in favour of exclusive context ("it really is a park")? Paint
+tools can only answer with a paintable kind (DISP-003). Design together with Q-007.~~ Answered: context
+always wins, and the user confirms it with a tap (IMP-012, DISP-004).
 
 **Q-007** One feature with two landuse statements (for example `landuse=residential` + `leisure=park` on the
 same way) is an error of the same family as a dispute. IMP-001 currently picks one class quietly. How

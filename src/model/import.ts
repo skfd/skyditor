@@ -114,8 +114,10 @@ function resolveOverlaps(world: World, ranked: Ranked[]) {
         continue;
       }
       const agreeing = agree(a.kind, b.kind);
-      // IMP-011: the tier wins over unspecified residential; otherwise the smaller feature.
-      const [win, lose] = agreeing && a.kind === "RU" && b.kind !== "RU" ? [b, a] : [a, b];
+      // IMP-011: the tier wins over unspecified residential; IMP-012: context wins over landuse;
+      // otherwise the smaller feature.
+      const bWins = agreeing ? a.kind === "RU" && b.kind !== "RU" : b.kind === "CTX";
+      const [win, lose] = bWins ? [b, a] : [a, b];
       for (const part of parts)
         for (const c of components(part.shape)) {
           if (!containsDisc(c, TUNE.IMPORT_SNAP)) {
@@ -123,7 +125,7 @@ function resolveOverlaps(world: World, ranked: Ranked[]) {
             continue;
           }
           lose.lost.push(c);
-          if (!agreeing) win.disputes.push({ shape: c, rival: { kind: lose.kind, ctx: lose.ctx } }); // IMP-012
+          if (!agreeing) win.disputes.push({ shape: c, rival: { kind: lose.kind, ctx: lose.ctx, source: lose.f.id } }); // IMP-012
         }
     }
   }

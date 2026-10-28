@@ -386,7 +386,7 @@ export class App {
     this.canvas.setPointerCapture(e.pointerId);
     this.hover = null;
     // PAINT-001: the brush radius is fixed in metres for the whole stroke.
-    this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy);
+    this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy, TUNE.TAP_MOVE / this.camera.scale);
     this.strokeStart = { sx, sy, t: performance.now(), moved: 0 };
     this.handle(this.stroke.start(), [wx, wy]);
   }
@@ -628,7 +628,8 @@ export class App {
           const [cx, cy] = e.at;
           if (e.piece) {
             // FEEL-001: rise from the old height; merged slabs only flash, they don't bounce as a whole.
-            if (e.piece.area <= area(e.region) * 1.05)
+            // Context settled by a tap (DISP-004) is flat land: it only flashes.
+            if (e.piece.kind !== "CTX" && e.piece.area <= area(e.region) * 1.05)
               this.anims.pop(e.piece, now, { from: r.liftPx(e.prevKind, s), delay });
             this.anims.flash({ path, color: "#fff", cx, cy, mode: "light" }, now, delay);
             this.sound.pop(KINDS[e.piece.kind as Kind].pitch, delay);

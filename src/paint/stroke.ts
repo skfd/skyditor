@@ -5,7 +5,10 @@ import type { Step } from "../model/history";
 import { type Atom, type Piece, World, makePiece, normalize } from "../model/world";
 import { TUNE } from "../tuning";
 import { distToSegment, samplesOf } from "./samples";
-import { type Freeform, type Tool, applyRegion, changes, claimWhole, freeformIn, strokeShape, toolKind, unitLimit } from "./snap";
+import {
+  type Freeform, type Tool, applyRegion, changes, claimWhole, freeformIn, settleForContext, settles, strokeShape, toolKind,
+  unitLimit,
+} from "./snap";
 
 export type StrokeEvent =
   | { type: "claim"; piece: Piece | null; region: Shape; prevKind: Kind | null; at: [number, number]; whole: boolean }
@@ -34,6 +37,7 @@ export class Stroke {
     readonly radius: number, // m, fixed for the stroke (PAINT-001)
     x: number,
     y: number,
+    readonly tapMove = 0, // m; how far the cursor may move while the stroke can still be a tap (DISP-004)
   ) {
     this.limit = unitLimit(radius);
     this.trail.push([x, y]);
@@ -60,8 +64,10 @@ export class Stroke {
     if (!this.rejected) {
       const p = this.world.pieceAt(toI(bx), toI(by));
       const onLand = p !== null || this.world.atomAt(toI(bx), toI(by)) !== null;
-      // DISP-002 / DISP-003: disputed context rejects only the tools that can't change it.
-      if ((p && p.kind === "CTX" && !changes(this.tool, p)) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
+      // DISP-005: disputed context rejects only once the stroke can no longer be a settling tap (DISP-004).
+      const [sx, sy] = this.trail[0];
+      const mayTap = settles(this.tool, p) && Math.hypot(bx - sx, by - sy) <= this.tapMove;
+      if ((p && p.kind === "CTX" && !mayTap) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
         this.rejected = true;
         events.push({ type: "reject", at: [bx, by] });
       }
@@ -111,6 +117,18 @@ export class Stroke {
     return { type: "claim", piece, region: p.shape, prevKind: p.kind, at: [cx / TUNE.GEOM_SCALE, cy / TUNE.GEOM_SCALE], whole: true };
   }
 
+  /** DISP-004 */
+  private settle(p: Piece): StrokeEvent {
+    for (const [atom, pieces] of settleForContext(this.world, p)) {
+      this.snapshot(atom);
+      atom.pieces = pieces;
+    }
+    const atom = this.world.atoms[p.atom];
+    const piece = atom.pieces.find((q) => q.kind === "CTX" && !q.rival && overlaps(q, p.shape) && q.area >= p.area - 0.01) ?? null;
+    const [cx, cy] = shapeCentroid(p.shape);
+    return { type: "claim", piece, region: p.shape, prevKind: "CTX", at: [cx / TUNE.GEOM_SCALE, cy / TUNE.GEOM_SCALE], whole: true };
+  }
+
   /** DENS-002..DENS-005 */
   private densityAlong(ax: number, ay: number, bx: number, by: number): StrokeEvent[] {
     if (this.tool.type !== "density") return [];
@@ -123,7 +141,7 @@ export class Stroke {
       if (!p || p.kind === null || this.densityDone.has(p)) continue;
       this.densityDone.add(p);
       const tier = KINDS[p.kind].tier;
-      // DENS-004 / DISP-003: disputed context is rejected like any other non-residential land.
+      // DENS-004 / DISP-005: disputed context is rejected like any other non-residential land.
       if (tier === undefined) {
         if (!this.rejected) events.push({ type: "reject", at: [x, y] });
         this.rejected = true;
@@ -208,12 +226,21 @@ export class Stroke {
     const kind = toolKind(this.tool);
     const [sx, sy] = this.trail[0];
     if (this.tool.type !== "density") {
-      // SNAP-004: a tap claims the whole unit piece under it.
-      if (isTap) {
-        const p = this.world.pieceAt(toI(sx), toI(sy));
-        if (p && p.area <= this.limit && changes(this.tool, p)) events.push(this.claim(this.world.atoms[p.atom], p));
+      const p = this.world.pieceAt(toI(sx), toI(sy));
+      if (isTap && settles(this.tool, p)) {
+        // DISP-004: a tap on disputed context settles it for the context, whatever its size, and does nothing else.
+        events.push(this.settle(p));
+        this.preview.clear();
+      } else {
+        // SNAP-004: a tap claims the whole unit piece under it.
+        if (isTap && p && p.area <= this.limit && changes(this.tool, p)) events.push(this.claim(this.world.atoms[p.atom], p));
+        // DISP-005: a press held on disputed context without moving is no tap, and changes nothing there.
+        if (!isTap && !this.rejected && settles(this.tool, p)) {
+          this.rejected = true;
+          events.push({ type: "reject", at: [sx, sy] });
+        }
+        this.updatePreview();
       }
-      this.updatePreview();
       for (const [atom, ff] of this.preview) {
         if (isEmpty(ff.region)) continue;
         this.snapshot(atom);
