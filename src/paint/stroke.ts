@@ -1,20 +1,24 @@
-// One press–drag–release gesture (PAINT-*, SNAP-001..006, DENS-*).
+// One press–drag–release gesture (PAINT-*, SNAP-001..006, DENS-*), on land or on buildings (TYPE-007..TYPE-010).
 import { type BBox, type Ring, type Shape, area, bbox, contains, expandBBox, intersect, isEmpty, shapeCentroid, toI, toM } from "../geo/clip";
-import { type Kind, KINDS, tierKind } from "../model/kinds";
+import { type Building, statusOf, typeAs, untype } from "../model/buildings";
+import { type BuildingLook, type Kind, KINDS, tierKind } from "../model/kinds";
 import type { Step } from "../model/history";
-import { type Atom, type Piece, World, makePiece, normalize } from "../model/world";
+import { type Atom, type BuildingSet, type Piece, World, makePiece, normalize } from "../model/world";
 import { TUNE } from "../tuning";
 import { distToSegment, samplesOf } from "./samples";
 import {
-  type Freeform, type Tool, applyRegion, changes, claimWhole, freeformIn, isUnit, settleForContext, settles, strokeShape,
-  toolKind, unitLimit,
+  type Freeform, type Target, type Tool, applyRegion, changes, claimWhole, freeformIn, isUnit, onBuildings, settleForContext,
+  settles, strokeShape, toolKind, unitLimit,
 } from "./snap";
 
 export type StrokeEvent =
   | { type: "claim"; piece: Piece | null; region: Shape; prevKind: Kind | null; at: [number, number]; whole: boolean }
   | { type: "tier"; piece: Piece; prevKind: Kind; at: [number, number] }
   | { type: "bump"; piece: Piece; at: [number, number] }
-  | { type: "reject"; at: [number, number] };
+  | { type: "reject"; at: [number, number] }
+  // TYPE-007 / TYPE-008 / TYPE-010: a building changed; TYPE-007: an unsure building was passed over.
+  | { type: "typed"; building: Building; prevLook: BuildingLook | null; at: [number, number] }
+  | { type: "skip"; building: Building; at: [number, number] };
 
 interface Coverage {
   covered: Uint8Array;
@@ -26,10 +30,13 @@ export class Stroke {
   readonly preview = new Map<Atom, Freeform>(); // SNAP-105
   readonly coverage = new Map<Piece, Coverage>(); // SNAP-002
   private readonly before = new Map<Atom, Piece[]>(); // undo snapshots (PAINT-005)
+  private readonly beforeB = new Map<BuildingSet, Building[]>(); // TYPE-011
   private readonly densityDone = new Set<Piece>();
+  private readonly buildingsDone = new Set<number>(); // geom ids touched by this stroke (TYPE-007, TYPE-008)
   private readonly dirty = new Set<Atom>();
   private rejected = false;
   readonly limit: number;
+  readonly onBuildings: boolean; // TYPE-006 / TYPE-007
 
   constructor(
     readonly world: World,
@@ -38,8 +45,10 @@ export class Stroke {
     x: number,
     y: number,
     readonly tapMove = 0, // m; how far the cursor may move while the stroke can still be a tap (DISP-004)
+    readonly target: Target = "land",
   ) {
     this.limit = unitLimit(radius);
+    this.onBuildings = onBuildings(tool, target);
     this.trail.push([x, y]);
   }
 
@@ -58,6 +67,7 @@ export class Stroke {
   }
 
   private segment(ax: number, ay: number, bx: number, by: number): StrokeEvent[] {
+    if (this.onBuildings) return this.buildingsAlong(ax, ay, bx, by);
     if (this.tool.type === "density") return this.densityAlong(ax, ay, bx, by);
     const events: StrokeEvent[] = [];
     // PAINT-009
@@ -166,12 +176,58 @@ export class Stroke {
     return events;
   }
 
+  /** TYPE-007 / TYPE-008 / TYPE-010: every building whose centre the brush disc passes over, once per stroke. */
+  private buildingsAlong(ax: number, ay: number, bx: number, by: number): StrokeEvent[] {
+    const events: StrokeEvent[] = [];
+    const r = this.radius;
+    const box = expandBBox(
+      { minX: toI(Math.min(ax, bx)), minY: toI(Math.min(ay, by)), maxX: toI(Math.max(ax, bx)), maxY: toI(Math.max(ay, by)) },
+      toI(r),
+    );
+    for (const g of this.world.buildingsIn(box)) {
+      if (this.buildingsDone.has(g.id)) continue;
+      if (distToSegment(toM(g.cx), toM(g.cy), ax, ay, bx, by) > r) continue;
+      events.push(...this.touchBuilding(this.world.building(g), [toM(g.cx), toM(g.cy)]));
+    }
+    return events;
+  }
+
+  /** What this stroke's tool does to one building. Reject feedback plays at most once per stroke (TYPE-009). */
+  private touchBuilding(b: Building, at: [number, number]): StrokeEvent[] {
+    this.buildingsDone.add(b.geom.id);
+    const reject = (): StrokeEvent[] => {
+      if (this.rejected) return [];
+      this.rejected = true;
+      return [{ type: "reject", at }];
+    };
+    const status = statusOf(b);
+    let next: Building | null = null;
+    if (this.tool.type === "agree") {
+      // TYPE-007: only a guessed building takes an agree stroke; an unsure one is shown skipped.
+      const g = this.world.guessOf(b);
+      if (!g) return [];
+      if (!g.look) return [{ type: "skip", building: b, at }];
+      next = typeAs(b, g.look);
+    } else if (this.tool.type === "paint") {
+      if (status === "protected" || this.tool.kind === "R1") return reject(); // TYPE-009
+      next = typeAs(b, this.tool.kind); // TYPE-008: null when it already is that kind
+    } else if (this.tool.type === "erase") {
+      if (status === "protected") return reject(); // TYPE-009
+      next = untype(b); // TYPE-010
+    }
+    if (!next) return [];
+    const set = this.world.setOf(b.geom);
+    if (!this.beforeB.has(set)) this.beforeB.set(set, set.items); // TYPE-011
+    set.items = set.items.map((o) => (o === b ? next! : o));
+    return [{ type: "typed", building: next, prevLook: b.look, at }];
+  }
+
   /**
    * SNAP-101 + SNAP-105: recomputes the freeform preview for atoms the stroke touched since last time.
    * Stops once `budgetMs` is spent; the remaining atoms stay dirty for the next call.
    */
   updatePreview(budgetMs = Infinity) {
-    if (this.tool.type === "density" || this.dirty.size === 0) return;
+    if (this.tool.type === "density" || this.onBuildings || this.dirty.size === 0) return;
     const t0 = performance.now();
     for (const atom of this.dirty) {
       const shape = this.strokeShapeNear(atom.bbox);
@@ -225,7 +281,11 @@ export class Stroke {
     const events: StrokeEvent[] = [];
     const kind = toolKind(this.tool);
     const [sx, sy] = this.trail[0];
-    if (this.tool.type !== "density") {
+    if (this.onBuildings) {
+      // TYPE-007 / TYPE-008 / TYPE-010: a tap takes the building under it, however small the brush.
+      const b = isTap ? this.world.buildingAt(toI(sx), toI(sy)) : null;
+      if (b && !this.buildingsDone.has(b.geom.id)) events.push(...this.touchBuilding(b, [sx, sy]));
+    } else if (this.tool.type !== "density") {
       const p = this.world.pieceAt(toI(sx), toI(sy));
       if (isTap && settles(this.tool, p)) {
         // DISP-004: a tap on disputed context settles it for the context, whatever its size, and does nothing else.
@@ -256,17 +316,25 @@ export class Stroke {
     }
     this.coverage.clear(); // SNAP-006
     const atoms = [...this.before].filter(([a, b]) => a.pieces !== b).map(([atom, before]) => ({ atom, before, after: atom.pieces }));
-    return { events, step: atoms.length ? { atoms } : null };
+    const buildings = this.buildingSteps();
+    return { events, step: atoms.length || buildings.length ? { atoms, buildings } : null };
+  }
+
+  /** TYPE-011 */
+  private buildingSteps() {
+    return [...this.beforeB].filter(([s, b]) => s.items !== b).map(([set, before]) => ({ set, before, after: set.items }));
   }
 
   /** PAINT-010: reverts everything the stroke changed. Returns what was reverted, for the settle animation only. */
   cancel(): Step | null {
     const atoms = [...this.before].filter(([a, b]) => a.pieces !== b).map(([atom, before]) => ({ atom, before, after: atom.pieces }));
     for (const a of atoms) a.atom.pieces = a.before;
+    const buildings = this.buildingSteps();
+    for (const b of buildings) b.set.items = b.before;
     this.preview.clear();
     this.coverage.clear();
     this.dirty.clear();
-    return atoms.length ? { atoms } : null;
+    return atoms.length || buildings.length ? { atoms, buildings } : null;
   }
 }
 

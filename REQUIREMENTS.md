@@ -41,7 +41,7 @@ and not only what is *formally compliant*.
 ### 0.3 Corrections (CORR)
 
 Sometimes code satisfies a requirement to the letter but is still *not right*. When that happens, we
-don't silently re-interpret the original. We add a **correction** to §17:
+don't silently re-interpret the original. We add a **correction** to §18:
 
 ```
 **CORR-NNN** (corrects SNAP-004) <EARS statement that pins down the intended behaviour>
@@ -98,6 +98,11 @@ has been absorbed into a rewritten requirement, it may be retired.
 | **Charge** | Visible progress towards claiming a unit piece during a stroke. |
 | **Disputed** | A piece where two imported features say different things (IMP-012). Shown to the user as "the map disagrees here". |
 | **Rival** | The kind a disputed piece's losing feature claimed. |
+| **Look** | What a building's tags say its land should be (BLD-001). |
+| **Typed building** | A building whose OSM tags say what it is. |
+| **Guessed building** | An untyped building whose footprint, neighbours and addresses agree on one look (§17). |
+| **Unsure building** | An untyped building they do not agree on. It carries the looks they allow as candidates. |
+| **Target** | What the brush acts on: land or buildings. |
 
 ---
 
@@ -365,7 +370,8 @@ hospital, place of worship, town hall, library, fire or police station → civic
 
 **BLD-005** The editor shall give every other building the look unknown, including the untyped
 `building=yes` and roofs, garages, sheds, greenhouses and ruins, and shall not guess a look from the
-landuse around the building.
+landuse around the building. A look guessed from the building and its neighbours is drawn as a guess, never
+as data (§17).
   Why: most buildings in OSM have no type. A guess from the land would only echo the land's colour back
   and pass a guess off as data. Garages next to houses are not industrial.
 
@@ -649,7 +655,7 @@ context colour (REN-015).
   stands out.
 
 **REN-010** Where the building layer is on, the editor shall draw buildings with the look unknown as faint
-shapes in the neutral building colour.
+shapes in the neutral building colour. A guessed building is drawn by TYPE-004 instead.
   Trace: manual
 
 **REN-011** Where the building layer is on, the editor shall draw each building that disagrees with its
@@ -797,7 +803,11 @@ Pressing anywhere else closes it.
 **NG-001** The editor shall not upload, export, or otherwise write OSM data in M0.
   Trace: policy
 
-**NG-002** The editor shall not edit any feature other than the landuse kinds in §5.
+~~**NG-002** The editor shall not edit any feature other than the landuse kinds in §5.~~ Retired: building
+types are editable (§17). NG-004 replaces it.
+
+**NG-004** The editor shall not edit any feature other than the landuse kinds in §5 and the building types in
+§17.
   Trace: policy
 
 **NG-003** The editor shall not show a raster basemap.
@@ -815,7 +825,99 @@ this file. `npm test` fails if this file names a knob that `src/tuning.ts` does 
 
 ---
 
-## 17. Corrections
+## 17. Building types
+
+Most buildings in OSM are `building=yes`. Many of them are obvious from the map alone: a building on its own
+is a house, a row sharing walls is a terrace. The editor guesses what it can, shows every guess as a guess,
+and lets the user agree in bulk. Where the map cannot tell, it asks.
+
+**TYPE-001** The editor shall put each loaded building in one of three states: *typed* when its tags say
+what it is (a kind of building, BLD-002; what it is used for, BLD-004; or an accessory such as a garage,
+shed or roof), *guessed* when they say nothing but its footprint, neighbours and addresses agree on one look
+(TYPE-002), and *unsure* otherwise. A plain `building=residential` is untyped too: its tier is unknown.
+  Why: the user should only be asked about the buildings the map itself cannot answer.
+
+**TYPE-002** The editor shall guess a building's look from the building and its neighbours alone, never
+from the land under it (BLD-005), from these signals, strongest first: shared walls (a building on its own
+is a house, two sharing one wall are semi-detached, a row of three or more sharing walls is terraced);
+footprint size and levels (a large or tall footprint is apartments, a very large low one is a shop, offices
+or industry); addresses on the building (one is a house, two to four are semi-detached, terraced or small
+apartments, decided by the walls, many are apartments); and the typed buildings of similar size in the same
+block (an untyped building among typed houses is a house). The thresholds are TUNE-GUESS-*; the rules are
+in `src/model/guess.ts`.
+  Why: shape is the honest signal. It is what a mapper tracing imagery sees too. Absence of a signal is never
+  evidence: a city without address data must still get its houses and terraces guessed.
+
+**TYPE-003** If the signals disagree, or allow more than one look, then the editor shall make the building
+unsure and keep every look they allow as a candidate, never picking one by itself.
+  Why: a wrong guess accepted in bulk is worse than no guess. Where the map cannot tell, the user must.
+
+**TYPE-004** Where the building layer is on, the editor shall draw a guessed building in its guessed look's
+colour, hatched and fainter than a typed building (REN-009), and an unsure building as a faint neutral shape
+(REN-010) with a small quiet mark kept at a constant screen size.
+  Why: three states, three looks, readable at a glance: solid is known, hatched is a guess waiting for a yes,
+  marked is a question.
+  Trace: manual
+
+**TYPE-005** While buildings are the target or the agree tool is selected, when the user points at a
+guessed or unsure building, the editor shall say what it guessed, or which looks it is unsure between, and
+how to answer.
+  Trace: manual
+
+**TYPE-006** The editor shall offer a target switch (a top-bar button, key `T`) between land and buildings.
+While buildings are the target, the paint tiles and the eraser act on buildings (TYPE-008, TYPE-010), the
+brush cursor shows it, and the building layer is on.
+  Why: one palette, one colour language, two things it can colour. GEN-005: the button is the pointer's way.
+  Trace: manual
+
+**TYPE-007** The editor shall offer an *agree* tool (key `G`). While an agree stroke is active, when the
+brush passes over the centre of a guessed building, or a tap lands on one, the editor shall type that
+building with its guess, once per building per stroke, with the pop (FEEL-001). Unsure and typed buildings
+under an agree stroke are left alone; an unsure one lights up briefly, so the user sees it was skipped.
+  Why: agreeing to the obvious should be as fast as painting a street. Deciding the unclear is a separate,
+  deliberate act.
+
+**TYPE-008** While buildings are the target, when a paint stroke passes over the centre of a building, or a
+tap lands on one, the editor shall type it with the tile's kind, once per building per stroke: `house` for
+detached houses, `semidetached_house`, `terrace`, `apartments` for apartments and for high-rise (Q-002),
+`commercial`, `retail`, `industrial`. The table is in `src/osm/classes.ts`. A building whose look is already
+the tile's kind is left alone, its more specific type kept.
+  Why: the user is the override. A bungalow painted "detached houses" stays a bungalow: the editor never
+  flattens information it was not asked to change.
+
+**TYPE-009** If a stroke on buildings touches a building whose type the palette has no kind for (schools,
+churches and other civic buildings; garages, sheds, roofs and other accessories), or the tile is Rural,
+which names no kind of building, then the editor shall leave the building alone and play the reject
+feedback (FEEL-004), at most once per stroke.
+  Why: the editor refines what a building is for; it never overwrites a mapper's answer about something
+  else. Rural is a kind of land, not of building.
+
+**TYPE-010** While buildings are the target, when an eraser stroke passes over the centre of a typed
+building whose type names a paintable kind, or a tap lands on one, the editor shall make it untyped
+(`building=yes`), so it is guessed afresh.
+
+**TYPE-011** The editor shall remember, for each building, the OSM element it came from and whether the
+user has changed it, and shall commit each stroke on buildings as one undo step (PAINT-005, PAINT-006,
+UNDO-001 to UNDO-004).
+  Why: IMP-008, for buildings.
+
+**TYPE-012** While any building is guessed or unsure, the editor shall show a button in the top bar with
+the number of buildings still to decide. When the user presses it, or presses `J`, the editor shall move
+the camera to the next one, north to south, so that at least TUNE-DISPUTE-VIEW of land around it is in
+view, and flash it. The button is hidden while there are none.
+  Why: HUD-009, for buildings. The count is the to-do list.
+
+**TYPE-013** While buildings are the target, when the user Alt-clicks a typed building, the editor shall
+select its look's tile, if the palette has one.
+  Trace: manual
+
+**TYPE-014** The editor shall use guesses only for drawing (TYPE-004, TYPE-005) and for the agree tool
+(TYPE-007): never for snapping, piece kinds, the district mix, or disagreement with the land (BLD-007).
+  Why: a guess is a question, not data. Only a typed building may call the land wrong.
+
+---
+
+## 18. Corrections
 
 **CORR-001** (corrects IMP-004) The editor shall give an overlap to the smaller feature by size alone only
 where the two are *nested*: at least TUNE-NEST-INSIDE of the smaller feature's land lies inside the larger
@@ -836,7 +938,7 @@ of the pieces it shrinks, the void it leaves behind, and any piece these later m
 
 ---
 
-## 18. Open questions
+## 19. Open questions
 
 **Q-001** Which `residential=*` values should R2 (detached vs. single_family) and R5 (apartments vs. urban)
 write when output arrives? Decide before output exists.
@@ -851,13 +953,13 @@ lattice stops at the kerb, which matches the common "don't glue landuse to roads
 **Q-004** Should painting suggest a tier from the buildings underneath (count, footprint, levels)? Good
 candidate for M1.
 
-**Q-005** Should buildings with the look unknown get an inferred look, drawn fainter than a tagged one?
+~~**Q-005** Should buildings with the look unknown get an inferred look, drawn fainter than a tagged one?
 Candidate signals, strongest first: footprint shape (two buildings sharing a wall → semi-detached, a row
 of narrow buildings sharing walls → terraced, small detached footprint → house, very large plain footprint
 → industrial or retail); then address and entrance nodes (several house numbers on one footprint, many
 `addr:unit`/`addr:flats`/`entrance=*` → apartments). Address mapping differs a lot between cities
 (on the outline, inside it, or imported points at the plot centre), and fetching tagged nodes makes area
-downloads bigger. The same inference should feed Q-004, so colours and suggestions never disagree.
+downloads bigger. The same inference should feed Q-004, so colours and suggestions never disagree.~~ Answered: yes, as a guess the user agrees to (TYPE-001 to TYPE-004). Address nodes are Q-008.
 
 ~~**Q-006** How does the user settle a dispute in favour of exclusive context ("it really is a park")? Paint
 tools can only answer with a paintable kind (DISP-003). Design together with Q-007.~~ Answered: context
@@ -866,3 +968,7 @@ always wins, and the user confirms it with a tap (IMP-012, DISP-004).
 **Q-007** One feature with two landuse statements (for example `landuse=residential` + `leisure=park` on the
 same way) is an error of the same family as a dispute. IMP-001 currently picks one class quietly. How
 should the editor show it, and how does the user settle it?
+
+**Q-008** Should the loader fetch address and entrance nodes for TYPE-002? Today only addresses tagged on the
+building way itself count. Tagged nodes make area downloads bigger and address practice differs by city.
+Measure on the demo area first.

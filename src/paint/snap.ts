@@ -10,7 +10,15 @@ import { TUNE } from "../tuning";
 export type Tool =
   | { type: "paint"; kind: PaintKind }
   | { type: "erase" }
-  | { type: "density"; dir: 1 | -1 };
+  | { type: "density"; dir: 1 | -1 }
+  | { type: "agree" }; // TYPE-007: accepts the editor's guesses about buildings
+
+/** TYPE-006: what the brush acts on. */
+export type Target = "land" | "buildings";
+
+/** Whether a stroke with this tool and target acts on buildings (TYPE-006, TYPE-007) rather than on land. */
+export const onBuildings = (tool: Tool, target: Target) =>
+  tool.type === "agree" || (target === "buildings" && (tool.type === "paint" || tool.type === "erase"));
 
 export const toolKind = (t: Tool): Kind | null => (t.type === "paint" ? t.kind : null);
 
@@ -31,7 +39,7 @@ export function changes(tool: Tool, p: Piece): boolean {
 
 /** DISP-004: a tap on disputed context settles it for the context, with a paint tool or the eraser. */
 export const settles = (tool: Tool, p: Piece | null): p is Piece =>
-  tool.type !== "density" && !!p && p.kind === "CTX" && !!p.rival;
+  (tool.type === "paint" || tool.type === "erase") && !!p && p.kind === "CTX" && !!p.rival;
 
 /**
  * DISP-004: the context keeps the piece, undisputed, and every piece of the rival feature counts as

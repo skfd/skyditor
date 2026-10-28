@@ -51,6 +51,17 @@ export const TUNE = {
   BUILDING_SHADE: 0.35, // TUNE-BUILDING-SHADE: how far a building's colour is mixed towards the neutral building colour
   BUILDING_ALPHA: 0.85, // TUNE-BUILDING-ALPHA: opacity of buildings with a known look
 
+  // Guessing building types (TYPE-002)
+  GUESS_TOUCH: 0.3, // TUNE-GUESS-TOUCH: gap up to which two footprints count as sharing a wall, m
+  GUESS_HOUSE_AREA: 350, // TUNE-GUESS-HOUSE-AREA: largest footprint of a house or one terraced unit, m²
+  GUESS_BIG_AREA: 1500, // TUNE-GUESS-BIG-AREA: footprint from which a building is apartments or business, m²
+  GUESS_APT_LEVELS: 4, // TUNE-GUESS-APT-LEVELS: levels from which a building is apartments
+  GUESS_MANY_ADDR: 5, // TUNE-GUESS-MANY-ADDR: addresses from which a building is apartments
+  GUESS_SIMILAR: 2, // TUNE-GUESS-SIMILAR: area ratio within which two buildings in a block are of similar size
+  GUESS_NEIGHBOUR_MIN: 3, // TUNE-GUESS-NEIGHBOUR-MIN: typed similar neighbours needed before they count
+  GUESS_NEIGHBOUR_SHARE: 0.75, // TUNE-GUESS-NEIGHBOUR-SHARE: share of them with one look for that look to count
+  GUESS_ALPHA: 0.55, // TUNE-GUESS-ALPHA: opacity of a guessed building, before its hatch
+
   // Disputes
   RIPPLE_PERIOD: 2400, // TUNE-RIPPLE-PERIOD: time between ripples of a disagreeing building, ms
   RIPPLE_REACH: 12, // TUNE-RIPPLE-REACH: how far a ripple grows out of the footprint, px

@@ -52,13 +52,13 @@ describe("the app mounts", () => {
     expect($("#start")!.classList.contains("show")).toBe(true);
   });
 
-  it("HUD-001 / KIND-001 / DENS-001 / KIND-007: the palette has the ladder, the business kinds, density and the eraser", () => {
+  it("HUD-001 / KIND-001 / DENS-001 / TYPE-007 / KIND-007: the palette has the ladder, the business kinds, density, agree and the eraser", () => {
     const tiles = $$("#palette button.tile");
     expect(tiles.map((t) => t.dataset.tool)).toEqual([
-      "R1", "R2", "R3", "R4", "R5", "R6", "COM", "RET", "IND", "UP", "DOWN", "ERASE",
+      "R1", "R2", "R3", "R4", "R5", "R6", "COM", "RET", "IND", "UP", "DOWN", "AGREE", "ERASE",
     ]);
     expect(tiles.map((t) => t.querySelector(".key")?.textContent)).toEqual([
-      "1", "2", "3", "4", "5", "6", "Q", "W", "E", "A", "Z", "X",
+      "1", "2", "3", "4", "5", "6", "Q", "W", "E", "A", "Z", "G", "X",
     ]);
     // KIND-002: the six tiers sit together as one ladder.
     expect($$("#palette .ladder button.tile")).toHaveLength(6);
@@ -75,9 +75,11 @@ describe("the app mounts", () => {
     expect($<HTMLButtonElement>("#btn-redo")!.disabled).toBe(true);
   });
 
-  it("HUD-007: the layer toggles show their state", () => {
+  it("HUD-007 / TYPE-006: the layer toggles and the target switch show their state", () => {
     expect($("#btn-buildings")!.getAttribute("aria-pressed")).toBe("true");
     expect($("#btn-outlines")!.getAttribute("aria-pressed")).toBe("false");
+    expect($("#btn-target")!.getAttribute("aria-pressed")).toBe("false");
+    expect($("#btn-target")!.innerHTML).toContain("<svg");
   });
 
   it("HUD-005: the OSM attribution is on the page", () => {
@@ -94,5 +96,9 @@ describe("the demo loads", () => {
     const segs = $$("#mix .bar > *");
     expect(segs.length).toBeGreaterThan(0);
     expect(segs.some((s) => parseFloat(s.style.width || s.style.flexGrow || "0") > 0)).toBe(true);
+    // TYPE-012: the demo has plenty of `building=yes`, so the to-decide count shows.
+    const todo = $<HTMLButtonElement>("#btn-guesses")!;
+    expect(todo.hidden).toBe(false);
+    expect(Number(todo.dataset.n)).toBeGreaterThan(0);
   }, 60_000);
 });
