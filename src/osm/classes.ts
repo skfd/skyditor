@@ -11,6 +11,9 @@ export const BARRIER_HIGHWAY = new Set([
 export const BARRIER_RAILWAY = new Set(["rail", "light_rail", "narrow_gauge"]);
 export const BARRIER_WATERWAY = new Set(["river", "canal"]);
 
+/** LAT-001: street classes that stop being barriers when private. */
+export const PRIVATE_LOCAL = new Set(["residential", "living_street"]);
+
 /** SNAP-108: minor ways that divide a block into lots without being barriers. */
 export const MINOR_HIGHWAY = new Set(["service", "footway", "path", "cycleway", "track", "steps", "bridleway"]);
 

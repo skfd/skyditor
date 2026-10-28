@@ -21,6 +21,18 @@ describe("lattice", () => {
     expect((await s.world()).atoms.length).toBe(9);
   });
 
+  it("LAT-001: a private street is not a barrier, but still divides cells", async () => {
+    const s = new Sketch(300).grid(200);
+    s.road([[0, -100], [0, 100]], "residential", { access: "private" });
+    s.road([[-200, -100], [-200, 100]], "living_street", { access: "private" });
+    s.road([[200, -100], [200, 100]], "living_street");
+    const w = await s.world();
+    expect(w.atoms.length).toBe(10);
+    expect(atomAt(w, -10, 0)).toBe(atomAt(w, 10, 0));
+    expect(atomAt(w, -210, 0)).toBe(atomAt(w, -190, 0));
+    expect(w.cellsOf(atomAt(w, 0, 0)).length).toBe(2); // SNAP-108
+  });
+
   it("LAT-002: tunnels and covered ways do not split land", async () => {
     const s = new Sketch(300).grid(200);
     s.road([[0, -100], [0, 100]], "primary", { tunnel: "yes" });

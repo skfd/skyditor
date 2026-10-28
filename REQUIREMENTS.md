@@ -173,8 +173,11 @@ and it shall keep that fragment updated with the loaded area's centre. The demo 
 
 **LAT-001** The editor shall treat as barriers the ways that cut a city into blocks: roads that carry
 traffic, from motorways down to residential and pedestrian streets, railways, rivers and canals. Paths,
-service roads and the like are not barriers (SNAP-108). The classes are listed in `src/osm/classes.ts`.
-  Why: a block is what lies between the streets you would have to cross.
+service roads and the like are not barriers (SNAP-108), nor are private residential and living streets.
+The classes are listed in `src/osm/classes.ts`.
+  Why: a block is what lies between the streets you would have to cross. A private street serves the lots
+  around it, and careful mappers often draw the landuse over it. Living streets that lead nowhere else (dead
+  ends, loops, rings) were tried too and left as barriers: the replay benchmark lost more than it gained.
 
 **LAT-002** The editor shall not treat a way tagged `tunnel` (any value except `no`), or `covered=yes`, as a
 barrier.

@@ -1,8 +1,11 @@
-// Turns raw OSM data into the features the lattice and the importer need (LOAD-005/006, LAT-001..004).
+// Turns raw OSM data into the features the lattice and the importer need (LOAD-005/006, LAT-001..004, LAT-009).
 import { type BBox, type Ring, type Shape, area as shapeArea, toI, union } from "../geo/clip";
 import { Projection, type LonLatBounds } from "../geo/project";
 import { type AreaClass, type BuildingLook, buildingLook, classifyArea } from "../model/kinds";
-import { BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, LOT_BARRIER, MINOR_HIGHWAY, isSidewalk } from "./classes";
+import {
+  BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, LOT_BARRIER, MINOR_HIGHWAY, PRIVATE_LOCAL,
+  isSidewalk,
+} from "./classes";
 import { type StreetStyle, streetStyle } from "../lattice/style";
 import { TUNE } from "../tuning";
 import ClipperLib from "clipper-lib";
@@ -132,6 +135,12 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
   for (const w of osm.ways.values()) {
     const t = w.tags;
     const bc = barrierClass(t);
+    // LAT-001: a private street divides lots like a service road.
+    if (bc && PRIVATE_LOCAL.has(bc) && t.access === "private") {
+      const pts = partialCoords(w);
+      if (pts.length >= 2) f.minorLines.push({ pts: new Float32Array(pts.flat()), major: true });
+      continue;
+    }
     if (bc) {
       const pts = partialCoords(w);
       if (pts.length >= 2) f.barriers.push({ id: `way/${w.id}`, line: toRing(pts), cls: bc, width: tagWidth(t) });
