@@ -1,0 +1,14 @@
+# name lat lon  — centre of a sample square. Comments start with #.
+# First batch, chosen by reputation (see README). Add more, ideally picked by the quality screen.
+karlsruhe_suedweststadt 49.0035 8.3880
+munich_schwabing        48.1610 11.5790
+amsterdam_oudwest       52.3660 4.8700
+utrecht_lombok          52.0900 5.0990
+amersfoort_vathorst     52.1950 5.4350
+warsaw_mokotow          52.1990 21.0130
+prague_vinohrady        50.0760 14.4440
+vienna_josefstadt       48.2110 16.3480
+helsinki_kallio         60.1840 24.9500
+tallinn_kristiine       59.4290 24.7200
+hamburg_volksdorf       53.6480 10.1630
+berlin_friedenau        52.4710 13.3300
