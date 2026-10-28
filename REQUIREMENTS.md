@@ -734,7 +734,6 @@ animation, and the model is updated before the animation starts.
 **HUD-001** The editor shall show a palette with the residential ladder as one connected strip of six tiles
 (R1→R6) whose icons grow in height, followed by commercial, retail, industrial, density up/down and the
 eraser.
-  Trace: manual
 
 **HUD-002** When the user points at a palette tile, the editor shall show the tile's name, its key, and the
 OSM tags it stands for.
@@ -752,17 +751,14 @@ following the brush size.
 
 **HUD-005** The editor shall show the OSM attribution "© OpenStreetMap contributors" whenever OSM data is
 on screen.
-  Trace: manual
 
 **HUD-006** The editor shall show map controls at the side of the map: undo and redo (UNDO-001, UNDO-002),
 zoom in and out (CAM-007), fit area (CAM-004), and brush grow and shrink (INP-001) around a dot that shows
 the brush size. Undo and redo shall look disabled while there is nothing to undo or redo.
   Why: GEN-005. Each control does exactly what its key does.
-  Trace: manual
 
 **HUD-007** The editor shall show toggle buttons for the building layer (INP-003) and the original
 outlines (IMP-009), each showing whether its layer is on.
-  Trace: manual
 
 **HUD-008** The editor shall list, in the help panel, the pointer or touch way of doing each action next to
 its key.
