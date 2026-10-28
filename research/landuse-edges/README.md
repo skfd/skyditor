@@ -484,11 +484,13 @@ through freeform snapping.
 | 5. Straight free edges | Bends per 100 m of inner edge that follows nothing | 7.4 → 3.2 |
 | 6. Fewer barriers | Result edge → truth edge, p90 | 14.1 → 13.9 m (private streets only) |
 | Swallowing that stays near the stroke | Result outside truth and p90, without more edges that follow nothing | Outside 4.1% → 3.6%, p90 13.9 → 8.4 m, nothing 20.0% → 20.6% |
+| Fences that end inside a block | Inner edges that follow a fence; that follow nothing | Fence 25.5% → 30.7%, nothing 20.6% → 17.7% |
 
 ### Proposals made (`replay-2026-10-proposals.txt`)
 
-Made in this order, one commit each, with the replay run after each. Saved run:
-`replay-results-2026-10-proposals.json.gz`.
+Made in this order, one commit each, with the replay run after each. Saved run after step 7:
+`replay-results-2026-10-proposals.json.gz`; after step 8: `replay-2026-10-fences.txt` and
+`replay-results-2026-10-fences.json.gz`.
 
 | Step | IoU | Outside truth | Truth missed | Result → truth edge, p90 | Inner edges: nothing / fence / building | Bends per 100 m, free edge | Buildings split |
 |---|---|---|---|---|---|---|---|
@@ -499,9 +501,10 @@ Made in this order, one commit each, with the replay run after each. Saved run:
 | 5. Straight free edges (SNAP-111) | 0.909 | 4.1% | 5.5% | 14.1 m | 20.0 / 25.4 / 14.6% | 3.2 | 7.5% |
 | 6. Private streets (LAT-001) | 0.909 | 4.1% | 5.5% | 13.9 m | 20.0 / 25.4 / 14.6% | 3.2 | 7.5% |
 | 7. Swallow near the paint (CORR-003) | 0.912 | 3.6% | 5.6% | 8.4 m | 20.6 / 25.5 / 14.8% | 3.3 | 7.5% |
+| 8. Fences that end inside a block (SNAP-112) | 0.913 | 3.6% | 5.5% | 8.9 m | 17.7 / 30.7 / 14.2% | 3.4 | 7.5% |
 | Mappers | | | | | 14.8 / 34.7 / 14.5% | 1.9 | 4.8% |
 
-Now, by street style:
+After step 7, by street style:
 
 | | All | Kerb (60) | Property line (164) | Mappers |
 |---|---|---|---|---|
@@ -544,9 +547,31 @@ Now, by street style:
    landuse strips around parks, which the idealised strokes barely reach and swallowing used to fill end to
    end. Reach 2.5 gives p90 9.1 m overall and 7.9 m there; 4 gives 10.4 and 7.4.
 
+8. **Fences that end inside a block (SNAP-112).** SNAP-108 uses a fence only where it cuts the block in two.
+   Now every fence, wall and hedge also cuts the leftover before swallowing: a gap up to one closes, and
+   nothing is swallowed across one. Letting a gap up to a fence close at the full snap distance gave fence
+   30.8%, nothing 17.5%, but p90 8.4 → 9.1 m: in Warsaw 0_8 a fence down the middle of a gap mappers left
+   empty split it into two halves that each closed. TUNE-FENCE-SNAP, the distance for a gap up to a fence,
+   swept on the replay:
+
+   | TUNE-FENCE-SNAP | IoU | Result → truth edge, p90 | Fence / nothing | Squares better / worse |
+   |---|---|---|---|---|
+   | 0.3 | 0.913 | 8.9 m | 29.4 / 18.4% | 131 / 67 |
+   | **0.45** | 0.913 | 8.9 m | 30.3 / 17.9% | 138 / 66 |
+   | 0.6 (= TUNE-SNAP-FACTOR) | 0.912 | 9.1 m | 30.8 / 17.5% | 130 / 75 |
+
+   Cutting only unpainted land, so a stroke never takes a strip of a neighbouring landuse up to a fence,
+   gave p90 8.9 m but fence 29.4%, nothing 18.4%. It was dropped: painting a fenced lot inside an existing
+   area should snap to the fence. The sweep ran before one last fix: wherever paint meets a fence, the half
+   of the fence's slit next to it joins the paint, so two lots painted one after the other meet on the fence
+   instead of leaving a 0.5 m strip between them. The replay paints neighbouring lots different kinds and
+   cannot see that strip; a unit test does. With it: fence 30.7%, nothing 17.7%, 146 squares better, 55
+   worse. The p90 stays 0.5 m above step 7, and inner edges grow by 3% (654 → 672 km).
+
 **What is left.**
 
-- Edges that follow nothing: 20.6% against 14.8%. Fences that end inside a block are the obvious next target.
+- Edges that follow nothing: 17.7% against 14.8%, and fences 30.7% against 34.7%. Overshoot is
+  the next candidate: SNAP-112 closes gaps short of a fence, but paint that spills a few metres past one stays.
 - Bends per 100 m of all edge: 4.7 against 3.5, and 5.3 in property-line squares. Street edges now step around
   building fronts and follow sidewalk geometry.
 - Buildings split: 7.5% against 4.8%, untouched by any of this.

@@ -4,7 +4,7 @@ import {
   narrowParts, offset, simplify, toI, touches, union,
 } from "../geo/clip";
 import type { Kind, PaintKind } from "../model/kinds";
-import { type Atom, type Piece, type World, isProtected, makePiece, normalize } from "../model/world";
+import { type Atom, type Piece, SOFT_LINE_HALF_WIDTH, type World, isProtected, makePiece, normalize } from "../model/world";
 import { TUNE } from "../tuning";
 import { straighten } from "./straighten";
 
@@ -83,7 +83,7 @@ export interface Freeform {
 /**
  * The snapped freeform result of a stroke shape inside one atom, built in this order: the stroke shape
  * within the open pieces (SNAP-102), whole cells (SNAP-108), straight free edges (SNAP-111), buildings
- * (SNAP-109), then leftover swallowing (SNAP-103, SNAP-104).
+ * (SNAP-109), then leftover swallowing (SNAP-103, SNAP-104, SNAP-112).
  */
 export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, radiusM: number): Freeform | null {
   const limit = unitLimit(radiusM);
@@ -135,12 +135,30 @@ export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, 
 
   // SNAP-103 / SNAP-104: narrow leftovers that touch the paint are swallowed; corners of wide ones are not.
   // CORR-003: only near the paint. Clipped after narrowParts, so the cut makes no new narrow bits.
+  // SNAP-112: fence slits only shape the leftover; the region is never clipped by them, so no crack is left.
+  const fences = world.fencesOf(atom);
   const leftover = difference(eligible, painted);
   const reach = offset(painted, TUNE.SWALLOW_REACH * radiusM);
-  const swallowed = narrowParts(leftover, TUNE.SNAP_FACTOR * radiusM)
+  let narrow = narrowParts(leftover, TUNE.SNAP_FACTOR * radiusM);
+  if (!isEmpty(fences)) {
+    // SNAP-112: narrow leftovers stop at fences, and a gap narrower than TUNE-FENCE-SNAP up to a fence is
+    // narrow too. That distance is shorter than the snap distance: a fence in the middle of a wide gap must
+    // not split it into two halves that each close.
+    const cut = difference(leftover, fences);
+    narrow = [
+      ...narrow.flatMap((c) => components(difference(c, fences))),
+      ...narrowParts(cut, TUNE.FENCE_SNAP * radiusM),
+    ];
+  }
+  const swallowed = narrow
     .flatMap((c) => components(intersect(c, reach)))
     .filter((c) => touches(c, painted, 0.1));
-  return { region: union(painted, ...swallowed), eligible };
+  let region = union(painted, ...swallowed);
+  // The half of a slit next to the region joins it, a little past the fence's centreline, so paint on either
+  // side of a fence meets there, whichever stroke came first.
+  if (!isEmpty(fences))
+    region = union(region, intersect(intersect(offset(region, SOFT_LINE_HALF_WIDTH + 0.05), fences), eligible));
+  return { region, eligible };
 }
 
 /** Replaces a whole piece with `kind` (null = erase). Returns the new piece list for the atom. */

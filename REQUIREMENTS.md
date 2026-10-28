@@ -508,6 +508,14 @@ result shall include that whole cell.
   Why: fences, walls, paths and service roads inside a block are where real lots end. Paint should prefer
   them. Careful mappers run a third of the edges inside blocks along a fence, wall or hedge.
 
+**SNAP-112** The editor shall treat fences, walls and hedges as edges when swallowing leftovers, whether
+or not they divide the atom into cells: a gap between the paint and one narrower than TUNE-FENCE-SNAP of
+the brush's width shall close (SNAP-103), and no leftover shall be swallowed across one.
+  Why: a fence that stops partway into a block still marks where a lot ends, and SNAP-108 ignores it. Careful
+  mappers run 35% of the edges inside blocks along a fence, wall or hedge; after SNAP-108 the editor ran 25%.
+  The distance is shorter than the snap distance: a fence down the middle of a gap too wide to close must not
+  split it into two halves that each do.
+
 **SNAP-109** The editor shall never let a freeform result cut through a building. A building with at least
 half its area inside the result shall be included whole, with a margin of TUNE-BUILDING-MARGIN. Any other
 building within that margin of the result shall be left out, with the same margin.

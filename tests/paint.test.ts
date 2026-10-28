@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toI } from "../src/geo/clip";
+import { contains, toI } from "../src/geo/clip";
 import { History } from "../src/model/history";
 import { Stroke } from "../src/paint/stroke";
 import { type Tool, unitLimit } from "../src/paint/snap";
@@ -104,6 +104,80 @@ describe("open pieces", () => {
       paint(w, R2, 14, [[-78, -75], [-78, 75], [-30, 75], [-30, -75]]);
       expect(at(w, -54, 0)?.kind).toBe("R2");
       expect(at(w, 50, 0)?.kind).toBe(null);
+    }
+  });
+
+  it("SNAP-112: a gap up to a fence that ends inside the block closes", async () => {
+    // The fence runs in from the east street and stops in the middle; it divides no cells. Paint edge at y = -30,
+    // the fence half the widest gap that closes beyond it.
+    const gap = TUNE.FENCE_SNAP * 10;
+    const s = grid();
+    s.way([[100, -30 - gap], [0, -30 - gap]], { barrier: "fence" });
+    const w = await s.world();
+    expect(w.cellsOf(atomAt(w, 0, 0)).length).toBe(0);
+    paint(w, R2, 10, [[-60, -20], [60, -20]]);
+    expect(at(w, 30, -30 - gap / 2)?.kind).toBe("R2");
+    expect(at(w, 30, -34 - gap)?.kind).toBe(null);
+    expect(at(w, -30, -30 - gap / 2)?.kind).toBe(null); // no fence here: a wide leftover
+  });
+
+  it("SNAP-112: a fence in a gap too wide to close does not make it close", async () => {
+    // Paint edge at y = -80, block edge near -94: too wide to close. The fence leaves a near part just wider
+    // than a gap up to a fence may be.
+    const near = 2 * TUNE.FENCE_SNAP * 10 + 1;
+    const s = grid();
+    s.way([[-100, -80 - near], [100, -80 - near]], { barrier: "fence" });
+    const w = await s.world();
+    paint(w, R2, 10, [[-60, -70], [60, -70]]);
+    expect(at(w, 0, -80 - near / 2)?.kind).toBe(null);
+  });
+
+  it("SNAP-112: no leftover is swallowed across a fence", async () => {
+    // Paint edge at y = -82, fence at -87, block edge near -94: the whole gap would close without the fence.
+    expect(2 * TUNE.FENCE_SNAP * 12).toBeGreaterThan(5);
+    const s = grid();
+    s.way([[-100, -87], [100, -87]], { barrier: "wall" });
+    const w = await s.world();
+    paint(w, R2, 12, [[-60, -70], [60, -70]]);
+    expect(at(w, 0, -85)?.kind).toBe("R2");
+    expect(at(w, 0, -91)?.kind).toBe(null);
+  });
+
+  it("SNAP-112: a fence across a gap that closes leaves no crack", async () => {
+    const s = grid();
+    s.way([[0, -100], [0, -60]], { barrier: "hedge" });
+    const w = await s.world();
+    // The live preview (SNAP-105) shows the region before SNAP-107 tidies slivers, so check it there too.
+    const s2 = new Stroke(w, R2, 12, -60, -75);
+    s2.start();
+    for (let x = -59; x <= 60; x++) s2.move(x, -75);
+    s2.updatePreview();
+    const region = s2.preview.get(atomAt(w, 0, 0))!.region;
+    expect(contains(region, toI(-5), toI(-91))).toBe(true);
+    expect(contains(region, toI(0), toI(-91))).toBe(true);
+    s2.end(false);
+    expect(at(w, 0, -91)?.kind).toBe("R2");
+  });
+
+  it("SNAP-112: two lots painted one after the other leave no crack along the fence between them", async () => {
+    for (const [first, second] of [[R2, R2], [COM, R2]] as Tool[][]) {
+      const s = grid();
+      s.way([[0, -110], [0, 110]], { barrier: "fence" });
+      const w = await s.world();
+      paint(w, first, 14, [[-78, -75], [-78, 75], [-30, 75], [-30, -75]]);
+      const pts: [number, number][] = [[78, -75], [78, 75], [30, 75], [30, -75]];
+      const st = new Stroke(w, second, 14, ...pts[0]);
+      st.start();
+      for (let i = 1; i < pts.length; i++)
+        for (let k = 1; k <= 40; k++) {
+          const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+          st.move(ax + ((bx - ax) * k) / 40, ay + ((by - ay) * k) / 40);
+        }
+      st.updatePreview();
+      const region = st.preview.get(atomAt(w, 0, 0))!.region;
+      expect(contains(region, toI(0.1), toI(0))).toBe(true);
+      st.end(false);
+      expect(voidArea(w, 0, 0)).toBeLessThan(1);
     }
   });
 

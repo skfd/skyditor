@@ -77,7 +77,7 @@ export const isProtected = (p: Piece) => p.kind === "CTX"; // PAINT-004
 // Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013).
 const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}`;
 const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land
-const SOFT_LINE_HALF_WIDTH = 0.25; // m; just enough to separate cells, swallowed again by SNAP-103
+export const SOFT_LINE_HALF_WIDTH = 0.25; // m; just enough to separate cells; swallowed again by SNAP-103, or along fences filled by SNAP-112
 
 const floatRing = (pts: Float32Array): Ring => {
   const r: Ring = [];
@@ -174,8 +174,9 @@ export class World {
   private readonly buildingIndex = new RBush<BuildingGeom>();
   private readonly sets = new Map<number, BuildingSet>();
   private readonly guesses = new Map<number, { items: Building[]; by: Map<Building, Guess | null> }>();
-  private readonly softIndex = new RBush<BBox & { line: Ring }>();
+  private readonly softIndex = new RBush<BBox & { line: Ring; fence: boolean }>();
   private readonly cellCache = new Map<number, Shape[]>();
+  private readonly fenceCache = new Map<number, Shape>();
   overlay: AreaFeature[] = []; // IMP-003, render only
   issues: TagIssue[] = []; // IMP-014, render only
   readonly originals: AreaFeature[] = []; // IMP-009, render only
@@ -211,7 +212,7 @@ export class World {
     this.softIndex.load(
       features.minorLines.map((l) => {
         const line = floatRing(l.pts);
-        return { ...bbox([line]), line };
+        return { ...bbox([line]), line, fence: !!l.fence };
       }),
     );
   }
@@ -296,6 +297,17 @@ export class World {
       this.cellCache.set(atom.id, cells);
     }
     return cells;
+  }
+
+  /** SNAP-112: thin slits along the fences, walls and hedges in an atom's area, whether or not they divide it. */
+  fencesOf(atom: Atom): Shape {
+    let slits = this.fenceCache.get(atom.id);
+    if (!slits) {
+      const lines = this.softIndex.search(atom.bbox).filter((x) => x.fence).map((x) => x.line);
+      slits = lines.length ? bufferLines(lines, SOFT_LINE_HALF_WIDTH) : [];
+      this.fenceCache.set(atom.id, slits);
+    }
+    return slits;
   }
 
   atomsIn(b: BBox): Atom[] {
