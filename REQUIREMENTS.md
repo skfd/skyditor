@@ -80,13 +80,13 @@ has been absorbed into a rewritten requirement, it may be retired.
 |------|---------|
 | **Area** | The rectangular extent of OSM data that is loaded into one session. |
 | **Barrier** | A linear OSM feature that splits land into blocks: drivable roads, railways, rivers and canals (§4). |
-| **Street space** | The union of all barriers, each buffered by its class half-width. It is never paintable. |
+| **Street space** | The land the barriers take up, at their width (LAT-003). It is never paintable. |
 | **Atom** | One connected piece of land left over when street space and water are removed from the area. In a city, roughly a *block*. Atoms are the coarse snapping lattice. |
 | **Piece** | A connected region inside one atom with one landuse value (or none). Every atom is fully divided into pieces. |
 | **Void** | A piece with no landuse. |
 | **Kind** | The landuse value of a piece: a paintable kind (§5), an exclusive context kind (§6), or void. |
 | **Tier** | The step on the residential ladder (R1 rural … R6 high-rise). |
-| **Brush** | The circular painting tool. Its radius is set in screen pixels and converted to metres when a stroke starts. |
+| **Brush** | The circular painting tool. Its size is set on screen and fixed in metres for each stroke. |
 | **Stroke** | One press–drag–release gesture with the brush. One stroke is one undo step. |
 | **Tap** | A stroke with almost no movement and a short duration (TUNE-TAP-*). |
 | **Unit piece** | A piece small enough, relative to the brush, to be claimed whole (§8). |
@@ -109,12 +109,13 @@ thresholds, buffers). The user sees only: map, landuse colours, brush, tools, an
   Why: the snapping can get as clever as it needs to internally; the user just paints.
   Trace: policy
 
-**GEN-003** The editor shall keep all geometry in a local planar coordinate system, in metres, centred on
-the loaded area.
+~~**GEN-003** The editor shall keep all geometry in a local planar coordinate system, in metres, centred on
+the loaded area.~~ Retired: a code convention the user cannot notice. It lives in CLAUDE.md.
 
-**GEN-004** The editor shall run boolean and offset geometry on integer coordinates at the resolution
-TUNE-GEOM-SCALE.
-  Why: robust polygon operations. The landuse lattice is useless if it develops cracks.
+**GEN-004** The editor shall never let the lattice develop cracks, slivers or overlaps between pieces:
+neighbouring pieces share their edges exactly, however often the land is repainted.
+  Why: a crack between two pieces is a hole in the map nobody painted. How the geometry stays exact is a
+  code rule (CLAUDE.md).
 
 **GEN-005** The editor shall let the user do everything with a pointer alone (mouse, pen or touch), without
 a keyboard. Keys are shortcuts, never the only way to do something.
@@ -139,8 +140,8 @@ that fails, query the OSM API 0.6 `map` call.
 **LOAD-004** When the user drops an `.osm` (XML) or Overpass JSON file onto the editor, the editor shall
 load that file. The area is the file's declared bounds, or the extent of its nodes if there are none.
 
-**LOAD-005** The editor shall read nodes, ways and multipolygon relations, and assemble relation rings from
-member ways joined end to end.
+**LOAD-005** The editor shall read areas drawn as closed ways and as multipolygon relations alike, holes
+included.
 
 **LOAD-006** If a multipolygon ring cannot be closed, then the editor shall skip that ring, keep loading,
 and count the skipped ring in the load report.
@@ -170,17 +171,18 @@ service roads and the like are not barriers (SNAP-108). The classes are listed i
 **LAT-002** The editor shall not treat a way tagged `tunnel` (any value except `no`), or `covered=yes`, as a
 barrier.
 
-**LAT-003** The editor shall build street space by buffering each barrier by the half-width TUNE-HALFWIDTH
-of its class, with round ends and joins, clipped to the area.
+**LAT-003** The editor shall give each barrier its real width on the map: its tagged `width` where present,
+otherwise a typical width for its class (TUNE-HALFWIDTH), with rounded ends. This street space is never
+paintable.
 
 **LAT-004** The editor shall add to street space any `highway` area (closed way with `area=yes`, or an
 `area:highway` feature) of a barrier class.
 
-**LAT-005** The editor shall compute atoms as the connected parts of (area rectangle − street space −
-water), keeping holes.
+**LAT-005** The editor shall divide the land left after street space and water into atoms: every connected
+piece of it is one atom, holes included.
 
-**LAT-006** If a candidate atom is smaller than TUNE-ATOM-MIN-AREA, or contains no disc of radius
-TUNE-ATOM-MIN-RADIUS, then the editor shall discard it.
+**LAT-006** If a candidate atom is too small (TUNE-ATOM-MIN-AREA) or too thin (TUNE-ATOM-MIN-RADIUS) to be
+land anyone paints, then the editor shall discard it.
   Why: traffic islands and slivers between parallel carriageways are not land anyone paints.
 
 **LAT-007** The editor shall not split an atom along a dead-end barrier that ends inside it. The dead end
@@ -255,11 +257,11 @@ than beside it: lawns, flowerbeds, gardens, playgrounds, pitches, parking.
 the feature with the smaller area. → see CORR-001
   Why: a retail area drawn inside a big residential polygon is the more specific statement.
 
-**IMP-005** The editor shall convert each paintable or exclusive-context feature into pieces by
-intersecting its resolved footprint (after IMP-004) with every atom it overlaps.
+**IMP-005** The editor shall cut each paintable or exclusive-context feature into pieces at the block edges,
+once its overlaps are resolved (IMP-004), so that every piece lies inside one atom.
 
-**IMP-006** If an imported fragment inside an atom is smaller than TUNE-IMPORT-MIN-FRAGMENT, or contains no
-disc of radius TUNE-ATOM-MIN-RADIUS, then the editor shall drop that fragment.
+**IMP-006** If an imported fragment inside an atom is too small (TUNE-IMPORT-MIN-FRAGMENT) or too thin
+(TUNE-ATOM-MIN-RADIUS) to be land anyone meant, then the editor shall drop that fragment.
   Why: polygons drawn to road centrelines poke a few centimetres into neighbouring blocks.
 
 **IMP-007** The editor shall absorb into an adjacent imported paintable piece any part of the void inside
@@ -381,10 +383,11 @@ business (commercial and retail), or industrial.
 ## 7. Painting — general
 
 **PAINT-001** When the user presses the primary button over the map with a paint tool selected, the editor
-shall start a stroke with the current kind and the brush radius converted to metres at that moment.
+shall start a stroke with the current kind and a brush size that stays fixed, in metres, for the whole
+stroke.
 
-**PAINT-002** While a stroke is active, the editor shall record the cursor path, adding a point once the
-cursor has moved at least TUNE-TRAIL-STEP × brush radius from the previous point.
+**PAINT-002** While a stroke is active, the editor shall follow the cursor closely enough that the trail
+shows no corners at any brush size (TUNE-TRAIL-STEP).
 
 **PAINT-003** While a stroke is active, the editor shall draw the brush trail as a soft translucent band in
 the kind's colour.
@@ -426,13 +429,13 @@ stroke.
 
 ## 8. Snapping — unit pieces
 
-**SNAP-001** The editor shall treat a piece as a unit piece when its area is at most
-min(TUNE-UNIT-ABS-MAX, TUNE-UNIT-FACTOR × π × brush radius²). → see CORR-002
+**SNAP-001** The editor shall treat a piece as a unit piece when it is small relative to the brush: no more
+than TUNE-UNIT-FACTOR brush discs in area, and never above TUNE-UNIT-ABS-MAX. → see CORR-002
   Why: zoom becomes precision. Zoomed out, the brush grabs whole blocks; zoomed in, it paints parts of
   blocks.
 
-**SNAP-002** While a stroke is active, the editor shall track for each unit piece the fraction of its area
-the stroke has covered, measured on a fixed set of sample points spread evenly over the piece.
+**SNAP-002** While a stroke is active, the editor shall track how much of each unit piece the stroke has
+covered.
 
 **SNAP-003** When a unit piece's covered fraction reaches TUNE-CLAIM-COVERAGE during a stroke, the editor
 shall claim that piece immediately, without waiting for the stroke to end.
@@ -441,8 +444,8 @@ shall claim that piece immediately, without waiting for the stroke to end.
 piece.
 
 **SNAP-005** While a stroke is active, the editor shall show each partly covered unit piece charging: a
-dashed outline and a light fill in the stroke's colour, both growing with covered fraction ÷
-TUNE-CLAIM-COVERAGE. A charging piece shall never look claimed.
+dashed outline and a light fill in the stroke's colour, both growing as the piece nears its claim
+(SNAP-003). A charging piece shall never look claimed.
   Trace: manual
 
 **SNAP-006** When a stroke ends, the editor shall drop the charge of every unit piece that was not
@@ -453,16 +456,17 @@ claimed, with no change to the piece.
 
 ## 9. Snapping — open pieces (freeform)
 
-**SNAP-101** The editor shall build the stroke shape as the brush trail buffered by the brush radius
-(round caps and joins), smoothed by a morphological closing of radius TUNE-SMOOTH-FACTOR × brush radius.
+**SNAP-101** The editor shall take as the stroke shape the land the brush passed over, with notches and
+gaps much narrower than the brush smoothed away (TUNE-SMOOTH-FACTOR).
 
 **SNAP-102** The editor shall limit the freeform result in each atom to the open pieces the stroke shape
 touches, excluding exclusive-context pieces, and pieces already of the stroke's kind unless they are
 disputed (DISP-002).
 
 **SNAP-103** The editor shall swallow leftovers: within the touched open pieces, any part outside the
-stroke shape that is narrower than 2 × TUNE-SNAP-FACTOR × brush radius, and that touches the stroke shape,
-shall join the result. The corners of a wider leftover belong to that leftover and are never swallowed.
+stroke shape that is narrower than the snap distance (TUNE-SNAP-FACTOR of the brush's width), and that
+touches the stroke shape, shall join the result. The corners of a wider leftover belong to that leftover and
+are never swallowed.
   Why: this is what makes paint "snap". A gap narrower than the snap distance between the paint and a
   road, a neighbouring landuse, or a context area closes by itself. Wide leftovers stay.
 
@@ -470,8 +474,8 @@ shall join the result. The corners of a wider leftover belong to that leftover a
   Why: painting the west half of a field must not grab a rounded-off corner on its far east side.
 
 **SNAP-108** The editor shall divide each atom into *cells* along the minor ways that cross it: paths,
-cycleways, service roads, tracks and steps (classes in `src/osm/classes.ts`). When the stroke shape covers at least
-TUNE-CELL-TAKE of a cell's area, the freeform result shall include that whole cell.
+cycleways, service roads, tracks and steps (classes in `src/osm/classes.ts`). When the stroke shape covers
+at least TUNE-CELL-TAKE of a cell's area, the freeform result shall include that whole cell.
   Why: paths and service roads inside a block are where real lots end. Paint should prefer them.
 
 **SNAP-109** The editor shall never let a freeform result cut through a building. A building with at least
@@ -479,15 +483,16 @@ half its area inside the result shall be included whole, with a margin of TUNE-B
 building within that margin of the result shall be left out, with the same margin.
   Why: landuse is about what the buildings are. A boundary through a house is always wrong.
 
-**SNAP-110** The editor shall build the freeform result in this order: stroke shape within the open pieces
-(SNAP-102), whole cells (SNAP-108), buildings (SNAP-109), leftover swallowing (SNAP-103, SNAP-104).
+~~**SNAP-110** The editor shall build the freeform result in this order: stroke shape within the open pieces
+(SNAP-102), whole cells (SNAP-108), buildings (SNAP-109), leftover swallowing (SNAP-103, SNAP-104).~~
+Retired: an order of operations is how, not what. It is a comment in `src/paint/snap.ts`.
 
 **SNAP-105** While a stroke is active, the editor shall show the snapped freeform result as a live preview
 in the stroke's colour, updated at least every TUNE-PREVIEW-INTERVAL.
   Trace: manual
 
-**SNAP-106** When a stroke ends, the editor shall apply the snapped freeform result. Its shape shall be
-simplified with tolerance TUNE-SIMPLIFY, and it shall settle into place with the claim animation
+**SNAP-106** When a stroke ends, the editor shall apply the snapped freeform result. Its outline shall be
+cleaned of the brush's jitter (TUNE-SIMPLIFY), and it shall settle into place with the claim animation
 (FEEL-001).
 
 **SNAP-107** If applying a freeform result leaves a piece in the same atom smaller than TUNE-SLIVER-AREA,
@@ -563,12 +568,12 @@ holding Space, the editor shall pan the map. After release, it shall coast to a 
 the whole area.
   Trace: manual
 
-**CAM-005** The editor shall keep the zoom within TUNE-ZOOM-MIN..TUNE-ZOOM-MAX pixels per metre, and keep the
+**CAM-005** The editor shall keep the zoom within its limits (TUNE-ZOOM-MIN, TUNE-ZOOM-MAX), and keep the
 view centre within the area.
 
 **INP-001** When the user presses `[` or `]`, presses a brush size button (HUD-006), or turns the wheel
-while holding Shift, the editor shall shrink or grow the brush within TUNE-BRUSH-MIN..TUNE-BRUSH-MAX
-pixels, by TUNE-BRUSH-STEP per press.
+while holding Shift, the editor shall shrink or grow the brush within its limits (TUNE-BRUSH-MIN,
+TUNE-BRUSH-MAX), one step (TUNE-BRUSH-STEP) per press.
   Trace: manual
 
 **INP-002** When the user presses a tool key (KIND-001, KIND-007, DENS-001), the editor shall select that
@@ -603,13 +608,12 @@ preview, and the brush cursor.
   Trace: manual
 
 **REN-002** The editor shall draw each landuse piece as a *slab*: the top face at its true position, and a
-darker side face directly below it, offset downwards by the kind's lift in screen pixels, scaled with
-zoom within TUNE-LIFT-ZOOM-CLAMP.
+darker side face below it, as tall as the kind's lift, growing a little with zoom (TUNE-LIFT-ZOOM-CLAMP).
   Why: height reads as density at a glance, but the top face stays exactly where the data is.
   Trace: manual
 
-**REN-003** The editor shall draw slabs in north-to-south order, so that southern slabs hide the sides of
-northern slabs.
+**REN-003** The editor shall let southern slabs hide the sides of northern slabs, as a city seen from the
+south.
   Trace: manual
 
 **REN-004** The editor shall draw a thin gap (TUNE-PIECE-GAP) between neighbouring pieces of different
@@ -627,8 +631,8 @@ the atoms within TUNE-HINT-RADIUS × brush radius of the cursor.
 **REN-007** When the cursor is over a piece, the editor shall highlight that piece slightly.
   Trace: manual
 
-**REN-008** The editor shall keep 60 frames per second on the demo area on a typical laptop, and shall
-redraw only when something changed or is animating.
+**REN-008** The editor shall stay smooth (60 frames per second on the demo area on a typical laptop) and
+shall not spend work redrawing while nothing on screen changes or moves.
   Trace: manual
 
 **REN-009** Where the building layer is on, the editor shall draw each building whose look (BLD-001) is

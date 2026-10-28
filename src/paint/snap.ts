@@ -71,7 +71,11 @@ export interface Freeform {
   eligible: Shape; // the open pieces it may take from
 }
 
-/** SNAP-110: the snapped freeform result of a stroke shape inside one atom. */
+/**
+ * The snapped freeform result of a stroke shape inside one atom, built in this order: the stroke shape
+ * within the open pieces (SNAP-102), whole cells (SNAP-108), buildings (SNAP-109), then leftover swallowing
+ * (SNAP-103, SNAP-104).
+ */
 export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, radiusM: number): Freeform | null {
   const limit = unitLimit(radiusM);
   // SNAP-102: only open pieces the stroke touches, never context, never pieces already of the kind.

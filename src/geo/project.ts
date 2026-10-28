@@ -1,4 +1,5 @@
-// Local planar projection (GEN-003): metres, x east, y south (screen-like), centred on the area.
+// Local planar projection: metres, x east, y south (screen-like), centred on the area. All model geometry
+// lives in these coordinates; lon/lat exists only at the import and URL edges (CLAUDE.md).
 export interface LonLatBounds {
   minLon: number;
   minLat: number;

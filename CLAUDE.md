@@ -35,5 +35,10 @@ Tests build tiny maps in local metres with `Sketch` (`tests/helpers.ts`), e.g.
 
 - Users never see internal concepts (GEN-002): no atoms, pieces, thresholds or buffers in the UI.
 - Animations explain changes; they never delay input or the model (FEEL-009).
-- Geometry goes through `src/geo/clip.ts` (integer Clipper ops). Don't mix in float boolean ops.
+- All model geometry is in local planar metres centred on the area (`src/geo/project.ts`); lon/lat exists
+  only at the import and URL edges.
+- Geometry goes through `src/geo/clip.ts` (integer Clipper ops at `TUNE.GEOM_SCALE`). Don't mix in float
+  boolean ops: that is how the lattice grows cracks (GEN-004).
+- Requirements say what the user gets, in the user's words. How it is done (order of operations, sampling,
+  buffering, draw order) belongs in a code comment next to the requirement's citation.
 - Pieces are immutable; replace them, never mutate. Renderer caches and undo depend on object identity.
