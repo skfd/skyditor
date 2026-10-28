@@ -1,5 +1,6 @@
 // Landuse kinds, the residential ladder and import classification (KIND-*, IMP-001..003, LAT-008).
 import type { Tags } from "../osm/parse";
+import { BUILDING_LOOK, CIVIC_AMENITY, EDUCATION_AMENITY, EXCLUSIVE, OVERLAY, RESIDENTIAL_TIER, isWaterArea } from "../osm/classes";
 import { TUNE } from "../tuning";
 
 export type TierKind = "R1" | "R2" | "R3" | "R4" | "R5" | "R6";
@@ -54,44 +55,6 @@ export const CTX_COLORS: Record<CtxClass, string> = {
   civic: "#e3d7c7",
 };
 
-const RESIDENTIAL_TIER: Record<string, TierKind> = {
-  // KIND-005
-  rural: "R1",
-  single_family: "R2",
-  detached: "R2",
-  duplex: "R3",
-  terrace: "R4",
-  terraced: "R4",
-  apartments: "R5",
-  urban: "R5",
-  block: "R5",
-};
-
-const EXCLUSIVE: Record<string, Record<string, CtxClass>> = {
-  // IMP-002, REN-015
-  landuse: {
-    forest: "wood", farmland: "farm", meadow: "green", orchard: "farm", vineyard: "farm", cemetery: "cemetery",
-    allotments: "farm", recreation_ground: "green", railway: "grey", construction: "construction", brownfield: "grey",
-    greenfield: "farm", military: "grey", religious: "civic", farmyard: "farm", quarry: "grey", landfill: "grey",
-    plant_nursery: "farm", education: "education", institutional: "civic",
-  },
-  leisure: { park: "park", golf_course: "green", sports_centre: "civic", stadium: "civic", nature_reserve: "green" },
-  natural: {
-    wood: "wood", scrub: "wood", heath: "green", grassland: "green", wetland: "green", sand: "farm", beach: "farm",
-    bare_rock: "grey",
-  },
-};
-
-const OVERLAY: Record<string, Record<string, CtxClass>> = {
-  // IMP-003
-  landuse: { grass: "green", flowerbed: "green", village_green: "green" },
-  leisure: { garden: "green", playground: "green", pitch: "green", dog_park: "green" },
-  amenity: { parking: "grey" },
-};
-
-/** IMP-013, BLD-004: amenities whose grounds are education land. */
-export const EDUCATION_AMENITY = new Set(["school", "university", "college", "kindergarten"]);
-
 export type AreaClass =
   | { cls: "paintable"; kind: PaintKind | "RU" }
   | { cls: "exclusive"; ctx: CtxClass; label: string; implied?: true } // implied: by an amenity (IMP-013)
@@ -101,17 +64,16 @@ export type AreaClass =
 /** IMP-001: every area feature gets exactly one class (or null = ignored). */
 export function classifyArea(tags: Tags): AreaClass | null {
   const lu = tags.landuse;
-  // LAT-008
-  if (tags.natural === "water" || tags.waterway === "riverbank" || lu === "reservoir" || lu === "basin")
-    return { cls: "water" };
+  if (isWaterArea(tags)) return { cls: "water" }; // LAT-008
   if (lu === "residential") {
-    const t = RESIDENTIAL_TIER[tags.residential ?? ""];
-    return { cls: "paintable", kind: t ?? "RU" };
+    const t = RESIDENTIAL_TIER[tags.residential ?? ""]; // KIND-005
+    return { cls: "paintable", kind: t ?? "RU" }; // KIND-004
   }
   if (lu === "commercial") return { cls: "paintable", kind: "COM" };
   if (lu === "retail") return { cls: "paintable", kind: "RET" };
   if (lu === "industrial") return { cls: "paintable", kind: "IND" };
   for (const key of ["landuse", "leisure", "natural"]) {
+    // IMP-002
     const v = tags[key];
     if (v && EXCLUSIVE[key]?.[v]) return { cls: "exclusive", ctx: EXCLUSIVE[key][v], label: `${key}=${v}` };
   }
@@ -119,6 +81,7 @@ export function classifyArea(tags: Tags): AreaClass | null {
   if (EDUCATION_AMENITY.has(tags.amenity ?? ""))
     return { cls: "exclusive", ctx: "education", label: `amenity=${tags.amenity}`, implied: true };
   for (const key of ["landuse", "leisure", "amenity"]) {
+    // IMP-003
     const v = tags[key];
     if (v && OVERLAY[key]?.[v]) return { cls: "overlay", ctx: OVERLAY[key][v] };
   }
@@ -128,27 +91,6 @@ export function classifyArea(tags: Tags): AreaClass | null {
 /** BLD-001: what a building says about its land. null = unknown. */
 export type BuildingLook = PaintKind | "RU" | "EDU" | "CIVIC";
 
-const BUILDING_LOOK: Record<string, BuildingLook> = {
-  // BLD-002
-  farm: "R1", farmhouse: "R1", cabin: "R1", static_caravan: "R1",
-  house: "R2", detached: "R2", bungalow: "R2",
-  semidetached_house: "R3",
-  terrace: "R4",
-  apartments: "R5", dormitory: "R5",
-  residential: "RU",
-  commercial: "COM", office: "COM", hotel: "COM",
-  retail: "RET", supermarket: "RET", kiosk: "RET",
-  industrial: "IND", warehouse: "IND", manufacture: "IND", factory: "IND", hangar: "IND",
-  school: "EDU", university: "EDU", college: "EDU", kindergarten: "EDU",
-  hospital: "CIVIC",
-  church: "CIVIC", cathedral: "CIVIC", chapel: "CIVIC", mosque: "CIVIC", synagogue: "CIVIC", temple: "CIVIC",
-  public: "CIVIC", government: "CIVIC", civic: "CIVIC", fire_station: "CIVIC", train_station: "CIVIC",
-};
-
-const CIVIC_AMENITY = new Set([
-  // BLD-004
-  "hospital", "place_of_worship", "townhall", "library", "fire_station", "police",
-]);
 
 /** BLD-003: levels from `building:levels`, else `height` in metres. */
 function levelsOf(tags: Tags): number | undefined {
@@ -161,7 +103,7 @@ function levelsOf(tags: Tags): number | undefined {
 
 /** BLD-001..BLD-005 */
 export function buildingLook(tags: Tags): BuildingLook | null {
-  let look: BuildingLook | null = BUILDING_LOOK[tags.building ?? ""] ?? null;
+  let look: BuildingLook | null = BUILDING_LOOK[tags.building ?? ""] ?? null; // BLD-002
   if (!look) {
     // BLD-004
     if (tags.shop) look = "RET";

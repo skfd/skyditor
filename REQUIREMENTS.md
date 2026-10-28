@@ -162,9 +162,10 @@ and it shall keep that fragment updated with the loaded area's centre. The demo 
 
 ## 4. Lattice (atoms)
 
-**LAT-001** The editor shall treat these ways as barriers: `highway` = motorway, trunk, primary, secondary,
-tertiary, unclassified, residential, living_street, pedestrian, road and their `_link` variants; `railway`
-= rail, light_rail, narrow_gauge; `waterway` = river, canal.
+**LAT-001** The editor shall treat as barriers the ways that cut a city into blocks: roads that carry
+traffic, from motorways down to residential and pedestrian streets, railways, rivers and canals. Paths,
+service roads and the like are not barriers (SNAP-108). The classes are listed in `src/osm/classes.ts`.
+  Why: a block is what lies between the streets you would have to cross.
 
 **LAT-002** The editor shall not treat a way tagged `tunnel` (any value except `no`), or `covered=yes`, as a
 barrier.
@@ -185,8 +186,8 @@ TUNE-ATOM-MIN-RADIUS, then the editor shall discard it.
 **LAT-007** The editor shall not split an atom along a dead-end barrier that ends inside it. The dead end
 only becomes a notch in the atom.
 
-**LAT-008** The editor shall treat as water: `natural=water`, `waterway=riverbank`, `landuse=reservoir`,
-`landuse=basin`. (Coastline handling is out of scope for M0.)
+**LAT-008** The editor shall treat as water the lakes, ponds, reservoirs, basins and river surfaces mapped
+as areas (tags in `src/osm/classes.ts`). Coastline handling is out of scope for M0.
 
 ---
 
@@ -219,8 +220,9 @@ TUNE-LIFT that strictly increases from R1 to R6.
 pattern, translucent enough that overlay context beneath it stays visible.
   Why: most residential landuse in OSM has no subtag. It should look like it is waiting to be refined.
 
-**KIND-005** The editor shall map imported `residential=*` values to tiers as follows: rural → R1;
-single_family, detached → R2; duplex → R3; terrace, terraced → R4; apartments, urban, block → R5.
+**KIND-005** The editor shall read each `residential=*` value that names a kind of housing as its tier
+(KIND-001), synonyms included: `detached` and `single_family` are both R2, `apartments`, `urban` and
+`block` all R5. The mapping is in `src/osm/classes.ts`.
 
 **KIND-006** The editor shall give commercial, retail and industrial colours clearly distinct from the
 residential ramp, and a single shared slab height TUNE-LIFT-NONRES.
@@ -231,18 +233,21 @@ residential ramp, and a single shared slab height TUNE-LIFT-NONRES.
 
 ## 6. Interpreting existing landuse
 
-**IMP-001** The editor shall classify each loaded area feature as exactly one of: *paintable*
-(`landuse` = residential, commercial, retail, industrial), *exclusive context*, *overlay context*,
-*water*, or *ignored*.
+Which tags mean what is a reading of OSM, not a design decision of this editor, and it shifts as mapping
+practice does. The requirements here state the principle and a few examples; the full tag tables live in
+`src/osm/classes.ts`, cite the requirement they implement, and are tested under its ID.
 
-**IMP-002** The editor shall classify as exclusive context: `landuse` = forest, farmland, meadow, orchard,
-vineyard, cemetery, allotments, recreation_ground, railway, construction, brownfield, greenfield,
-military, religious, farmyard, quarry, landfill, plant_nursery, education, institutional; `leisure` =
-park, golf_course, sports_centre, stadium, nature_reserve; `natural` = wood, scrub, heath, grassland,
-wetland, sand, beach, bare_rock.
+**IMP-001** The editor shall classify each loaded area feature as exactly one of: *paintable* (a landuse
+kind of §5), *exclusive context*, *overlay context*, *water*, or *ignored*.
 
-**IMP-003** The editor shall classify as overlay context: `landuse` = grass, flowerbed, village_green;
-`leisure` = garden, playground, pitch, dog_park; `amenity` = parking.
+**IMP-002** The editor shall classify as exclusive context the land nobody paints landuse over: woods and
+farmland, parks and golf courses, cemeteries, allotments, school grounds, military and railway land,
+quarries, construction sites and the like.
+  Why: this land is mapped by people with their own tags and practices. The editor shows it and paints
+  around it (PAINT-004).
+
+**IMP-003** The editor shall classify as overlay context the small features that sit inside landuse rather
+than beside it: lawns, flowerbeds, gardens, playgrounds, pitches, parking.
   Why: in OSM these usually sit *inside* a residential or commercial area. They must not cut holes in
   the lattice. They are drawn on top, as hints.
 
@@ -293,8 +298,8 @@ disputed part too small to keep as a fragment on its own (IMP-006) shall not be 
   at every spot, but the editor must not pretend it knows. Context always holds the part because the
   editor never overwrites context (PAINT-004); it only asks the user to confirm the shrink (DISP-004).
 
-**IMP-013** The editor shall read an area tagged `amenity` = school, university, college or kindergarten
-that IMP-001 does not otherwise classify as education context (REN-015).
+**IMP-013** The editor shall read an area tagged as a school, university, college or kindergarten by its
+`amenity` alone, with no landuse IMP-001 recognises, as education context (REN-015).
   Why: most school grounds in OSM carry only the amenity. Without this, their land shows as empty.
 
 **IMP-014** The editor shall mark an area read by IMP-013 as *missing its landuse* unless at least
@@ -334,22 +339,11 @@ by BLD-003.
   reads without a legend, and a building that disagrees with its land shows where landuse is wrong or
   missing.
 
-**BLD-002** The editor shall map `building=*` values to looks as follows:
-
-| Look | `building=*` |
-|------|--------------|
-| R1 | farm, farmhouse, cabin, static_caravan |
-| R2 | house, detached, bungalow |
-| R3 | semidetached_house |
-| R4 | terrace |
-| R5 | apartments, dormitory |
-| Unspecified residential | residential |
-| Commercial | commercial, office, hotel |
-| Retail | retail, supermarket, kiosk |
-| Industrial | industrial, warehouse, manufacture, factory, hangar |
-| Education | school, university, college, kindergarten |
-| Civic | hospital, church, cathedral, chapel, mosque, synagogue, temple, public, government, civic, fire_station, train_station |
-
+**BLD-002** When a building's `building=*` value names a kind of building, the editor shall give it the
+matching look: farmhouses and cabins R1, houses R2, semi-detached houses R3, terraces R4, blocks of flats
+R5, a plain `residential` building unspecified residential; offices and hotels commercial; shops and
+supermarkets retail; warehouses and factories industrial; schools education; hospitals, places of worship
+and public buildings civic. The table is in `src/osm/classes.ts`.
   Why: an explicit building type wins over everything else. A block of flats with shops downstairs is
   still residential land.
 
@@ -359,14 +353,14 @@ levels, the editor shall give it the look R6. Its levels are `building:levels`, 
   Why: R6 has no tag of its own (Q-002); the number of floors is the only honest signal. Other looks keep
   their type whatever the height: a 12-storey "house" is a tagging mistake, not a high-rise.
 
-**BLD-004** When a building's `building=*` value is not listed in BLD-002, the editor shall take its look
-from its other tags, in this order: `shop=*` → retail; `office=*` → commercial; `amenity` = school,
-university, college, kindergarten → education; `amenity` = hospital, place_of_worship, townhall, library,
-fire_station, police → civic.
+**BLD-004** When a building's type says nothing (BLD-002), the editor shall take its look from what the
+building is used for, in this order: a shop → retail; an office → commercial; a school → education; a
+hospital, place of worship, town hall, library, fire or police station → civic. The tags are in
+`src/osm/classes.ts`.
 
-**BLD-005** The editor shall give every other building the look unknown, including `building` = yes,
-roof, garage, garages, shed, carport, greenhouse, construction and ruins, and shall not guess a look from
-the landuse around the building.
+**BLD-005** The editor shall give every other building the look unknown, including the untyped
+`building=yes` and roofs, garages, sheds, greenhouses and ruins, and shall not guess a look from the
+landuse around the building.
   Why: most buildings in OSM have no type. A guess from the land would only echo the land's colour back
   and pass a guess off as data. Garages next to houses are not industrial.
 
@@ -475,8 +469,8 @@ shall join the result. The corners of a wider leftover belong to that leftover a
 **SNAP-104** The editor shall not swallow narrow leftovers that do not touch the stroke shape.
   Why: painting the west half of a field must not grab a rounded-off corner on its far east side.
 
-**SNAP-108** The editor shall divide each atom into *cells* along minor ways (`highway` = service, footway,
-path, cycleway, track, steps, bridleway) that cross it. When the stroke shape covers at least
+**SNAP-108** The editor shall divide each atom into *cells* along the minor ways that cross it: paths,
+cycleways, service roads, tracks and steps (classes in `src/osm/classes.ts`). When the stroke shape covers at least
 TUNE-CELL-TAKE of a cell's area, the freeform result shall include that whole cell.
   Why: paths and service roads inside a block are where real lots end. Paint should prefer them.
 

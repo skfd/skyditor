@@ -1,7 +1,8 @@
 // Turns raw OSM data into the features the lattice and the importer need (LOAD-005/006, LAT-001..004).
 import { type BBox, type Ring, type Shape, area as shapeArea, toI, union } from "../geo/clip";
 import { Projection, type LonLatBounds } from "../geo/project";
-import { type AreaClass, type BuildingLook, EDUCATION_AMENITY, buildingLook, classifyArea } from "../model/kinds";
+import { type AreaClass, type BuildingLook, buildingLook, classifyArea } from "../model/kinds";
+import { BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, MINOR_HIGHWAY } from "./classes";
 import { TUNE } from "../tuning";
 import ClipperLib from "clipper-lib";
 import { dataBounds, type OsmData, type OsmWay, type Tags } from "./parse";
@@ -37,14 +38,6 @@ export interface Features {
   minorLines: MinorLine[];
   report: { skippedRings: number; ways: number; relations: number };
 }
-
-const BARRIER_HIGHWAY = new Set([
-  "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
-  "pedestrian", "road",
-]);
-const BARRIER_RAILWAY = new Set(["rail", "light_rail", "narrow_gauge"]);
-const BARRIER_WATERWAY = new Set(["river", "canal"]);
-const MINOR_HIGHWAY = new Set(["service", "footway", "path", "cycleway", "track", "steps", "bridleway"]);
 
 /** LAT-001/LAT-002: the barrier class of a way, or null. */
 export function barrierClass(tags: Tags): string | null {

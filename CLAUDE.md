@@ -8,6 +8,8 @@
   code and tests.
 - Feel numbers are code-level work: knobs are named `TUNE-*` and live in `src/tuning.ts` with their meaning.
   A requirement names a knob, never its value (§16). Tuning a value is not a spec change.
+- Which OSM tags mean what is a reading, not a design decision: requirements state the principle with a few
+  examples, and the full tag tables live in `src/osm/classes.ts`, citing their requirement.
 - Cite requirement IDs in code comments where they are implemented (`// SNAP-103`) and in test titles
   (`it("SNAP-103: …")`).
 - When a requirement is satisfied to the letter but the result is still wrong, add a correction instead of
