@@ -94,6 +94,35 @@ describe("open pieces", () => {
     }
   });
 
+  // A wobbly stroke across the centre block, from its west edge to its east edge: its north and south
+  // outlines follow nothing, so each becomes one straight line.
+  const wobbly = (amp: number) =>
+    Array.from({ length: 49 }, (_, i): [number, number] => [-120 + 5 * i, -20 + amp * Math.sin(i * 0.9)]);
+  const innerVertices = (w: Awaited<ReturnType<Sketch["world"]>>) =>
+    at(w, 0, -20)!.shape.flat().filter((p) => Math.abs(p.X) < toI(80)).length;
+
+  it("SNAP-111: an edge that follows nothing becomes a straight line", async () => {
+    const w = await grid().world();
+    paint(w, R2, 10, wobbly(2));
+    expect(at(w, 0, -20)?.kind).toBe("R2");
+    expect(innerVertices(w)).toBe(0);
+  });
+
+  it("SNAP-111: where the stroke turns, the edge turns with a square corner", async () => {
+    const w = await grid().world();
+    // Along the west edge, then turning east along y = 40 to the east edge: an L of 20 m wide paint.
+    paint(w, R2, 10, [[-84, -110], [-84, 40], [110, 40]]);
+    // The inner corner of the L, about (-74, 30), and nothing else on the free edges south and east of it.
+    const corner = at(w, -80, 40)!.shape.flat().filter((p) => p.X > toI(-80) && p.X < toI(85) && p.Y > toI(-85) && p.Y < toI(45));
+    expect(corner.length).toBe(1);
+    const ring = at(w, -80, 40)!.shape.find((r) => r.includes(corner[0]))!;
+    const k = ring.indexOf(corner[0]);
+    const [p, v, q] = [ring[(k + ring.length - 1) % ring.length], ring[k], ring[(k + 1) % ring.length]];
+    const cos = ((p.X - v.X) * (q.X - v.X) + (p.Y - v.Y) * (q.Y - v.Y)) /
+      (Math.hypot(p.X - v.X, p.Y - v.Y) * Math.hypot(q.X - v.X, q.Y - v.Y));
+    expect(Math.abs(cos)).toBeLessThan(0.02);
+  });
+
   it("SNAP-109: a building mostly outside the paint is left out with its yard", async () => {
     const s = grid();
     s.rect(-10, -20, 10, 0, { building: "house" });

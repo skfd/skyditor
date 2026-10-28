@@ -6,6 +6,7 @@ import {
 import type { Kind, PaintKind } from "../model/kinds";
 import { type Atom, type Piece, type World, isProtected, makePiece, normalize } from "../model/world";
 import { TUNE } from "../tuning";
+import { straighten } from "./straighten";
 
 export type Tool =
   | { type: "paint"; kind: PaintKind }
@@ -81,8 +82,8 @@ export interface Freeform {
 
 /**
  * The snapped freeform result of a stroke shape inside one atom, built in this order: the stroke shape
- * within the open pieces (SNAP-102), whole cells (SNAP-108), buildings (SNAP-109), then leftover swallowing
- * (SNAP-103, SNAP-104).
+ * within the open pieces (SNAP-102), whole cells (SNAP-108), straight free edges (SNAP-111), buildings
+ * (SNAP-109), then leftover swallowing (SNAP-103, SNAP-104).
  */
 export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, radiusM: number): Freeform | null {
   const limit = unitLimit(radiusM);
@@ -96,13 +97,19 @@ export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, 
   if (area(painted) < 1) return null;
 
   // SNAP-108: mostly covered cells are taken whole.
+  const cells = world.cellsOf(atom);
   const taken: Shape[] = [];
-  for (const cell of world.cellsOf(atom)) {
+  for (const cell of cells) {
     const inCell = intersect(painted, cell);
     if (isEmpty(inCell)) continue;
     if (area(inCell) >= TUNE.CELL_TAKE * area(cell)) taken.push(intersect(cell, eligible));
   }
   if (taken.length) painted = union(painted, ...taken);
+
+  // SNAP-111: stretches that follow neither the open pieces' outline nor a cell's become straight. Before
+  // buildings, so a straight line that crosses one still leaves it whole (SNAP-109).
+  painted = intersect(straighten(painted, [eligible, ...cells], TUNE.STRAIGHTEN * radiusM), eligible);
+  if (isEmpty(painted)) return null;
 
   // SNAP-109: whole buildings in, or whole buildings out, each with a yard.
   const m = TUNE.BUILDING_MARGIN;

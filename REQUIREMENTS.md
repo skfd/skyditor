@@ -511,6 +511,13 @@ building within that margin of the result shall be left out, with the same margi
   Why: landuse is about what the buildings are. A boundary through a house is always wrong. The margin is a
   narrow yard, so an edge near a building runs along its wall, as mappers draw it.
 
+**SNAP-111** The editor shall draw each stretch of a freeform result's outline that follows nothing on the
+map (no edge of the land it is painted into, no way, fence or building) as straight lines: one line where
+the stretch strays less than TUNE-STRAIGHTEN of the brush radius from it, and otherwise a few, meeting at
+a square corner where the stroke turned through about one.
+  Why: an edge that follows nothing records only where the hand went. Careful mappers draw such edges as
+  one straight segment (1.3 bends per 100 m, a third of their corners square); a brush stroke draws 15.
+
 ~~**SNAP-110** The editor shall build the freeform result in this order: stroke shape within the open pieces
 (SNAP-102), whole cells (SNAP-108), buildings (SNAP-109), leftover swallowing (SNAP-103, SNAP-104).~~
 Retired: an order of operations is how, not what. It is a comment in `src/paint/snap.ts`.
