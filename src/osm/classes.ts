@@ -14,6 +14,9 @@ export const BARRIER_WATERWAY = new Set(["river", "canal"]);
 /** SNAP-108: minor ways that divide a block into lots without being barriers. */
 export const MINOR_HIGHWAY = new Set(["service", "footway", "path", "cycleway", "track", "steps", "bridleway"]);
 
+/** SNAP-108: `barrier=*` lines that mark where a lot ends. */
+export const LOT_BARRIER = new Set(["fence", "wall", "hedge", "retaining_wall", "city_wall"]);
+
 /** LAT-003 / LAT-009: a footway, path or cycleway mapped separately as a street's sidewalk. */
 export const isSidewalk = (t: Tags) =>
   t.footway === "sidewalk" || t.path === "sidewalk" || t.cycleway === "sidewalk";

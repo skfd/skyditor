@@ -160,7 +160,7 @@ export class Renderer {
     this.setGfx.clear();
     this.disagreeing.clear();
     this.minorMajor = pathOfFloatRings(world.features.minorLines.filter((l) => l.major).map((l) => l.pts), false);
-    this.minorPaths = pathOfFloatRings(world.features.minorLines.filter((l) => !l.major).map((l) => l.pts), false);
+    this.minorPaths = pathOfFloatRings(world.features.minorLines.filter((l) => !l.major && !l.fence).map((l) => l.pts), false);
     const byCtx = new Map<string, Path2D>();
     for (const o of world.overlay) {
       if (o.klass.cls !== "overlay") continue;

@@ -2,7 +2,7 @@
 import { type BBox, type Ring, type Shape, area as shapeArea, toI, union } from "../geo/clip";
 import { Projection, type LonLatBounds } from "../geo/project";
 import { type AreaClass, type BuildingLook, buildingLook, classifyArea } from "../model/kinds";
-import { BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, MINOR_HIGHWAY, isSidewalk } from "./classes";
+import { BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, LOT_BARRIER, MINOR_HIGHWAY, isSidewalk } from "./classes";
 import { type StreetStyle, streetStyle } from "../lattice/style";
 import { TUNE } from "../tuning";
 import ClipperLib from "clipper-lib";
@@ -30,6 +30,7 @@ export interface BuildingFeature {
 export interface MinorLine {
   pts: Float32Array; // x,y metres
   major: boolean;
+  fence?: boolean; // a fence, wall or hedge rather than a way (SNAP-108)
 }
 export interface Features {
   bounds: LonLatBounds;
@@ -150,6 +151,11 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
         if (isSidewalk(t)) f.sidewalks.push(toRing(pts));
       }
       continue;
+    }
+    // SNAP-108: fences, walls and hedges divide blocks too. A closed one may also be an area, so read on.
+    if (t.barrier && LOT_BARRIER.has(t.barrier)) {
+      const pts = partialCoords(w);
+      if (pts.length >= 2) f.minorLines.push({ pts: new Float32Array(pts.flat()), major: false, fence: true });
     }
     if (!isClosed(w) || !isAreaish(t)) continue;
     const pts = coords(w);

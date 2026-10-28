@@ -83,6 +83,17 @@ describe("open pieces", () => {
     expect(at(w, 50, 0)?.kind).toBe(null);
   });
 
+  it("SNAP-108: a fence, wall or hedge divides cells like a path", async () => {
+    for (const barrier of ["fence", "wall", "hedge"]) {
+      const s = grid();
+      s.way([[0, -110], [0, 110]], { barrier });
+      const w = await s.world();
+      paint(w, R2, 14, [[-78, -75], [-78, 75], [-30, 75], [-30, -75]]);
+      expect(at(w, -54, 0)?.kind).toBe("R2");
+      expect(at(w, 50, 0)?.kind).toBe(null);
+    }
+  });
+
   it("SNAP-109: a building mostly outside the paint is left out with its yard", async () => {
     const s = grid();
     s.rect(-10, -20, 10, 0, { building: "house" });

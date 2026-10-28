@@ -498,10 +498,12 @@ are never swallowed.
 **SNAP-104** The editor shall not swallow narrow leftovers that do not touch the stroke shape.
   Why: painting the west half of a field must not grab a rounded-off corner on its far east side.
 
-**SNAP-108** The editor shall divide each atom into *cells* along the minor ways that cross it: paths,
-cycleways, service roads, tracks and steps (classes in `src/osm/classes.ts`). When the stroke shape covers
-at least TUNE-CELL-TAKE of a cell's area, the freeform result shall include that whole cell.
-  Why: paths and service roads inside a block are where real lots end. Paint should prefer them.
+**SNAP-108** The editor shall divide each atom into *cells* along the minor ways that cross it (paths,
+cycleways, service roads, tracks and steps) and along fences, walls and hedges (classes in
+`src/osm/classes.ts`). When the stroke shape covers at least TUNE-CELL-TAKE of a cell's area, the freeform
+result shall include that whole cell.
+  Why: fences, walls, paths and service roads inside a block are where real lots end. Paint should prefer
+  them. Careful mappers run a third of the edges inside blocks along a fence, wall or hedge.
 
 **SNAP-109** The editor shall never let a freeform result cut through a building. A building with at least
 half its area inside the result shall be included whole, with a margin of TUNE-BUILDING-MARGIN. Any other
