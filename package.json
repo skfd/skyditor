@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "trace": "node scripts/trace.mjs",
-    "fixture": "node scripts/make-fixture.mjs"
+    "fixture": "node scripts/make-fixture.mjs",
+    "replay": "node scripts/replay.mjs"
   },
   "dependencies": {
     "clipper-lib": "^6.4.2",

@@ -6,7 +6,9 @@ TUNE-HALFWIDTH) and freeform snapping (SNAP-103, SNAP-108, SNAP-109, SNAP-106).
 
 Two runs so far: a first batch of 12 hand-picked areas, and a run over 44 cities (3,564 squares) that
 answers the six questions the first batch raised. The answers and the changes they suggest are in
-[44-city run](#44-city-run-geofabrik-october-2026) and [Proposed changes](#proposed-changes).
+[44-city run](#44-city-run-geofabrik-october-2026) and [Proposed changes](#proposed-changes). The
+[replay benchmark](#replay-benchmark-october-2026) scores the editor against the careful squares, so
+each change gets a number before it lands.
 
 ## Why
 
@@ -76,6 +78,7 @@ python summarize.py results.json                                   # one table r
 | `analyze.py` | All metrics, writing one JSON object per square. |
 | `report.py` | Screens and pools the squares, and prints the answers to Q1–Q6. |
 | `summarize.py` | Prints one row per area; for a handful of areas. |
+| `replay_squares.py` | Writes `replay-squares.txt`, the careful squares the [replay benchmark](#replay-benchmark-october-2026) uses. |
 
 ## What it measures
 
@@ -384,10 +387,95 @@ The 44-city grid was cut blind and screened afterwards. To sharpen what is thin:
 - Trunk and motorway frontage, pedestrian streets and living streets, which have few squares each.
 - Detached suburbs, which a 5 km grid barely reaches.
 
-## What comes next: a replay benchmark
+## Replay benchmark (October 2026)
 
-Use the well-mapped squares as an answer key. Remove their paintable landuse, paint rough strokes inside
-each true polygon (shrunk and jittered), and score Skyditor's snapped result against the mapper's
-polygon: overlap, distance between edges, nodes per 100 m, share of edge that follows a feature, and
-buildings split. Each snapping change then gets a number before it lands. Ideally `analyze.py`'s metrics
-get ported to TypeScript so the same scores run under `npm test`.
+The careful squares of the 44-city run serve as an answer key. For each square the editor loads the data
+without its paintable landuse. Rough strokes are painted inside every true polygon. Then the snapped result
+is scored against the mapper's polygon. The truth gets the same yardsticks, so every editor number sits
+next to what the mappers drew.
+
+```sh
+python replay_squares.py results-2026-10.json.gz work/areas.txt > replay-squares.txt   # the careful squares
+# from the repository root:
+npm run replay                        # all of them, from work/squares/; about 70 s on 22 threads
+npm run replay -- --only berlin_0_1,helsinki_3_4 --svg   # a few, with a picture each in work/replay/
+npm run replay -- --report research/landuse-edges/replay-results-2026-10.json.gz   # re-print a saved run
+```
+
+The code lives in `bench/replay/` (TypeScript, driving the editor's own model) and `scripts/replay.mjs`
+(the runner). `tests/replay.test.ts` replays one committed square (Turku), so the harness keeps working as
+the editor changes. A run is deterministic: the same code gives the same scores whatever the thread count.
+
+**How the strokes are made.** Each true polygon, clipped to the central 600 m, gets an outline pass a brush
+radius in from its edge, then rows 1.5 radii apart across the middle. The whole trail wobbles by a smooth
+random field (0.3 radii RMS, wavelength about 60 m), so edges land a few metres either side of the truth.
+The radius is 0.1 × √area, between 4 and 15 m, and smaller for strips the brush does not fit. This is an
+idealised mapper who aims at the right edge; it does not model a careless one.
+
+**What is scored.** All within the central 600 m, as in `analyze.py`.
+
+- Overlap (IoU), truth missed, and result outside truth.
+- Distance from each result edge to the nearest truth edge, and back, sampled every 2 m.
+- What inner edges (> 20 m from every barrier) follow, first match: fence, wall or hedge; building outline;
+  context edge; minor way; street space. Unlike `analyze.py`, a neighbouring landuse edge does not count:
+  the result's edges between kinds are what is being judged.
+- Vertices turning ≥ 5°, per 100 m of edge, and per 100 m of inner edge that follows nothing.
+- Buildings split: buildings touching landuse with 5–95% of their footprint inside one polygon.
+
+Three things are adjusted for the editor's sake. Truth under protected context (a park on top of residential
+land) is taken out, since nobody can paint there. Touching truth polygons are painted different kinds, so
+the editor's merging of same-kind pieces does not erase their shared edge. Larger polygons are painted
+first.
+
+### Baseline (`replay-2026-10.txt`)
+
+265 squares, 46 km² of truth.
+
+| | All | Kerb (60) | Property line (164) | Mappers |
+|---|---|---|---|---|
+| Overlap (IoU) | 0.877 | 0.882 | 0.875 | |
+| Truth missed | 7.1% | 8.8% | 6.1% | |
+| Result outside truth | 5.9% | 3.6% | 7.2% | |
+| Result edge → truth edge, median / p90 | 1.9 / 18.9 m | 1.4 / 17.1 m | 2.1 / 17.6 m | |
+| Truth edge → result edge, median / p90 | 1.4 / 6.1 m | 1.1 / 6.9 m | 1.4 / 5.9 m | |
+| Inner edges that follow nothing | 38.9% | 36.8% | 40.2% | 14.7% |
+| … that follow a fence, wall or hedge | 18.0% | 14.6% | 19.2% | 34.7% |
+| … that follow a building | 7.8% | 12.6% | 7.8% | 14.5% |
+| Bends per 100 m of edge | 5.1 | 4.4 | 5.5 | 3.5 |
+| Bends per 100 m of inner edge that follows nothing | 10.3 | 10.6 | 10.6 | 1.9 |
+| Buildings split | 6.6% | 5.4% | 7.1% | 4.8% |
+
+Only 0.3% of the painted area was claimed as whole pieces, so at these brush sizes almost everything goes
+through freeform snapping.
+
+**What it shows.**
+
+- Area is already close: about 88% overlap whatever the style. In property-line squares, more of the result
+  lies outside the truth (7.2% against 3.6% for kerb), as expected: street space stops at the kerb.
+- Edges are where the editor falls short. Its inner edges follow nothing 2.6 times as often as the
+  mappers' edges. Where they follow nothing, they bend 5 times as often. They follow fences half as often,
+  although fences are not snap targets yet (SNAP-108 uses paths and service roads).
+- The long tail of result edges far from any truth edge (p90 about 18 m) has two sources seen in the
+  pictures:
+  - **Roads inside the truth.** In Hamburg 8_6 one polygon spans an estate road. The editor splits at every
+    road and draws edges along both sides of it (Q2, proposal 6).
+  - **Leftover swallowing over long distances.** Kyiv 1_4 is a single 330,000 m² atom: it wraps around a
+    motorway, so strips between the carriageways connect to the painted block. SNAP-103 swallows every
+    narrow leftover that touches the paint. Here that means strips hundreds of metres long that no stroke
+    came near. SNAP-104 does not stop it, because the strips touch the paint through each other.
+    This is not in the proposals yet.
+
+**Which number each proposal should move.**
+
+| Proposal | Watch |
+|---|---|
+| 1. Street space to the property line | Result outside truth and edge distances, property-line squares |
+| 2. Kerb style where the area is kerb style | The same, kerb squares: they must not get worse |
+| 3. Snap to fences, walls and hedges | Inner edges that follow a fence; that follow nothing |
+| 4. Buildings: follow the wall | Inner edges that follow a building; buildings split |
+| 5. Straight free edges | Bends per 100 m of inner edge that follows nothing |
+| 6. Fewer barriers | Result edge → truth edge, p90 |
+
+**Limits.** One idealised stroke pattern at one wobble. Only careful, block-by-block squares, so it says
+nothing about neighbourhood-style areas (Q-009). Sidewalk style is unknown for 41 squares. The first
+replay after each change should still be looked at in pictures (`--svg`), not only in numbers.
