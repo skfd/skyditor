@@ -617,6 +617,24 @@ TUNE-SPIKE-SPACING apart, that creep along the edge at TUNE-SPIKE-SPEED.
 redraw at most once every TUNE-AMBIENT-INTERVAL.
   Why: slow motion needs few frames. Constant full-rate redraws would cost battery for nothing (REN-008).
 
+**REN-015** The editor shall draw each exclusive-context piece flat, in the colour of its class, each class
+clearly distinct from the others and from the paintable kinds:
+
+| Class | Features (IMP-002) |
+|-------|--------------------|
+| Park | `leisure=park` |
+| Education | `landuse=education` |
+| Cemetery | `landuse=cemetery` |
+| Construction | `landuse=construction` |
+| Green | `landuse` = meadow, recreation_ground; `leisure` = golf_course, nature_reserve; `natural` = heath, grassland, wetland |
+| Wood | `landuse=forest`; `natural` = wood, scrub |
+| Farm | `landuse` = farmland, orchard, vineyard, allotments, greenfield, farmyard, plant_nursery; `natural` = sand, beach |
+| Civic | `landuse` = religious, institutional; `leisure` = sports_centre, stadium |
+| Grey | `landuse` = railway, brownfield, military, quarry, landfill; `natural=bare_rock` |
+
+  Why: parks, school grounds, cemeteries and building sites are the context a city is full of, and each
+  should read at a glance. The rest is grouped by how it looks from above.
+
 ### 14.2 Feel
 
 **FEEL-001** When a piece is claimed, the editor shall play the *pop*: the slab rises from the ground to its

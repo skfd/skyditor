@@ -40,15 +40,18 @@ export const tierOf = (k: Kind | null) => (k ? KINDS[k].tier : undefined);
 export const tierKind = (t: number) => TIERS[Math.max(1, Math.min(6, t)) - 1];
 export const isResidential = (k: Kind | null) => k === "RU" || (!!k && KINDS[k].tier !== undefined);
 
-// Context colour classes.
-export type CtxClass = "green" | "wood" | "farm" | "grey" | "civic" | "cemetery";
+// REN-015: context colour classes. The first four are the context a city is full of, each its own colour.
+export type CtxClass = "park" | "education" | "cemetery" | "construction" | "green" | "wood" | "farm" | "grey" | "civic";
 export const CTX_COLORS: Record<CtxClass, string> = {
+  park: "#9ad97a",
+  education: "#a9ddd3",
+  cemetery: "#8fa592",
+  construction: "#c4a27c",
   green: "#bcdba3",
   wood: "#94c184",
   farm: "#e5e5be",
   grey: "#d4d0c8",
   civic: "#e3d7c7",
-  cemetery: "#b9ccb0",
 };
 
 const RESIDENTIAL_TIER: Record<string, TierKind> = {
@@ -65,14 +68,14 @@ const RESIDENTIAL_TIER: Record<string, TierKind> = {
 };
 
 const EXCLUSIVE: Record<string, Record<string, CtxClass>> = {
-  // IMP-002
+  // IMP-002, REN-015
   landuse: {
     forest: "wood", farmland: "farm", meadow: "green", orchard: "farm", vineyard: "farm", cemetery: "cemetery",
-    allotments: "farm", recreation_ground: "green", railway: "grey", construction: "grey", brownfield: "grey",
+    allotments: "farm", recreation_ground: "green", railway: "grey", construction: "construction", brownfield: "grey",
     greenfield: "farm", military: "grey", religious: "civic", farmyard: "farm", quarry: "grey", landfill: "grey",
-    plant_nursery: "farm", education: "civic", institutional: "civic",
+    plant_nursery: "farm", education: "education", institutional: "civic",
   },
-  leisure: { park: "green", golf_course: "green", sports_centre: "civic", stadium: "civic", nature_reserve: "green" },
+  leisure: { park: "park", golf_course: "green", sports_centre: "civic", stadium: "civic", nature_reserve: "green" },
   natural: {
     wood: "wood", scrub: "wood", heath: "green", grassland: "green", wetland: "green", sand: "farm", beach: "farm",
     bare_rock: "grey",
