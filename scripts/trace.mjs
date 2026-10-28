@@ -4,8 +4,9 @@
 // requirement without a `Trace:` line is cited nowhere in the code.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const reqText = readFileSync(join(root, "REQUIREMENTS.md"), "utf8");
 
 const MARKERS = ["manual", "policy"]; // §0.4
