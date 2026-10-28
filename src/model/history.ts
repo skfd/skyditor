@@ -1,8 +1,10 @@
-// Undo / redo of whole strokes (UNDO-001..UNDO-003).
-import type { Atom, Piece } from "./world";
+// Undo / redo of whole strokes (UNDO-001..UNDO-003), on land and on buildings alike (TYPE-011).
+import type { Building } from "./buildings";
+import type { Atom, BuildingSet, Piece } from "./world";
 
 export interface Step {
   atoms: { atom: Atom; before: Piece[]; after: Piece[] }[];
+  buildings?: { set: BuildingSet; before: Building[]; after: Building[] }[];
 }
 
 export class History {
@@ -19,6 +21,7 @@ export class History {
     const s = this.done.pop();
     if (!s) return null;
     for (const a of s.atoms) a.atom.pieces = a.before;
+    for (const b of s.buildings ?? []) b.set.items = b.before;
     this.undone.push(s);
     return s;
   }
@@ -28,6 +31,7 @@ export class History {
     const s = this.undone.pop();
     if (!s) return null;
     for (const a of s.atoms) a.atom.pieces = a.after;
+    for (const b of s.buildings ?? []) b.set.items = b.after;
     this.done.push(s);
     return s;
   }

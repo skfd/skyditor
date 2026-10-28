@@ -1,16 +1,18 @@
 // Glue: input, the frame loop, and turning model events into feedback.
 import { area, toI, toM } from "./geo/clip";
 import { squareAround } from "./geo/project";
+import { paintable, statusOf } from "./model/buildings";
+import { describeGuess } from "./model/guess";
 import { History, type Step } from "./model/history";
 import { KINDS, type Kind } from "./model/kinds";
 import { type Stage, worldFromText } from "./model/load";
 import type { Piece, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
-import type { Tool } from "./paint/snap";
+import { type Target, type Tool, onBuildings } from "./paint/snap";
 import { Stroke, type StrokeEvent } from "./paint/stroke";
 import { Anims } from "./render/anim";
 import { Camera } from "./render/camera";
-import { Renderer, pathOf } from "./render/renderer";
+import { COLORS, Renderer, buildingPath, pathOf } from "./render/renderer";
 import { TUNE } from "./tuning";
 import { Sound } from "./ui/audio";
 import { Badges } from "./ui/badges";
@@ -48,6 +50,7 @@ export class App {
 
   private toolId = "R2";
   private tool: Tool = { type: "paint", kind: "R2" };
+  private target: Target = "land"; // TYPE-006
   private brushPx: number = TUNE.BRUSH_DEFAULT;
   private stroke: Stroke | null = null;
   private strokeStart = { sx: 0, sy: 0, t: 0, moved: 0 };
@@ -67,6 +70,8 @@ export class App {
   private lastDraw = 0;
   private disputes = 0; // HUD-009
   private lastDispute: [number, number] | null = null; // HUD-010: where the last jump went
+  private toDecide = 0; // TYPE-012
+  private lastDecide: [number, number] | null = null; // TYPE-012: where the last jump went
   private lastFrame = performance.now();
   private loadingBusy = false;
   private readonly badges = new Badges(); // REN-016 / HUD-012
@@ -77,6 +82,7 @@ export class App {
     this.hud.setSound(this.sound.enabled, { on: ICONS.SOUND_ON, off: ICONS.SOUND_OFF });
     this.hud.setBrush(this.brushPx);
     this.hud.setLayers(this.showBuildings, this.showOriginals);
+    this.hud.setTarget(false);
     this.bindInput();
     this.bindStart();
     window.addEventListener("resize", () => this.resize());
@@ -163,6 +169,7 @@ export class App {
     this.hud.setPlace(place);
     this.badges.set(world.issues);
     this.lastDispute = null;
+    this.lastDecide = null;
     this.updateMix(true);
     this.dirty = true;
   }
@@ -243,6 +250,8 @@ export class App {
     on("btn-buildings", () => this.toggleBuildings());
     on("btn-outlines", () => this.toggleOriginals());
     on("btn-disputes", () => this.nextDispute());
+    on("btn-target", () => this.toggleTarget()); // TYPE-006
+    on("btn-guesses", () => this.nextToDecide()); // TYPE-012
   }
 
   // ---------- tools ----------
@@ -274,6 +283,48 @@ export class App {
     store.set("buildings", this.showBuildings ? "on" : "off");
     this.hud.setLayers(this.showBuildings, this.showOriginals);
     this.dirty = true;
+  }
+
+  /** TYPE-006: land ↔ buildings. Painting buildings you cannot see makes no sense, so the layer comes on. */
+  private toggleTarget() {
+    this.target = this.target === "land" ? "buildings" : "land";
+    if (this.target === "buildings" && !this.showBuildings) this.toggleBuildings();
+    this.hud.setTarget(this.target === "buildings");
+    this.hud.toast(this.target === "buildings" ? "Painting building types" : "Painting land");
+    this.hud.hint(null);
+    this.dirty = true;
+  }
+
+  /** TYPE-012: flies to the next building still to decide, north to south, and flashes it. */
+  private nextToDecide() {
+    if (!this.world) return;
+    const list = this.world.toDecide();
+    if (!list.length) return;
+    const after = this.lastDecide;
+    const b =
+      (after && list.find((q) => q.geom.minY > after[1] || (q.geom.minY === after[1] && q.geom.minX > after[0]))) || list[0];
+    this.lastDecide = [b.geom.minX, b.geom.minY];
+    const g = b.geom;
+    const box = { minX: toM(g.minX), minY: toM(g.minY), maxX: toM(g.maxX), maxY: toM(g.maxY) };
+    const cx = (box.minX + box.maxX) / 2, cy = (box.minY + box.maxY) / 2;
+    const hw = Math.max(TUNE.DISPUTE_VIEW, (box.maxX - box.minX) * 1.3) / 2;
+    const hh = Math.max(TUNE.DISPUTE_VIEW, (box.maxY - box.minY) * 1.3) / 2;
+    const now = performance.now();
+    const dur = this.anims.dur(600);
+    this.camera.fit({ minX: cx - hw, minY: cy - hh, maxX: cx + hw, maxY: cy + hh }, dur, now);
+    this.anims.flash({ path: buildingPath(g), color: "#fff", cx, cy, mode: "light" }, now, dur, 420);
+    this.dirty = true;
+  }
+
+  /** TYPE-005: what the editor thinks about the building under the cursor, while buildings are what the brush acts on. */
+  private hintAt(wx: number, wy: number, sx: number, sy: number) {
+    if (!this.world || !onBuildings(this.tool, this.target)) return this.hud.hint(null);
+    const b = this.world.buildingAt(toI(wx), toI(wy));
+    const g = b && this.world.guessOf(b);
+    if (!g) return this.hud.hint(null);
+    const text = describeGuess(g, (k) => KINDS[k as Kind]?.label ?? k);
+    const how = g.look ? "Brush with Agree, or tap, to accept" : "Pick a tile and tap to decide";
+    this.hud.hint(`${text} · ${how}`, sx, sy);
   }
 
   private toggleOriginals() {
@@ -330,6 +381,7 @@ export class App {
       if (!this.stroke && !this.pan) {
         this.cursor = null;
         this.hover = null;
+        this.hud.hint(null);
         this.dirty = true;
       }
     });
@@ -381,6 +433,12 @@ export class App {
     if (e.button !== 0 || !this.world || this.stroke) return;
     const [wx, wy] = this.camera.toWorld(sx, sy);
     if (e.altKey) {
+      if (this.target === "buildings") {
+        // TYPE-013
+        const b = this.world.buildingAt(toI(wx), toI(wy));
+        if (b && statusOf(b) === "typed" && paintable(b.look) && TOOLS.some((t) => t.id === b.look)) this.selectTool(b.look);
+        return;
+      }
       // PAINT-008
       const p = this.world.pieceAt(toI(wx), toI(wy));
       if (p && p.kind && p.kind in KINDS && TOOLS.some((t) => t.id === p.kind)) this.selectTool(p.kind);
@@ -388,8 +446,9 @@ export class App {
     }
     this.canvas.setPointerCapture(e.pointerId);
     this.hover = null;
-    // PAINT-001: the brush radius is fixed in metres for the whole stroke.
-    this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy, TUNE.TAP_MOVE / this.camera.scale);
+    this.hud.hint(null);
+    // PAINT-001: the brush radius is fixed in metres for the whole stroke. TYPE-006: the target is fixed too.
+    this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy, TUNE.TAP_MOVE / this.camera.scale, this.target);
     this.strokeStart = { sx, sy, t: performance.now(), moved: 0 };
     this.handle(this.stroke.start(), [wx, wy]);
   }
@@ -429,6 +488,7 @@ export class App {
     }
     const [wx, wy] = this.camera.toWorld(sx, sy);
     this.hover = this.world.pieceAt(toI(wx), toI(wy)); // REN-007
+    this.hintAt(wx, wy, sx, sy); // TYPE-005
   }
 
   private onUp(e: PointerEvent) {
@@ -572,6 +632,12 @@ export class App {
       case "n":
       case "N":
         return this.nextDispute(); // HUD-010
+      case "t":
+      case "T":
+        return this.toggleTarget(); // TYPE-006
+      case "j":
+      case "J":
+        return this.nextToDecide(); // TYPE-012
       case "Escape":
         this.hud.toggleHelp(false);
         return;
@@ -608,6 +674,12 @@ export class App {
         if (p.kind && p.kind !== "CTX") this.anims.pop(p, now, { short: true, from: r.liftPx(p.kind, this.camera.scale) * 0.3 });
         this.anims.flash({ path: pathOf(p.shape), color: "#fff", cx: 0, cy: 0, mode: "light" }, now, 0, 160);
       }
+    }
+    // TYPE-011 / UNDO-004: changed buildings flash too.
+    for (const s of step.buildings ?? []) {
+      const other = new Set(side === "before" ? s.after : s.before);
+      for (const b of side === "before" ? s.before : s.after)
+        if (!other.has(b)) this.anims.flash({ path: buildingPath(b.geom), color: "#fff", cx: 0, cy: 0, mode: "light" }, now, 0, 160);
     }
     this.sound.rewind(side === "after");
     this.updateMix();
@@ -656,6 +728,20 @@ export class App {
           this.anims.shake(now); // FEEL-004
           this.sound.reject();
           break;
+        case "typed": {
+          // TYPE-007 / TYPE-008 / TYPE-010 with FEEL-001's flash and pitch; no slab to raise, the footprint lights up.
+          const look = e.building.look;
+          const [cx, cy] = e.at;
+          this.anims.flash({ path: buildingPath(e.building.geom), color: "#fff", cx, cy, mode: "light" }, now, delay, TUNE.POP_DURATION);
+          this.sound.pop(paintable(look) ? KINDS[look].pitch : -9, delay, paintable(look) ? 0.8 : 0.5);
+          break;
+        }
+        case "skip": {
+          // TYPE-007: an unsure building passed over by an agree stroke lights up amber and stays as it is.
+          const [cx, cy] = e.at;
+          this.anims.flash({ path: buildingPath(e.building.geom), color: COLORS.unsure, cx, cy, mode: "ghost" }, now, 0, 420);
+          break;
+        }
       }
     }
     this.updateMix();
@@ -670,6 +756,11 @@ export class App {
     if (!loaded && this.disputes > 0 && n === 0) this.hud.toast("The map no longer disagrees with itself anywhere");
     this.disputes = n;
     this.hud.setDisputes(n);
+    // TYPE-012
+    const d = this.world.toDecide().length;
+    if (!loaded && this.toDecide > 0 && d === 0) this.hud.toast("Every building is decided");
+    this.toDecide = d;
+    this.hud.setToDecide(d);
   }
 
   // ---------- frame loop ----------
@@ -708,6 +799,7 @@ export class App {
           camera: this.camera,
           stroke: this.stroke,
           tool: this.tool,
+          target: this.target,
           brushPx: this.brushPx,
           cursor: this.cursor,
           hover: this.hover,

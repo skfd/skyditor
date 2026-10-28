@@ -93,12 +93,36 @@ export type BuildingLook = PaintKind | "RU" | "EDU" | "CIVIC";
 
 
 /** BLD-003: levels from `building:levels`, else `height` in metres. */
-function levelsOf(tags: Tags): number | undefined {
+export function levelsOf(tags: Tags): number | undefined {
   const lv = /^\s*(\d+(?:\.\d+)?)/.exec(tags["building:levels"] ?? "");
   if (lv) return Number(lv[1]);
   const h = /^\s*(\d+(?:\.\d+)?)\s*(?:m)?\s*$/.exec(tags.height ?? "");
   if (h) return Number(h[1]) / TUNE.LEVEL_HEIGHT;
   return undefined;
+}
+
+/**
+ * TYPE-002: how many addresses the building's own tags carry: house numbers ("12", "12;14", "12-18"), or the
+ * flats or units behind them ("1-24"). Undefined when it has none.
+ */
+export function addrCount(tags: Tags): number | undefined {
+  const count = (v: string | undefined): number => {
+    if (!v) return 0;
+    let n = 0;
+    for (const part of v.split(/[;,]/)) {
+      const r = /^\s*(\d+)\s*[-–]\s*(\d+)\s*[a-z]?\s*$/i.exec(part);
+      if (r) {
+        const [a, b] = [Number(r[1]), Number(r[2])];
+        // "12-18" on one house is three numbers at most; a flats range "1-24" is 24.
+        n += a <= b && b - a <= 200 ? b - a + 1 : 1;
+      } else if (part.trim()) n++;
+    }
+    return n;
+  };
+  const flats = Math.max(count(tags["addr:flats"]), count(tags["addr:unit"]));
+  const houses = count(tags["addr:housenumber"]);
+  if (!flats && !houses) return undefined;
+  return Math.max(flats, houses);
 }
 
 /** BLD-001..BLD-005 */

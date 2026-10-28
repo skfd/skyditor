@@ -16,6 +16,8 @@ export const ICONS: Record<string, string> = {
   IND: svg(`${ground}<path d="M3 24V14l5 3v-3l5 3v-3l5 3V6h3v18z M6 19h2.5v2H6z M11 19h2.5v2H11z"/><circle cx="20" cy="3.6" r="1.6" opacity="0.5"/>`),
   UP: svg(`<path d="M14 4l8 8h-5v4h-6v-4H6z"/><rect x="6" y="19" width="16" height="2.4" rx="1.2" opacity="0.6"/><rect x="6" y="23" width="16" height="2.4" rx="1.2" opacity="0.35"/>`),
   DOWN: svg(`<rect x="6" y="3" width="16" height="2.4" rx="1.2" opacity="0.35"/><rect x="6" y="7" width="16" height="2.4" rx="1.2" opacity="0.6"/><path d="M14 25l-8-8h5v-4h6v4h5z"/>`),
+  // TYPE-007: a tick over a house — "yes, that's what it is".
+  AGREE: svg(`${ground}<path d="M4 24v-8l6-5 6 5v8h-4v-4h-4v4z" opacity="0.55"/><path d="M14 13l4 4 7-8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
   ERASE: svg(`<path d="M15.5 5.5l7 7-10 10H8l-3.5-3.5z M8.6 13.4l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M14 22.5h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>`),
   // Map controls (HUD-006) and layer toggles (HUD-007).
   UNDO: svg(`<path d="M10 6l-5 5 5 5M5.5 11h11a6 6 0 0 1 0 12H12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`),
@@ -26,6 +28,10 @@ export const ICONS: Record<string, string> = {
   PLUS: svg(`<path d="M14 7v14M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
   MINUS: svg(`<path d="M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
   BUILDINGS: svg(`${ground}<path d="M4 24V12h9v12z M15 24V5h9v19z M17.5 8h4v2h-4z M17.5 12h4v2h-4z M17.5 16h4v2h-4z M6.5 15h4v2h-4z"/>`),
+  // TYPE-006: the brush target — a brush ring over a house.
+  TARGET: svg(`<path d="M5 24v-9l7-6 7 6v9h-5v-5h-4v5z"/><circle cx="19" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3 2.4"/>`),
+  // TYPE-012: a question mark in a round mark, the unsure building's badge.
+  UNSURE: svg(`<circle cx="14" cy="14" r="11"/><path d="M10.5 11a3.5 3.5 0 1 1 5 3.2c-1 .6-1.5 1.2-1.5 2.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="14" cy="20" r="1.5" fill="#fff"/>`),
   OUTLINES: svg(`<path d="M5 9l9-5 9 6v12l-9 3-9-4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3.2 2.6" stroke-linejoin="round"/>`),
   // HUD-009: the red spikes of a disputed piece (REN-013), round a small block.
   DISPUTE: svg(`<path d="M14 2.5l2.6 4.9 5.5-1.3-1.3 5.5 4.9 2.6-4.9 2.6 1.3 5.5-5.5-1.3L14 25.5l-2.6-4.9-5.5 1.3 1.3-5.5L2.3 14l4.9-2.6-1.3-5.5 5.5 1.3z"/><rect x="10" y="10" width="8" height="8" rx="1.5" fill="#fff"/>`),

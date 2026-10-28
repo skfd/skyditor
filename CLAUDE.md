@@ -29,7 +29,9 @@ Requirements checked by hand rather than by a unit test carry `Trace: manual`; `
 that have neither a marker nor a test, so a new testable requirement without a test shows up there.
 
 Tests build tiny maps in local metres with `Sketch` (`tests/helpers.ts`), e.g.
-`new Sketch(300).grid(200)` → nine blocks, roads every 200 m.
+`new Sketch(300).grid(200)` → nine blocks, roads every 200 m. `tests/smoke.test.ts` mounts `index.html` in
+happy-dom and loads the demo with a stubbed canvas: it is the test that notices when the page itself breaks,
+since nobody looks at the deployed app after every push.
 
 ## Things to keep true
 

@@ -31,6 +31,12 @@ or leaves whole buildings with a small yard, and swallows any leftover strip too
 own. Zoom is precision: zoomed out, you paint whole blocks; zoomed in, you paint parts of them. None of
 these words appear in the UI.
 
+Buildings get the same treatment. Most are `building=yes`, so the editor guesses what they are from the
+building alone: shared walls (one, a pair, a row), footprint size and levels, addresses on the building, and
+the typed buildings of similar size in the same block. A guess is drawn hatched; brush over it with *Agree*
+to accept. Where the signals disagree the building wears a `?` and the editor says what it could be; switch
+the brush to buildings (`T`), pick a tile and tap to decide. The land under a building is never a signal.
+
 ## Development model
 
 [`REQUIREMENTS.md`](REQUIREMENTS.md) is the source of truth. It's written in

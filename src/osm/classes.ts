@@ -1,6 +1,6 @@
 // The OSM tag tables (REQUIREMENTS.md §6): which tags the editor reads as what. The requirements state
 // the principle and a few examples; these lists are the reading, and change as mapping practice does.
-import type { BuildingLook, CtxClass, TierKind } from "../model/kinds";
+import type { BuildingLook, CtxClass, PaintKind, TierKind } from "../model/kinds";
 import type { Tags } from "./parse";
 
 /** LAT-001: ways that cut a city into blocks. A `_link` of a barrier highway is a barrier too. */
@@ -72,6 +72,21 @@ export const BUILDING_LOOK: Record<string, BuildingLook> = {
   church: "CIVIC", cathedral: "CIVIC", chapel: "CIVIC", mosque: "CIVIC", synagogue: "CIVIC", temple: "CIVIC",
   public: "CIVIC", government: "CIVIC", civic: "CIVIC", fire_station: "CIVIC", train_station: "CIVIC",
 };
+
+/** TYPE-008: the one `building=*` value the editor writes for each paintable kind. R1 names no building (TYPE-009). */
+export const BUILDING_WRITE: Partial<Record<PaintKind, string>> = {
+  R2: "house",
+  R3: "semidetached_house",
+  R4: "terrace",
+  R5: "apartments",
+  R6: "apartments", // Q-002
+  COM: "commercial",
+  RET: "retail",
+  IND: "industrial",
+};
+
+/** TYPE-001: `building=*` values that say nothing about what the building is, so it may be guessed. */
+export const UNTYPED_BUILDING = new Set(["yes", "residential"]);
 
 /** BLD-004: amenities that make an untyped building civic. */
 export const CIVIC_AMENITY = new Set(["hospital", "place_of_worship", "townhall", "library", "fire_station", "police"]);

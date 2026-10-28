@@ -1,9 +1,10 @@
-// Canvas renderer (REN-001..REN-014).
+// Canvas renderer (REN-001..REN-014, TYPE-004).
 import { type Shape, contains, offset, toI, toM } from "../geo/clip";
+import { type Building, type BuildingGeom, statusOf } from "../model/buildings";
 import { type BuildingLook, CTX_COLORS, type Kind, KINDS, disagreesWithLand, lookColor } from "../model/kinds";
-import type { Atom, Piece, Rival, World } from "../model/world";
+import type { Atom, BuildingSet, Piece, Rival, World } from "../model/world";
 import type { Stroke } from "../paint/stroke";
-import type { Tool } from "../paint/snap";
+import { type Target, type Tool, onBuildings } from "../paint/snap";
 import { TUNE } from "../tuning";
 import type { Anims } from "./anim";
 import type { Camera } from "./camera";
@@ -21,12 +22,15 @@ export const COLORS = {
   hint: "rgba(80, 64, 48, 0.55)",
   eraser: "#f4f1ea",
   dispute: "#d6363c", // REN-013
+  unsure: "#e5961a", // TYPE-004: the unsure mark, the amber of the missing-landuse badge (REN-016)
+  agree: "#4f9d69", // TYPE-007
 };
 
 export interface RenderState {
   camera: Camera;
   stroke: Stroke | null;
   tool: Tool;
+  target: Target; // TYPE-006
   brushPx: number;
   cursor: [number, number] | null; // screen px
   hover: Piece | null;
@@ -52,12 +56,23 @@ interface LookedBuilding {
   r: number; // half its larger side, m
 }
 
+/** The drawable form of one building set (TYPE-001 states), cached on the set's items identity. */
+interface SetGfx {
+  items: Building[];
+  faint: Path2D; // REN-010: typed buildings the palette has no kind for, and unsure buildings
+  typed: [string, Path2D][]; // REN-009, by colour
+  guessed: [string, Path2D][]; // TYPE-004, by colour
+  marks: [number, number][]; // TYPE-004: centres of unsure buildings, metres
+  looked: LookedBuilding[]; // REN-011 candidates
+}
+
 /** REN-012: the colour a rival kind would have. */
 const rivalColor = (r: Rival) => (r.kind === "CTX" ? CTX_COLORS[r.ctx ?? "green"] : KINDS[r.kind].color);
 
 export function toolColor(t: Tool): string {
   if (t.type === "paint") return KINDS[t.kind].color;
   if (t.type === "erase") return "#9a8f80";
+  if (t.type === "agree") return COLORS.agree;
   return t.dir > 0 ? "#e2683c" : "#6f9bd1";
 }
 
@@ -87,6 +102,17 @@ export function pathOf(shape: Shape): Path2D {
   return p;
 }
 
+const geomPaths = new WeakMap<BuildingGeom, Path2D>();
+/** A building's footprint as a path, built once per footprint. */
+export function buildingPath(g: BuildingGeom): Path2D {
+  let p = geomPaths.get(g);
+  if (!p) {
+    p = pathOfFloatRings([g.ring], true);
+    geomPaths.set(g, p);
+  }
+  return p;
+}
+
 function pathOfFloatRings(rings: Float32Array[], closed: boolean): Path2D {
   const p = new Path2D();
   for (const r of rings) {
@@ -104,16 +130,15 @@ export class Renderer {
   private readonly atomPaths = new Map<number, Path2D>();
   private lots!: Path2D;
   private water!: Path2D;
-  private buildings!: Path2D; // REN-010: unknown look
-  private lookedBuildings!: [string, Path2D][]; // REN-009: by colour
+  private readonly setGfx = new Map<number, SetGfx>(); // TYPE-004, per building set
+  private readonly guessHatch = new Map<string, CanvasPattern | null>(); // TYPE-004, by colour
   private minorMajor!: Path2D;
   private minorPaths!: Path2D;
   private overlay!: [string, Path2D][];
   private originals!: Path2D;
   private hatch: CanvasPattern | null = null;
   private readonly stripes = new Map<string, CanvasPattern | null>(); // REN-012, by rival colour
-  private lookedByAtom = new Map<number, LookedBuilding[]>(); // REN-011
-  private readonly disagreeing = new WeakMap<Piece[], LookedBuilding[]>(); // REN-011, per atom.pieces
+  private readonly disagreeing = new Map<number, { pieces: Piece[]; items: Building[]; list: LookedBuilding[] }>(); // REN-011
   private dpr = 1;
 
   constructor(readonly canvas: HTMLCanvasElement, private world: World) {
@@ -132,35 +157,8 @@ export class Renderer {
     }
     this.lots = lots;
     this.water = pathOf(world.water);
-    const unknown: Float32Array[] = [];
-    const byLook = new Map<string, Float32Array[]>();
-    this.lookedByAtom = new Map();
-    for (const b of world.features.buildings) {
-      if (!b.look) {
-        unknown.push(b.ring);
-        continue;
-      }
-      const c = buildingColor(b.look);
-      if (!byLook.has(c)) byLook.set(c, []);
-      byLook.get(c)!.push(b.ring);
-      // REN-011: which block each building stands in, found once.
-      let x = 0, y = 0, minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      const n = b.ring.length / 2;
-      for (let i = 0; i < b.ring.length; i += 2) {
-        const [bx, by] = [b.ring[i], b.ring[i + 1]];
-        [x, y] = [x + bx, y + by];
-        [minX, minY, maxX, maxY] = [Math.min(minX, bx), Math.min(minY, by), Math.max(maxX, bx), Math.max(maxY, by)];
-      }
-      const [X, Y] = [toI(x / n), toI(y / n)];
-      const atom = world.atomAt(X, Y);
-      if (!atom) continue;
-      const list = this.lookedByAtom.get(atom.id) ?? [];
-      const r = Math.max(0.5, (maxX - minX) / 2, (maxY - minY) / 2);
-      list.push({ path: pathOfFloatRings([b.ring], true), look: b.look, color: darken(lookColor(b.look), 0.6), x: X, y: Y, r });
-      this.lookedByAtom.set(atom.id, list);
-    }
-    this.buildings = pathOfFloatRings(unknown, true);
-    this.lookedBuildings = [...byLook].map(([c, rings]) => [c, pathOfFloatRings(rings, true)]);
+    this.setGfx.clear();
+    this.disagreeing.clear();
     this.minorMajor = pathOfFloatRings(world.features.minorLines.filter((l) => l.major).map((l) => l.pts), false);
     this.minorPaths = pathOfFloatRings(world.features.minorLines.filter((l) => !l.major).map((l) => l.pts), false);
     const byCtx = new Map<string, Path2D>();
@@ -242,19 +240,79 @@ export class Renderer {
     this.ctx.fill(path, "evenodd");
   }
 
-  /** BLD-007 / REN-011: the buildings in an atom that disagree with the land under them. */
-  private disagreeingIn(atom: Atom): LookedBuilding[] {
-    let out = this.disagreeing.get(atom.pieces);
-    if (!out) {
-      out = (this.lookedByAtom.get(atom.id) ?? []).filter((b) => {
+  /** TYPE-001 / TYPE-004: the paths of a building set, by state, rebuilt when the set changes. */
+  private gfxOf(set: BuildingSet): SetGfx {
+    let g = this.setGfx.get(set.atom);
+    if (g && g.items === set.items) return g;
+    const faint = new Path2D();
+    const typed = new Map<string, Path2D>();
+    const guessed = new Map<string, Path2D>();
+    const marks: [number, number][] = [];
+    const looked: LookedBuilding[] = [];
+    const add = (m: Map<string, Path2D>, c: string, p: Path2D) => {
+      if (!m.has(c)) m.set(c, new Path2D());
+      m.get(c)!.addPath(p);
+    };
+    for (const b of set.items) {
+      const path = buildingPath(b.geom);
+      const guess = this.world.guessOf(b);
+      if (guess) {
+        // TYPE-004: a guess is hatched in its look's colour; an unsure building is faint with a mark.
+        if (guess.look) add(guessed, buildingColor(guess.look), path);
+        else {
+          faint.addPath(path);
+          marks.push([toM(b.geom.cx), toM(b.geom.cy)]);
+        }
+        continue;
+      }
+      if (!b.look || b.look === "RU" || statusOf(b) === "protected" && !b.look) {
+        faint.addPath(path); // REN-010
+        continue;
+      }
+      add(typed, buildingColor(b.look), path); // REN-009
+      const geo = b.geom;
+      const r = Math.max(0.5, toM(geo.maxX - geo.minX) / 2, toM(geo.maxY - geo.minY) / 2);
+      looked.push({ path, look: b.look, color: darken(lookColor(b.look), 0.6), x: geo.cx, y: geo.cy, r });
+    }
+    g = { items: set.items, faint, typed: [...typed], guessed: [...guessed], marks, looked };
+    this.setGfx.set(set.atom, g);
+    return g;
+  }
+
+  /** TYPE-004: the hatch over a guessed building, a darker shade of its colour on a transparent ground. */
+  private guessHatchPattern(color: string): CanvasPattern | null {
+    if (this.guessHatch.has(color)) return this.guessHatch.get(color)!;
+    const c = document.createElement("canvas");
+    c.width = c.height = 8;
+    const g = c.getContext("2d")!;
+    g.strokeStyle = darken(color, 0.7);
+    g.lineWidth = 1.4;
+    g.beginPath();
+    for (const o of [-8, 0, 8]) {
+      g.moveTo(o, 8);
+      g.lineTo(o + 8, 0);
+    }
+    g.stroke();
+    const pat = this.ctx.createPattern(c, "repeat");
+    this.guessHatch.set(color, pat);
+    return pat;
+  }
+
+  /** BLD-007 / REN-011: the typed buildings in an atom that disagree with the land under them. TYPE-014: guesses never do. */
+  private disagreeingIn(atom: Atom, set: BuildingSet | undefined): LookedBuilding[] {
+    if (!set) return [];
+    let d = this.disagreeing.get(atom.id);
+    if (!d || d.pieces !== atom.pieces || d.items !== set.items) {
+      const list = this.gfxOf(set).looked.filter((b) => {
         const under = atom.pieces.find(
           (p) => b.x >= p.bbox.minX && b.x <= p.bbox.maxX && b.y >= p.bbox.minY && b.y <= p.bbox.maxY && contains(p.shape, b.x, b.y),
         );
         return disagreesWithLand(b.look, under?.kind ?? null);
       });
-      this.disagreeing.set(atom.pieces, out);
+      d = { pieces: atom.pieces, items: set.items, list };
+      this.disagreeing.set(atom.id, d);
     }
-    return out;
+    return d.list;
   }
 
   /** REN-002 lift for a kind at the current zoom. */
@@ -323,20 +381,42 @@ export class Renderer {
 
     const moving = !st.anims.reduced;
     let ambient = false;
+    const marks: [number, number][] = [];
     if (st.showBuildings) {
+      // The sets of the atoms in view, and the buildings standing outside every atom.
+      const sets = new Map<number, BuildingSet>();
+      for (const s of this.world.buildingSets()) sets.set(s.atom, s);
+      const shown = [sets.get(-1), ...atoms.map((a) => sets.get(a.id))].filter((s): s is BuildingSet => !!s);
+      const gfx = shown.map((s) => this.gfxOf(s));
       // REN-010
       ctx.fillStyle = COLORS.building;
-      ctx.fill(this.buildings, "nonzero");
+      for (const g of gfx) ctx.fill(g.faint, "nonzero");
       // REN-009
       ctx.globalAlpha = TUNE.BUILDING_ALPHA;
-      for (const [color, path] of this.lookedBuildings) {
-        ctx.fillStyle = color;
-        ctx.fill(path, "nonzero");
-      }
+      for (const g of gfx)
+        for (const [color, path] of g.typed) {
+          ctx.fillStyle = color;
+          ctx.fill(path, "nonzero");
+        }
+      // TYPE-004: guesses, fainter and hatched.
+      for (const g of gfx)
+        for (const [color, path] of g.guessed) {
+          ctx.globalAlpha = TUNE.GUESS_ALPHA;
+          ctx.fillStyle = color;
+          ctx.fill(path, "nonzero");
+          const pat = this.guessHatchPattern(color);
+          if (pat) {
+            pat.setTransform(new DOMMatrix().scale(px, px));
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = pat;
+            ctx.fill(path, "nonzero");
+          }
+        }
       ctx.globalAlpha = 1;
+      for (const g of gfx) marks.push(...g.marks);
       // REN-011: a steady edge, and an outline of the footprint growing out of it like a ping. With reduced
       // motion only the edge is left (FEEL-008).
-      const odd = atoms.flatMap((a) => this.disagreeingIn(a));
+      const odd = atoms.flatMap((a) => this.disagreeingIn(a, sets.get(a.id)));
       ctx.lineJoin = "round";
       for (const b of odd) {
         ctx.strokeStyle = b.color;
@@ -406,7 +486,7 @@ export class Renderer {
       ctx.setLineDash([]);
     }
 
-    const painting = st.tool.type !== "density";
+    const painting = st.tool.type !== "density" && !onBuildings(st.tool, st.target); // TYPE-006: no lattice hints on buildings
     // REN-006: lattice hints around the cursor.
     if (st.cursor && painting && !st.panning) {
       const [wx, wy] = cam.toWorld(st.cursor[0], st.cursor[1]);
@@ -448,6 +528,25 @@ export class Renderer {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
+
+    // TYPE-004: the unsure marks, at a constant screen size.
+    if (marks.length) {
+      const r = 7 * px;
+      ctx.font = `800 ${11 * px}px ${getComputedStyle(document.body).fontFamily || "sans-serif"}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 1.6 * px;
+      for (const [x, y] of marks) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS.unsure;
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.fillText("?", x, y + 0.5 * px);
+      }
+    }
 
     // HUD-004: brush cursor, in screen space.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -577,13 +676,17 @@ export class Renderer {
       return;
     }
     const r = st.brushPx;
+    const buildings = onBuildings(st.tool, st.target);
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.lineWidth = 4.5;
     ctx.strokeStyle = "rgba(255,255,255,0.85)";
     ctx.stroke();
+    // TYPE-006: on buildings the ring is dashed, so the target shows in the brush itself.
+    if (buildings) ctx.setLineDash([Math.max(4, r / 4), Math.max(3, r / 6)]);
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = tint > 0 ? `rgba(214, 60, 60, ${0.5 + tint / 2})` : st.tool.type === "erase" ? "#7d7366" : darken(color, 0.85);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.arc(sx, sy, 2, 0, Math.PI * 2);
     ctx.fillStyle = ctx.strokeStyle;

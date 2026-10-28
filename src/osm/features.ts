@@ -20,7 +20,9 @@ export interface Barrier {
   halfWidth: number; // m
 }
 export interface BuildingFeature {
+  source: string; // "way/123" (TYPE-011)
   ring: Float32Array; // closed ring, x,y metres
+  tags: Tags;
   look: BuildingLook | null; // BLD-001
 }
 export interface MinorLine {
@@ -135,7 +137,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     const pts = coords(w);
     if (!pts) continue;
     if (t.building && t.building !== "no") {
-      f.buildings.push({ ring: new Float32Array(pts.flat()), look: buildingLook(t) });
+      f.buildings.push({ source: `way/${w.id}`, ring: new Float32Array(pts.flat()), tags: t, look: buildingLook(t) });
       continue;
     }
     addArea(`way/${w.id}`, t, [toRing(pts)]);

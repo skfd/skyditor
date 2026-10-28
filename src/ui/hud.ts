@@ -28,6 +28,8 @@ export const TOOLS: ToolDef[] = [
   // DENS-001 / KIND-007: the density tools and the eraser, each with its key.
   { id: "UP", tool: { type: "density", dir: 1 }, label: "Density up", key: "A", icon: ICONS.UP, color: "#e2683c", tags: "one step up the residential ladder" },
   { id: "DOWN", tool: { type: "density", dir: -1 }, label: "Density down", key: "Z", icon: ICONS.DOWN, color: "#6f9bd1", tags: "one step down the residential ladder" },
+  // TYPE-007
+  { id: "AGREE", tool: { type: "agree" }, label: "Agree", key: "G", icon: ICONS.AGREE, color: "#4f9d69", tags: "accepts what the editor guessed a building is" },
   { id: "ERASE", tool: { type: "erase" }, label: "Eraser", key: "X", icon: ICONS.ERASE, color: "#9a8f80", tags: "removes painted landuse" },
 ];
 
@@ -63,6 +65,7 @@ export class Hud {
       "btn-brush-down": ICONS.MINUS,
       "btn-buildings": ICONS.BUILDINGS,
       "btn-outlines": ICONS.OUTLINES,
+      "btn-target": ICONS.TARGET, // TYPE-006
     };
     for (const [id, icon] of Object.entries(icons)) $(`#${id}`).innerHTML = icon;
   }
@@ -98,6 +101,44 @@ export class Hud {
       void b.offsetWidth; // restart the CSS animation
       b.classList.add("boing");
     }
+  }
+
+  /** TYPE-006: the target button is pressed while buildings are the target. */
+  setTarget(buildings: boolean) {
+    const b = $("#btn-target");
+    b.setAttribute("aria-pressed", String(buildings));
+    b.title = buildings ? "Painting buildings. Switch to land (T)" : "Painting land. Switch to buildings (T)";
+    document.body.classList.toggle("target-buildings", buildings);
+  }
+
+  /** TYPE-012: how many buildings are still to decide, hidden at none. */
+  setToDecide(n: number) {
+    const b = $<HTMLButtonElement>("#btn-guesses");
+    const was = b.hidden ? 0 : Number(b.dataset.n ?? 0);
+    b.hidden = n === 0;
+    b.dataset.n = String(n);
+    b.innerHTML = `${ICONS.UNSURE}<span>${n}</span>`;
+    const text = n === 1 ? "1 building to decide" : `${n} buildings to decide`;
+    b.title = `${text}. Show the next one (J)`;
+    b.setAttribute("aria-label", `${text}. Show the next one`);
+    if (n !== was && n > 0 && was !== 0) {
+      b.classList.remove("boing");
+      void b.offsetWidth;
+      b.classList.add("boing");
+    }
+  }
+
+  /** TYPE-005: a line beside the cursor about the building under it, or nothing. */
+  hint(text: string | null, x = 0, y = 0) {
+    const h = $("#hint");
+    if (!text) {
+      h.classList.remove("show");
+      return;
+    }
+    h.textContent = text;
+    h.classList.add("show");
+    const w = h.offsetWidth;
+    h.style.transform = `translate(${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, x + 18)))}px, ${Math.round(y + 22)}px)`;
   }
 
   /** HUD-007 */

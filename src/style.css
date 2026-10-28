@@ -238,6 +238,36 @@ button.disputes span {
 button.disputes.boing svg {
   animation: boing 360ms var(--spring);
 }
+/* TYPE-012: the count of buildings to decide, in the amber of the unsure mark (TYPE-004). */
+button.disputes.todo {
+  background: #fbeedc;
+  color: #e5961a;
+}
+button.disputes.todo:hover {
+  background: #f8e3c4;
+}
+button.disputes.todo span {
+  color: #8a5a06;
+}
+
+/* TYPE-005: what the editor thinks about the building under the cursor. */
+#hint {
+  position: fixed;
+  left: 0;
+  top: 0;
+  max-width: 300px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 12.5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+#hint.show {
+  opacity: 1;
+}
 
 /* On a phone the top bar is tight; the count (HUD-009) must not push the help button off screen. */
 @media (max-width: 520px) {
@@ -358,6 +388,7 @@ button.disputes.boing svg {
 .tile[data-tool="R6"] { --side: 8px; }
 .tile[data-tool="UP"],
 .tile[data-tool="DOWN"],
+.tile[data-tool="AGREE"],
 .tile[data-tool="ERASE"] {
   background: #fff;
   color: var(--c);
@@ -365,6 +396,7 @@ button.disputes.boing svg {
 }
 .tile[data-tool="UP"].on,
 .tile[data-tool="DOWN"].on,
+.tile[data-tool="AGREE"].on,
 .tile[data-tool="ERASE"].on {
   box-shadow: 0 9px 0 #ddd2c1, 0 0 0 3px var(--c), 0 10px 18px rgba(60, 40, 20, 0.25);
 }
@@ -788,6 +820,9 @@ body.dropping #drop {
 .badge-sample {
   vertical-align: -3px;
   border-color: transparent;
+}
+.badge-sample.unsure {
+  background: #e5961a;
 }
 #issue {
   position: fixed;

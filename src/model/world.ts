@@ -1,10 +1,13 @@
 // The editable model: atoms (the snapping lattice) fully divided into pieces (OVL-001).
 import RBush from "rbush";
 import {
-  type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, toI, touches, union,
+  type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, expandBBox, shapeCentroid, toI, touches, union,
 } from "../geo/clip";
 import type { AreaFeature, Features } from "../osm/features";
+import { type Building, type BuildingGeom, makeBuilding } from "./buildings";
+import { type Guess, guess } from "./guess";
 import type { CtxClass, Kind } from "./kinds";
+import { TUNE } from "../tuning";
 
 export interface Piece {
   readonly id: number;
@@ -157,17 +160,20 @@ function touchClusters(ps: Piece[]): Piece[][] {
   return [...m.values()];
 }
 
-export interface Building extends BBox {
-  shape: Shape;
-  area: number;
-  yard?: Shape; // SNAP-109, computed on first use
+/** TYPE-011: the buildings standing in one atom (or outside every atom, `atom` -1), replaced as a whole on change. */
+export interface BuildingSet {
+  readonly atom: number;
+  items: Building[];
 }
 
 export class World {
   readonly atoms: Atom[];
   readonly totalLand: number;
   private readonly index = new RBush<AtomBox>();
-  private readonly buildingIndex = new RBush<Building>();
+  private readonly geoms: BuildingGeom[] = [];
+  private readonly buildingIndex = new RBush<BuildingGeom>();
+  private readonly sets = new Map<number, BuildingSet>();
+  private readonly guesses = new Map<number, { items: Building[]; by: Map<Building, Guess | null> }>();
   private readonly softIndex = new RBush<BBox & { line: Ring }>();
   private readonly cellCache = new Map<number, Shape[]>();
   overlay: AreaFeature[] = []; // IMP-003, render only
@@ -188,12 +194,19 @@ export class World {
     this.index.load(this.atoms.map((a) => ({ ...a.bbox, atom: a })));
     this.totalLand = this.atoms.reduce((s, a) => s + a.area, 0);
     // SNAP-109; BLD-006: the footprint only, never the look.
-    this.buildingIndex.load(
-      features.buildings.map((b) => {
-        const shape = union([floatRing(b.ring)]);
-        return { ...bbox(shape), shape, area: area(shape) };
-      }),
-    );
+    this.geoms = features.buildings.map((b, id) => {
+      const shape = union([floatRing(b.ring)]);
+      const [cx, cy] = shapeCentroid(shape);
+      return { ...bbox(shape), id, source: b.source, ring: b.ring, shape, area: area(shape), cx, cy, atom: this.atomAt(cx, cy)?.id ?? -1, cluster: id, clusterSize: 1 };
+    });
+    this.buildingIndex.load(this.geoms);
+    this.clusterBuildings();
+    for (const [i, b] of features.buildings.entries()) {
+      const g = this.geoms[i];
+      const set = this.sets.get(g.atom) ?? { atom: g.atom, items: [] };
+      set.items.push(makeBuilding(g, b.tags, { look: b.look }));
+      this.sets.set(g.atom, set);
+    }
     // SNAP-108
     this.softIndex.load(
       features.minorLines.map((l) => {
@@ -203,9 +216,71 @@ export class World {
     );
   }
 
-  /** SNAP-109: buildings overlapping a box. */
-  buildingsIn(b: BBox): Building[] {
+  /** TYPE-002: footprints that share a wall (within TUNE-GUESS-TOUCH) form one cluster. */
+  private clusterBuildings() {
+    const parent = this.geoms.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const gap = toI(TUNE.GUESS_TOUCH);
+    for (const g of this.geoms)
+      for (const o of this.buildingIndex.search(expandBBox(g, gap))) {
+        if (o.id <= g.id || find(o.id) === find(g.id)) continue;
+        if (touches(g.shape, o.shape, TUNE.GUESS_TOUCH)) parent[find(o.id)] = find(g.id);
+      }
+    const sizes = new Map<number, number>();
+    for (const g of this.geoms) {
+      g.cluster = find(g.id);
+      sizes.set(g.cluster, (sizes.get(g.cluster) ?? 0) + 1);
+    }
+    for (const g of this.geoms) g.clusterSize = sizes.get(g.cluster)!;
+  }
+
+  /** SNAP-109: building footprints overlapping a box. */
+  buildingsIn(b: BBox): BuildingGeom[] {
     return this.buildingIndex.search(b);
+  }
+
+  /** The current state of a building, by its footprint. */
+  building(g: BuildingGeom): Building {
+    return this.sets.get(g.atom)!.items.find((b) => b.geom === g)!;
+  }
+
+  /** The building set a footprint belongs to (TYPE-011). */
+  setOf(g: BuildingGeom): BuildingSet {
+    return this.sets.get(g.atom)!;
+  }
+
+  buildingSets(): Iterable<BuildingSet> {
+    return this.sets.values();
+  }
+
+  /** TYPE-007 / TYPE-008: the building under a point, if any. */
+  buildingAt(x: number, y: number): Building | null {
+    for (const g of this.buildingIndex.search({ minX: x, minY: y, maxX: x, maxY: y }))
+      if (contains(g.shape, x, y)) return this.building(g);
+    return null;
+  }
+
+  /** TYPE-001..TYPE-003: what the editor guesses about a building, or null when it is typed or protected. */
+  guessOf(b: Building): Guess | null {
+    const set = this.sets.get(b.geom.atom)!;
+    let c = this.guesses.get(set.atom);
+    if (!c || c.items !== set.items) {
+      c = { items: set.items, by: new Map() };
+      this.guesses.set(set.atom, c);
+    }
+    let g = c.by.get(b);
+    if (g === undefined) {
+      g = guess(b, set.items);
+      c.by.set(b, g);
+    }
+    return g;
+  }
+
+  /** TYPE-012: every guessed or unsure building, north to south, then west to east. */
+  toDecide(): Building[] {
+    const out: Building[] = [];
+    for (const s of this.sets.values()) for (const b of s.items) if (this.guessOf(b)) out.push(b);
+    return out.sort((a, b) => a.geom.minY - b.geom.minY || a.geom.minX - b.geom.minX);
   }
 
   /** SNAP-108: the cells minor ways cut an atom into; empty when they don't split it. */
@@ -249,7 +324,7 @@ export class World {
     return out.sort((a, b) => a.bbox.minY - b.bbox.minY || a.bbox.minX - b.bbox.minX);
   }
 
-  /** Land area per kind ("void" for none), for the district mix (HUD-003). */
+  /** Land area per kind ("void" for none), for the district mix (HUD-003). BLD-006 / TYPE-014: buildings play no part. */
   mix(): Record<string, number> {
     const m: Record<string, number> = {};
     for (const a of this.atoms)
@@ -260,4 +335,3 @@ export class World {
     return m;
   }
 }
-
