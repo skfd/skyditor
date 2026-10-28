@@ -58,8 +58,11 @@ has been absorbed into a rewritten requirement, it may be retired.
 - Code that implements a requirement cites its ID in a nearby comment, for example `// SNAP-004`.
 - Tests name the IDs they verify in the test title, for example `it("SNAP-004: leftover strip …")`.
 - A requirement that cannot be traced the usual way says so in a `Trace:` line after its statement:
-  - `Trace: manual` — implemented and cited in code, but checked by hand in the running app rather
-    than by a unit test (animation, sound, layout, input bindings, network).
+  - `Trace: manual` — implemented and cited in code, but checked by hand in the running app. Either the
+    behaviour is glue between the browser and the model that only the running app exercises (input
+    bindings, animation, sound, layout, network), or it is a quality judgement a test could only fake by
+    measuring the mechanism ("the trail shows no corners"). Being obvious is not a reason: nobody looks at
+    the deployed app after every push, so obvious things get a cheap test.
   - `Trace: policy` — holds by construction or review; nothing in the code to cite (non-goals, what the
     user must never see).
 - `npm run trace` lists every requirement with its implementing and testing locations. It fails if code
@@ -385,9 +388,11 @@ business (commercial and retail), or industrial.
 **PAINT-001** When the user presses the primary button over the map with a paint tool selected, the editor
 shall start a stroke with the current kind and a brush size that stays fixed, in metres, for the whole
 stroke.
+  Trace: manual
 
 **PAINT-002** While a stroke is active, the editor shall follow the cursor closely enough that the trail
 shows no corners at any brush size (TUNE-TRAIL-STEP).
+  Trace: manual
 
 **PAINT-003** While a stroke is active, the editor shall draw the brush trail as a soft translucent band in
 the kind's colour.
@@ -494,6 +499,7 @@ in the stroke's colour, updated at least every TUNE-PREVIEW-INTERVAL.
 **SNAP-106** When a stroke ends, the editor shall apply the snapped freeform result. Its outline shall be
 cleaned of the brush's jitter (TUNE-SIMPLIFY), and it shall settle into place with the claim animation
 (FEEL-001).
+  Trace: manual
 
 **SNAP-107** If applying a freeform result leaves a piece in the same atom smaller than TUNE-SLIVER-AREA,
 touching the result, that the stroke could change (PAINT-004, DISP-002), then the editor shall

@@ -47,6 +47,15 @@ describe("lattice", () => {
     expect(w.atomAt(0, 0)).toBeNull();
   });
 
+  it("LAT-004: a pedestrian square is street space, not land", async () => {
+    const s = new Sketch(300).grid(200);
+    s.rect(-20, -20, 20, 20, { highway: "pedestrian", area: "yes" });
+    const w = await s.world();
+    expect(w.atoms.length).toBe(9);
+    expect(w.atomAt(0, 0)).toBeNull();
+    expect(atomAt(w, -80, -80).area).toBeCloseTo(190 * 190 - 40 * 40, -2);
+  });
+
   it("LAT-003: width=* overrides the class half-width", async () => {
     const s = new Sketch(300);
     s.road([[-320, 0], [320, 0]], "residential", { width: "30" });
