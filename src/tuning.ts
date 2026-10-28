@@ -49,7 +49,7 @@ export const TUNE = {
   SMOOTH_FACTOR: 0.35, // TUNE-SMOOTH-FACTOR: stroke smoothing radius ÷ brush radius
   SNAP_FACTOR: 0.6, // TUNE-SNAP-FACTOR: leftover swallow radius ÷ brush radius
   CELL_TAKE: 0.5, // TUNE-CELL-TAKE: covered fraction at which a cell is taken whole
-  BUILDING_MARGIN: 2.5, // TUNE-BUILDING-MARGIN: yard kept around buildings by freeform results, m
+  BUILDING_MARGIN: 0.5, // TUNE-BUILDING-MARGIN: yard kept around buildings by freeform results, m
   SIMPLIFY: 0.4, // TUNE-SIMPLIFY: simplification tolerance of committed freeform shapes, m
   SLIVER_AREA: 40, // TUNE-SLIVER-AREA: pieces smaller than this get merged after a change, m²
   PREVIEW_INTERVAL: 50, // TUNE-PREVIEW-INTERVAL: maximum freeform preview staleness, ms

@@ -508,7 +508,8 @@ result shall include that whole cell.
 **SNAP-109** The editor shall never let a freeform result cut through a building. A building with at least
 half its area inside the result shall be included whole, with a margin of TUNE-BUILDING-MARGIN. Any other
 building within that margin of the result shall be left out, with the same margin.
-  Why: landuse is about what the buildings are. A boundary through a house is always wrong.
+  Why: landuse is about what the buildings are. A boundary through a house is always wrong. The margin is a
+  narrow yard, so an edge near a building runs along its wall, as mappers draw it.
 
 ~~**SNAP-110** The editor shall build the freeform result in this order: stroke shape within the open pieces
 (SNAP-102), whole cells (SNAP-108), buildings (SNAP-109), leftover swallowing (SNAP-103, SNAP-104).~~

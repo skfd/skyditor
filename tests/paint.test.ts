@@ -100,7 +100,8 @@ describe("open pieces", () => {
     const w = await s.world();
     paint(w, R2, 10, [[-60, -25], [60, -25]]); // covers y ∈ [-35, -15]: a quarter of the house
     expect(at(w, 0, -17)?.kind).toBe(null);
-    expect(at(w, 0, -21)?.kind).toBe(null);
+    expect(at(w, 0, -20 - TUNE.BUILDING_MARGIN / 2)?.kind).toBe(null); // in its yard
+    expect(at(w, 0, -20 - TUNE.BUILDING_MARGIN - 0.3)?.kind).toBe("R2"); // the edge follows the wall
     expect(at(w, 30, -17)?.kind).toBe("R2");
   });
 
@@ -110,8 +111,8 @@ describe("open pieces", () => {
     const w = await s.world();
     paint(w, R2, 10, [[-60, -12], [60, -12]]); // covers y ∈ [-22, -2]
     expect(at(w, 0, -1)?.kind).toBe("R2");
-    expect(at(w, 0, 1.5)?.kind).toBe("R2");
-    expect(at(w, 30, 1.5)?.kind).toBe(null);
+    expect(at(w, 0, TUNE.BUILDING_MARGIN / 2)?.kind).toBe("R2");
+    expect(at(w, 30, TUNE.BUILDING_MARGIN / 2)?.kind).toBe(null);
   });
 });
 
