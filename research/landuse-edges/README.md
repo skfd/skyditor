@@ -179,7 +179,8 @@ Each answer changes something specific in the editor. The 44-city run answers al
 
 44 cities in 17 countries (`cities.txt`): the first batch's cities, more cities in those countries, eight
 countries not sampled before, and six Canadian cities. Each city got a 9 × 9 grid of 600 m squares
-1.2 km apart, 3,564 squares in all, cut from Geofabrik extracts of 2026-10-25 to 27. All the numbers below
+1.2 km apart, 3,564 squares in all, cut from Geofabrik extracts of 2026-10-25 to 27. Kyiv and Lviv come from
+the cached Ukraine history file, cut to its state on 2026-10-05. All the numbers below
 are in [report-2026-10.txt](report-2026-10.txt).
 
 The squares were screened as "Choosing more areas" in the first batch suggested:
@@ -231,6 +232,10 @@ how many squares each row comes from.
   12.7% of the variance in distance and width 12.0%; both together explain 18.6%. On samples with `lanes`,
   class explains 16.7% and lanes 8.2%. The property line sits about width ÷ 2 + 3 m from the centreline
   (width 6 m → 6.1 m, 10 m → 9.4 m). Taking width ÷ 2 alone, as LAT-003 does, puts it at the kerb.
+- **"No sidewalk mapped" understates the default.** Its streets come from squares that map sidewalks,
+  so they are mostly streets that really have none. A city that never maps sidewalks separately is
+  unstyled and contributes nothing here. Where a sidewalk exists but is not in the data, the honest
+  figure is nearer the middle column: for residential streets 6–7 m, not 5.6.
 - **Spread is wide.** Even within one class and style, p25–p75 spans 3–6 m. A fixed half-width will be
   off by a couple of metres on many streets, and only a mapped sidewalk pins the edge down.
 
@@ -251,7 +256,8 @@ squares with cover, which neighbourhood-style squares dominate.
 | living_street, dead end / loop / ring | 30% / 38% / 66% | 80% / 87% / 92% |
 | living_street, `access=private` | 66% (2.1 km) | 94% |
 | pedestrian, dead end | 22% | 62% |
-| tertiary and above | ≤ 0.6% | 15–31% |
+| primary to tertiary | ≤ 0.6% | 15–31% |
+| trunk, motorway | 0% | 4–5% |
 
 - Service roads are mostly inside, as LAT-001 already has it (not barriers).
 - Residential dead ends mostly stay outside the landuse even in careful areas (8%). LAT-007, a notch
@@ -316,8 +322,9 @@ Lots are faces between roads, fences, walls, hedges and context edges, less the 
 | Ukraine | 8 / 4 | 28 / 7 |
 | Czechia | 1 / 1 | 4 / 4 |
 
-- **Property line is the common style:** Finland, Poland, Latvia, Great Britain, Canada and Estonia, plus
-  Hamburg and Munich. Kerb dominates in Berlin, Vilnius and Kyiv.
+- **Property line is the common style:** Finland, Poland, Latvia, Great Britain and Canada, plus Hamburg
+  and Munich (Estonia too, on few squares). Kerb dominates in Berlin, Vilnius and Kyiv. Czechia is
+  undecided.
 - **A city keeps its style.** Two styled squares of the same city agree 93% of the time 1.2 km apart,
   91% at 2.4 km and 88% at 3.6 km or more. Within one square, the minority side has a median 1% of the
   sidewalk rays, and only 8% of squares are mixed (≥ 30%).
@@ -347,8 +354,8 @@ The values are starting points from the medians above, for the replay benchmark 
 
 1. **Street space to the property line (LAT-003, Q-003).** Where a separately mapped sidewalk runs along a
    barrier, street space reaches the sidewalk's far side plus a new TUNE-SIDEWALK-MARGIN of 1.5 m.
-   Elsewhere it uses property-line half-widths: residential 6, living_street 4.5, pedestrian 5,
-   unclassified 8, tertiary 10, secondary 11, primary 11 m. Trunk and motorway are unmeasured and stay
+   Elsewhere it uses property-line half-widths: residential 6–7, living_street 4.5–6, pedestrian 5,
+   unclassified 8–9, tertiary 9–10, secondary 11, primary 10–11 m (between the two Q1 columns). Trunk and motorway are unmeasured and stay
    as they are. `width=*` should only widen, as width ÷ 2 + 3 m, never narrow: on its own it predicts no
    better than the class and lands at the kerb.
 2. **Kerb style where the area is kerb style (Q-008).** When the loaded area has ≥ 20 sidewalk crossings
