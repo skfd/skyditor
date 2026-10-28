@@ -35,9 +35,8 @@ and not only what is *formally compliant*.
 
 - IDs are `AREA-NNN` (for example `SNAP-004`). They are never reused or renumbered.
 - A retired requirement stays in the file, struck through, with a note on what replaced it.
-- Numeric feel and tuning values live in the **tuning table (§16)** as `TUNE-*` IDs, one ID per row.
-  Requirements refer to them by ID instead of repeating numbers. The code mirrors the table in
-  `src/tuning.ts`, and `npm test` fails when a row and its mirror disagree.
+- Feel and tuning numbers are not requirements. Where a requirement needs to name a knob, it uses the knob's
+  `TUNE-*` ID (§16); the value lives in `src/tuning.ts` only.
 
 ### 0.3 Corrections (CORR)
 
@@ -807,69 +806,12 @@ Pressing anywhere else closes it.
 
 ---
 
-## 16. Tuning table
+## 16. Tuning
 
-All numbers here are starting values to be tuned by feel. The code mirrors them in `src/tuning.ts`, and
-`tests/tuning.test.ts` reads this table and fails when a row and its mirror disagree. One ID per row; a
-range or a per-key list is written as it is in the code, in the same order.
-
-| ID | Value | Meaning |
-|----|-------|---------|
-| TUNE-GEOM-SCALE | 100 per m | Integer geometry resolution (1 cm). |
-| TUNE-AREA-SIDE | 1200 m | Side of a searched area. |
-| TUNE-HALFWIDTH | motorway 12, trunk 10, primary 9, secondary 8, tertiary 7, unclassified 5, residential 5, living_street 4, pedestrian 4, road 5, `_link` 5, rail 4, light_rail 3, narrow_gauge 3, river 10, canal 8 (m) | Street space half-widths. `width=*`, when present, overrides with width ÷ 2. |
-| TUNE-ATOM-MIN-AREA | 150 m² | Smallest kept atom. |
-| TUNE-ATOM-MIN-RADIUS | 2.5 m | Smallest disc an atom or imported fragment must contain. |
-| TUNE-IMPORT-MIN-FRAGMENT | 60 m² | Smallest kept imported fragment. |
-| TUNE-IMPORT-SNAP | 6 m | Leftover radius closed around imported pieces; half the widest overlap split as drift (IMP-010). |
-| TUNE-NEST-INSIDE | 0.9 | Share of the smaller feature's land that must lie inside the larger one for nesting (CORR-001). |
-| TUNE-NEST-SIZE | 0.8 | Largest land area of the smaller feature, as a share of the larger one's, for nesting (CORR-001). |
-| TUNE-BRUSH-DEFAULT | 30 px | Initial brush radius. |
-| TUNE-BRUSH-MIN | 8 px | Smallest brush radius. |
-| TUNE-BRUSH-MAX | 120 px | Largest brush radius. |
-| TUNE-BRUSH-STEP | 1.15 | Brush radius factor per key or button press. |
-| TUNE-TRAIL-STEP | 0.2 | Trail point spacing, as a fraction of brush radius. |
-| TUNE-UNIT-FACTOR | 14 | Unit piece limit, as a multiple of brush disc area. |
-| TUNE-UNIT-ABS-MAX | 150 000 m² | Unit piece limit, absolute. |
-| TUNE-UNIT-SAMPLES | 120 | Target sample points per unit piece. |
-| TUNE-CLAIM-COVERAGE | 0.3 | Covered fraction at which a unit piece is claimed. |
-| TUNE-SMOOTH-FACTOR | 0.35 | Stroke smoothing radius ÷ brush radius. |
-| TUNE-SNAP-FACTOR | 0.6 | Leftover swallow radius ÷ brush radius. |
-| TUNE-CELL-TAKE | 0.5 | Covered fraction at which a cell is taken whole. |
-| TUNE-BUILDING-MARGIN | 2.5 m | Yard kept around buildings by freeform results. |
-| TUNE-HIGHRISE-LEVELS | 9 | Levels from which a residential building looks high-rise. |
-| TUNE-LEVEL-HEIGHT | 3 m | Height of one level, for buildings with only `height`. |
-| TUNE-BUILDING-SHADE | 0.35 | How far a building's colour is mixed towards the neutral building colour. |
-| TUNE-BUILDING-ALPHA | 0.85 | Opacity of buildings with a known look. |
-| TUNE-RIPPLE-PERIOD | 2400 ms | Time between ripples of a disagreeing building. |
-| TUNE-RIPPLE-REACH | 12 px | How far a ripple grows out of the footprint. |
-| TUNE-DISPUTE-STRIPE | 12 px | Stripe period on disputed pieces (rival colour on half of it). |
-| TUNE-SPIKE-SPACING | 11 px | Distance between spikes on a disputed piece's edge. |
-| TUNE-SPIKE-SIZE | 5 px | Spike length. |
-| TUNE-SPIKE-SPEED | 6 px/s | How fast spikes creep along the edge. |
-| TUNE-AMBIENT-INTERVAL | 50 ms | Shortest time between redraws for ripples and spikes alone. |
-| TUNE-DISPUTE-VIEW | 160 m | Smallest stretch of land shown around a disputed piece the camera moves to. |
-| TUNE-SIMPLIFY | 0.4 m | Simplification tolerance of committed freeform shapes. |
-| TUNE-SLIVER-AREA | 40 m² | Pieces smaller than this get merged after a change. |
-| TUNE-PREVIEW-INTERVAL | 50 ms | Maximum freeform preview staleness. |
-| TUNE-TAP-MOVE | 6 px | Farthest a tap may move. |
-| TUNE-TAP-TIME | 350 ms | Longest a tap may last. |
-| TUNE-LIFT | R1 1, R2 2, R3 3, R4 4, R5 6, R6 9 (px) | Slab height per tier at 1 px/m. |
-| TUNE-LIFT-NONRES | 3 px | Slab height of commercial, retail, industrial. |
-| TUNE-LIFT-ZOOM-CLAMP | 0.5 .. 1.6 | Zoom scale factor applied to lift. |
-| TUNE-PIECE-GAP | 0.6 m | Gap between neighbouring pieces of different kinds. |
-| TUNE-HINT-RADIUS | 3 | Lattice hint radius ÷ brush radius. |
-| TUNE-POP-DURATION | 340 ms | Claim pop length. |
-| TUNE-POP-OVERSHOOT | 1.7 | Back-ease overshoot constant. |
-| TUNE-POP-FLASH | 200 ms | Flash fade length. |
-| TUNE-POP-STAGGER | 1.4 ms per m | Pop stagger for simultaneous claims, per metre from the cursor. |
-| TUNE-REVEAL-MAX | 900 ms | Longest load reveal. |
-| TUNE-ZOOM-MIN | 0.08 px/m | Farthest zoom out. |
-| TUNE-ZOOM-MAX | 12 px/m | Closest zoom in. |
-| TUNE-ZOOM-STEP | 1.6 | Zoom factor per zoom button press. |
-| TUNE-ZOOM-HALFLIFE | 70 ms | Zoom smoothing half-life. |
-| TUNE-PAN-HALFLIFE | 160 ms | Pan coasting half-life. |
-| TUNE-REDUCED-MOTION | 0.3 | Duration factor with reduced motion. |
+Feel numbers are code-level work, not requirements. Each knob is named `TUNE-*` and lives in
+`src/tuning.ts` with its unit and a one-line meaning. A requirement names a knob where it needs a word for
+"the snap distance" or "the brush limits"; it never states the value, and tuning a value is not a change to
+this file. `npm test` fails if this file names a knob that `src/tuning.ts` does not have.
 
 ---
 

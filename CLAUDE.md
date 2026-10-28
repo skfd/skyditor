@@ -6,8 +6,8 @@
 
 - Before changing behaviour, change or add the requirement (or a `CORR-*` correction, see §0.3), then the
   code and tests.
-- Feel numbers live in the tuning table (§16) and are mirrored, with their IDs, in `src/tuning.ts`. Change
-  the table first.
+- Feel numbers are code-level work: knobs are named `TUNE-*` and live in `src/tuning.ts` with their meaning.
+  A requirement names a knob, never its value (§16). Tuning a value is not a spec change.
 - Cite requirement IDs in code comments where they are implemented (`// SNAP-103`) and in test titles
   (`it("SNAP-103: …")`).
 - When a requirement is satisfied to the letter but the result is still wrong, add a correction instead of
@@ -17,7 +17,7 @@
 ## Checks
 
 ```sh
-npm test            # vitest; includes tests/tuning.test.ts, which checks §16 against src/tuning.ts
+npm test            # vitest; includes tests/tuning.test.ts: every TUNE-* the spec names exists in src/tuning.ts
 npm run typecheck   # tsc
 npm run trace       # fails on IDs cited in code/tests that REQUIREMENTS.md doesn't define, and on
                     # requirements cited nowhere in code (unless marked `Trace: policy`, see §0.4)
