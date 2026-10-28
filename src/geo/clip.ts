@@ -208,3 +208,19 @@ export function shapeCentroid(s: Shape): [number, number] {
   }
   return [cx / (3 * a), cy / (3 * a)];
 }
+
+/** A point well inside `s`, in integer units: the centre of its deepest inset, found by bisection (REN-016). */
+export function interiorPoint(s: Shape): [number, number] {
+  const b = bbox(s);
+  let lo = 0, hi = Math.min(b.maxX - b.minX, b.maxY - b.minY) / 2 / S;
+  let deepest = s;
+  for (let i = 0; i < 10; i++) {
+    const mid = (lo + hi) / 2;
+    const inset = offset(s, -mid);
+    if (isEmpty(inset)) hi = mid;
+    else [lo, deepest] = [mid, inset];
+  }
+  const core = components(deepest).reduce((a, c) => (area(c) > area(a) ? c : a));
+  const c = shapeCentroid(core);
+  return contains(s, c[0], c[1]) ? c : [core[0][0].X, core[0][0].Y];
+}

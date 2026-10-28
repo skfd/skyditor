@@ -8,6 +8,9 @@
   </head>
   <body>
     <canvas id="map"></canvas>
+    <!-- REN-016 / HUD-012 -->
+    <div id="badges"></div>
+    <div id="issue" role="dialog" aria-label="Missing landuse"></div>
 
     <header id="topbar">
       <div class="pill brand">
@@ -56,7 +59,8 @@
       <p>Pick a tile below, then drag to paint. Small blocks fill up and snap in whole; big open land is painted freely and snaps to roads and neighbours. Zoom in for finer control.</p>
       <p>Red spikes mark places where the map disagrees with itself. Paint over one to settle it. Parks,
         school grounds, cemeteries and other land the palette doesn't offer can't be painted: click where one
-        disagrees to keep it. A pulsing building doesn't match the land it stands on.</p>
+        disagrees to keep it. A pulsing building doesn't match the land it stands on. An amber
+        <b class="badge-sample">!</b> marks land tagged without its landuse.</p>
       <p class="muted">Everything works with a mouse or a finger. Keys are shortcuts.</p>
       <!-- HUD-008 -->
       <dl>
@@ -73,6 +77,7 @@
         <dt>Side button · <kbd>F</kbd></dt><dd>Fit area</dd>
         <dt>Top-right buttons · <kbd>B</kbd> <kbd>O</kbd> <kbd>M</kbd></dt><dd>Buildings · original outlines · sound</dd>
         <dt>Red count, top right · <kbd>N</kbd></dt><dd>Next place where the map disagrees with itself</dd>
+        <dt>Click an amber <b class="badge-sample">!</b></dt><dd>See the missing tag, with a link to fix it on OpenStreetMap</dd>
       </dl>
       <p class="muted">Nothing is saved or uploaded — this is a toy.</p>
     </aside>

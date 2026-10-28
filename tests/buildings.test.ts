@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildingLook, KINDS } from "../src/model/kinds";
+import { CTX_COLORS, buildingLook, KINDS, lookColor } from "../src/model/kinds";
 import { worldFromText } from "../src/model/load";
 import { buildingColor } from "../src/render/renderer";
 import { Sketch } from "./helpers";
@@ -15,7 +15,9 @@ describe("building looks", () => {
     expect(buildingLook({ building: "office" })).toBe("COM");
     expect(buildingLook({ building: "supermarket" })).toBe("RET");
     expect(buildingLook({ building: "warehouse" })).toBe("IND");
-    expect(buildingLook({ building: "school" })).toBe("CIVIC");
+    expect(buildingLook({ building: "school" })).toBe("EDU");
+    expect(buildingLook({ building: "kindergarten" })).toBe("EDU");
+    expect(buildingLook({ building: "church" })).toBe("CIVIC");
   });
 
   it("BLD-002: an explicit type wins over shops in the building", () => {
@@ -41,6 +43,7 @@ describe("building looks", () => {
     expect(buildingLook({ building: "yes", shop: "supermarket", office: "company" })).toBe("RET");
     expect(buildingLook({ building: "yes", office: "company" })).toBe("COM");
     expect(buildingLook({ building: "yes", amenity: "place_of_worship" })).toBe("CIVIC");
+    expect(buildingLook({ building: "yes", amenity: "school" })).toBe("EDU");
     expect(buildingLook({ building: "yes", amenity: "cafe" })).toBeNull();
   });
 
@@ -77,5 +80,12 @@ describe("building looks", () => {
       expect(s.reduce((x, y) => x + y)).toBeLessThan(b.reduce((x, y) => x + y));
     }
     expect(buildingColor("R2")).toBe("rgb(182,151,95)");
+  });
+});
+
+describe("school buildings", () => {
+  it("REN-009: school buildings wear the school grounds' colour, not the civic one", () => {
+    expect(lookColor("EDU")).toBe(CTX_COLORS.education);
+    expect(buildingColor("EDU")).not.toBe(buildingColor("CIVIC"));
   });
 });

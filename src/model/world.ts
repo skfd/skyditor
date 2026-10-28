@@ -19,6 +19,14 @@ export interface Piece {
   readonly rival?: Rival; // IMP-012: set while the piece is disputed
 }
 
+/** IMP-014: an area whose tags imply a landuse it does not carry. */
+export interface TagIssue {
+  readonly source: string; // OSM element, "way/123" | "relation/456"
+  readonly tagged: string; // what it is tagged as, e.g. "amenity=school"
+  readonly missing: string; // the landuse tag it lacks
+  readonly at: [number, number]; // m; a point well inside its land (REN-016)
+}
+
 /** IMP-012: what the losing feature of a dispute said. */
 export interface Rival {
   readonly kind: Kind;
@@ -158,6 +166,7 @@ export class World {
   private readonly softIndex = new RBush<BBox & { line: Ring }>();
   private readonly cellCache = new Map<number, Shape[]>();
   overlay: AreaFeature[] = []; // IMP-003, render only
+  issues: TagIssue[] = []; // IMP-014, render only
   readonly originals: AreaFeature[] = []; // IMP-009, render only
 
   constructor(

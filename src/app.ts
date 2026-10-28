@@ -13,6 +13,7 @@ import { Camera } from "./render/camera";
 import { Renderer, pathOf } from "./render/renderer";
 import { TUNE } from "./tuning";
 import { Sound } from "./ui/audio";
+import { Badges } from "./ui/badges";
 import { Hud, TOOLS } from "./ui/hud";
 import { ICONS } from "./ui/icons";
 
@@ -68,6 +69,7 @@ export class App {
   private lastDispute: [number, number] | null = null; // HUD-010: where the last jump went
   private lastFrame = performance.now();
   private loadingBusy = false;
+  private readonly badges = new Badges(); // REN-016 / HUD-012
 
   constructor() {
     this.hud = new Hud((id) => this.selectTool(id));
@@ -159,6 +161,7 @@ export class App {
     this.camera.fit(box, this.anims.dur(900), now);
     this.reveal(now);
     this.hud.setPlace(place);
+    this.badges.set(world.issues);
     this.lastDispute = null;
     this.updateMix(true);
     this.dirty = true;
@@ -715,6 +718,7 @@ export class App {
         },
         now,
       );
+      this.badges.place(this.camera);
       this.dirty = false;
     }
     requestAnimationFrame((t) => this.frame(t));

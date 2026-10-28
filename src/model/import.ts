@@ -1,12 +1,12 @@
 // Interprets existing OSM landuse as pieces (IMP-004..IMP-012, CORR-001).
 import {
-  type BBox, type Shape, area, bbox, bboxOverlap, components, containsDisc, difference, intersect, isEmpty,
-  narrowParts, offset, touches, union,
+  type BBox, type Shape, area, bbox, bboxOverlap, components, containsDisc, difference, interiorPoint, intersect,
+  isEmpty, narrowParts, offset, toM, touches, union,
 } from "../geo/clip";
 import type { AreaFeature } from "../osm/features";
 import { TUNE } from "../tuning";
 import { type CtxClass, type Kind, agree } from "./kinds";
-import { type Atom, type Piece, type Rival, World, makePiece, normalize } from "./world";
+import { type Atom, type Piece, type Rival, type TagIssue, World, makePiece, normalize } from "./world";
 
 const DRIFT_STEP = 0.5; // m; how far each side's claim grows per round when a drift strip is split (IMP-010)
 
@@ -84,7 +84,36 @@ export function importLanduse(world: World, areas: AreaFeature[]): { pieces: num
     atom.pieces = snapImported(atom, normalize(atom, pieces, false));
     count += pieces.length;
   }
+  world.issues = missingLanduse(world, ranked);
   return { pieces: count, dropped };
+}
+
+/** IMP-014: school grounds mapped by their amenity (IMP-013) that no `landuse=education` outline covers. */
+function missingLanduse(world: World, ranked: Ranked[]): TagIssue[] {
+  const implied = ranked.filter((r) => r.f.klass.cls === "exclusive" && r.f.klass.implied && r.land > 0);
+  if (implied.length === 0) return [];
+  const landuse = union(
+    ...ranked.filter((r) => r.f.klass.cls === "exclusive" && r.f.klass.ctx === "education" && !r.f.klass.implied)
+      .map((r) => r.f.shape),
+  );
+  const issues: TagIssue[] = [];
+  for (const r of implied) {
+    const atoms = world.atomsIn(r.box);
+    let covered = 0;
+    if (!isEmpty(landuse)) for (const atom of atoms) covered += area(intersect(intersect(atom.shape, r.f.shape), landuse));
+    if (covered >= TUNE.NEST_INSIDE * r.land) continue;
+    // REN-016: the badge sits on the biggest piece the area kept, or else on its biggest bit of land.
+    let spot: Shape = [];
+    for (const atom of atoms)
+      for (const p of atom.pieces) if (p.source === r.f.id && p.area > area(spot)) spot = p.shape;
+    if (isEmpty(spot))
+      for (const atom of atoms)
+        for (const c of components(intersect(atom.shape, r.f.shape))) if (area(c) > area(spot)) spot = c;
+    const [x, y] = interiorPoint(spot);
+    const tagged = r.f.klass.cls === "exclusive" ? r.f.klass.label : "";
+    issues.push({ source: r.f.id, tagged, missing: "landuse=education", at: [toM(x), toM(y)] });
+  }
+  return issues;
 }
 
 /** IMP-006: big enough, and thick enough, to be land anyone paints. */

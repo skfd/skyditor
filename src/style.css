@@ -742,3 +742,82 @@ code {
 body.dropping #drop {
   opacity: 1;
 }
+
+/* ---------- missing landuse (REN-016, HUD-012) ---------- */
+#badges {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.badge,
+.badge-sample {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e5961a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+.badge {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  box-shadow: 0 1px 3px rgba(60, 40, 20, 0.35);
+  pointer-events: auto;
+}
+/* A bigger target for fingers (GEN-005). */
+.badge::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+}
+.badge:hover,
+.badge.open {
+  background: #c27a06;
+}
+.badge[hidden] {
+  display: none;
+}
+.badge-sample {
+  vertical-align: -3px;
+  border-color: transparent;
+}
+#issue {
+  position: fixed;
+  left: 0;
+  top: 0;
+  max-width: 280px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms;
+  user-select: text;
+}
+#issue.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+#issue p {
+  margin: 0 0 6px;
+}
+#issue code {
+  font: 12px ui-monospace, "SF Mono", Menlo, monospace;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(59, 47, 39, 0.07);
+}
+#issue a {
+  color: #2a6fb0;
+  font-weight: 600;
+}

@@ -13,6 +13,8 @@ export function overpassQuery(b: LonLatBounds): string {
   way["leisure"]; relation["leisure"]["type"="multipolygon"];
   way["natural"]; relation["natural"]["type"="multipolygon"];
   way["amenity"="parking"]; way["area:highway"]; way["building"];
+  way["amenity"~"^(school|university|college|kindergarten)$"];
+  relation["amenity"~"^(school|university|college|kindergarten)$"]["type"="multipolygon"];
 );
 out body;
 >;

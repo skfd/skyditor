@@ -277,6 +277,15 @@ disputed part too small to keep as a fragment on its own (IMP-006) shall not be 
   at every spot, but the editor must not pretend it knows. Context always holds the part because the
   editor never overwrites context (PAINT-004); it only asks the user to confirm the shrink (DISP-004).
 
+**IMP-013** The editor shall read an area tagged `amenity` = school, university, college or kindergarten
+that IMP-001 does not otherwise classify as education context (REN-015).
+  Why: most school grounds in OSM carry only the amenity. Without this, their land shows as empty.
+
+**IMP-014** The editor shall mark an area read by IMP-013 as *missing its landuse* unless at least
+TUNE-NEST-INSIDE of its land lies inside `landuse=education` features.
+  Why: the school is mapped but the landuse layer has a hole there. A separate `landuse=education` outline
+  that already covers the grounds says all there is to say.
+
 **DISP-001** When a paint stroke or a density step changes all or part of a disputed piece, the editor
 shall make the changed part undisputed and leave the rest of the piece disputed.
   Why: painting over a disagreement is the user's answer to it. Undo brings the dispute back with the
@@ -303,7 +312,7 @@ the editor shall leave it unchanged and play the reject feedback (PAINT-009, DEN
 ### Buildings
 
 **BLD-001** The editor shall give each loaded building one *look*: a paintable kind (§5), unspecified
-residential, civic, or unknown, from the first of BLD-002, BLD-004 and BLD-005 that applies, then adjusted
+residential, education, civic, or unknown, from the first of BLD-002, BLD-004 and BLD-005 that applies, then adjusted
 by BLD-003.
   Why: a building says what the land around it should be. When buildings and land share colours, the map
   reads without a legend, and a building that disagrees with its land shows where landuse is wrong or
@@ -322,7 +331,8 @@ by BLD-003.
 | Commercial | commercial, office, hotel |
 | Retail | retail, supermarket, kiosk |
 | Industrial | industrial, warehouse, manufacture, factory, hangar |
-| Civic | school, university, college, kindergarten, hospital, church, cathedral, chapel, mosque, synagogue, temple, public, government, civic, fire_station, train_station |
+| Education | school, university, college, kindergarten |
+| Civic | hospital, church, cathedral, chapel, mosque, synagogue, temple, public, government, civic, fire_station, train_station |
 
   Why: an explicit building type wins over everything else. A block of flats with shops downstairs is
   still residential land.
@@ -335,8 +345,8 @@ levels, the editor shall give it the look R6. Its levels are `building:levels`, 
 
 **BLD-004** When a building's `building=*` value is not listed in BLD-002, the editor shall take its look
 from its other tags, in this order: `shop=*` → retail; `office=*` → commercial; `amenity` = school,
-university, college, kindergarten, hospital, place_of_worship, townhall, library, fire_station, police →
-civic.
+university, college, kindergarten → education; `amenity` = hospital, place_of_worship, townhall, library,
+fire_station, police → civic.
 
 **BLD-005** The editor shall give every other building the look unknown, including `building` = yes,
 roof, garage, garages, shed, carport, greenhouse, construction and ruins, and shall not guess a look from
@@ -592,7 +602,8 @@ redraw only when something changed or is animating.
 
 **REN-009** Where the building layer is on, the editor shall draw each building whose look (BLD-001) is
 not unknown in its look's colour mixed TUNE-BUILDING-SHADE of the way towards the neutral building colour,
-at opacity TUNE-BUILDING-ALPHA. A look's colour is its kind's colour (§5), or the civic context colour.
+at opacity TUNE-BUILDING-ALPHA. A look's colour is its kind's colour (§5), or the education or civic
+context colour (REN-015).
   Why: on land of its own kind a building reads as the same family, a shade darker; on the wrong land it
   stands out.
 
@@ -623,7 +634,7 @@ clearly distinct from the others and from the paintable kinds:
 | Class | Features (IMP-002) |
 |-------|--------------------|
 | Park | `leisure=park` |
-| Education | `landuse=education` |
+| Education | `landuse=education`, and areas read by IMP-013 |
 | Cemetery | `landuse=cemetery` |
 | Construction | `landuse=construction` |
 | Green | `landuse` = meadow, recreation_ground; `leisure` = golf_course, nature_reserve; `natural` = heath, grassland, wetland |
@@ -634,6 +645,12 @@ clearly distinct from the others and from the paintable kinds:
 
   Why: parks, school grounds, cemeteries and building sites are the context a city is full of, and each
   should read at a glance. The rest is grouped by how it looks from above.
+
+**REN-016** The editor shall mark each area missing its landuse (IMP-014) with a small round badge at a
+point well inside its land, kept at a constant screen size above the map, and with no other mark: no
+spikes, stripes or motion.
+  Why: a missing tag is a gap, not a contradiction. It should be easy to spot, and much quieter than a
+  dispute (REN-013).
 
 ### 14.2 Feel
 
@@ -707,6 +724,12 @@ flash it.
 **HUD-011** When a change settles the last disputed piece, the editor shall say briefly that the map no
 longer disagrees anywhere.
   Why: finishing the list is a small win. It should feel like one.
+
+**HUD-012** When the user presses a badge (REN-016), the editor shall show next to it what the area is
+tagged as, the landuse tag it lacks, and a link that opens the area on openstreetmap.org in a new tab.
+Pressing anywhere else closes it.
+  Why: the editor writes no tags (NG-001), so the fix happens in OSM. The link takes the user straight
+  there.
 
 ---
 

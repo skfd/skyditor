@@ -89,9 +89,12 @@ const OVERLAY: Record<string, Record<string, CtxClass>> = {
   amenity: { parking: "grey" },
 };
 
+/** IMP-013, BLD-004: amenities whose grounds are education land. */
+export const EDUCATION_AMENITY = new Set(["school", "university", "college", "kindergarten"]);
+
 export type AreaClass =
   | { cls: "paintable"; kind: PaintKind | "RU" }
-  | { cls: "exclusive"; ctx: CtxClass; label: string }
+  | { cls: "exclusive"; ctx: CtxClass; label: string; implied?: true } // implied: by an amenity (IMP-013)
   | { cls: "overlay"; ctx: CtxClass }
   | { cls: "water" };
 
@@ -112,6 +115,9 @@ export function classifyArea(tags: Tags): AreaClass | null {
     const v = tags[key];
     if (v && EXCLUSIVE[key]?.[v]) return { cls: "exclusive", ctx: EXCLUSIVE[key][v], label: `${key}=${v}` };
   }
+  // IMP-013: school grounds mapped by their amenity alone.
+  if (EDUCATION_AMENITY.has(tags.amenity ?? ""))
+    return { cls: "exclusive", ctx: "education", label: `amenity=${tags.amenity}`, implied: true };
   for (const key of ["landuse", "leisure", "amenity"]) {
     const v = tags[key];
     if (v && OVERLAY[key]?.[v]) return { cls: "overlay", ctx: OVERLAY[key][v] };
@@ -120,7 +126,7 @@ export function classifyArea(tags: Tags): AreaClass | null {
 }
 
 /** BLD-001: what a building says about its land. null = unknown. */
-export type BuildingLook = PaintKind | "RU" | "CIVIC";
+export type BuildingLook = PaintKind | "RU" | "EDU" | "CIVIC";
 
 const BUILDING_LOOK: Record<string, BuildingLook> = {
   // BLD-002
@@ -133,15 +139,15 @@ const BUILDING_LOOK: Record<string, BuildingLook> = {
   commercial: "COM", office: "COM", hotel: "COM",
   retail: "RET", supermarket: "RET", kiosk: "RET",
   industrial: "IND", warehouse: "IND", manufacture: "IND", factory: "IND", hangar: "IND",
-  school: "CIVIC", university: "CIVIC", college: "CIVIC", kindergarten: "CIVIC", hospital: "CIVIC",
+  school: "EDU", university: "EDU", college: "EDU", kindergarten: "EDU",
+  hospital: "CIVIC",
   church: "CIVIC", cathedral: "CIVIC", chapel: "CIVIC", mosque: "CIVIC", synagogue: "CIVIC", temple: "CIVIC",
   public: "CIVIC", government: "CIVIC", civic: "CIVIC", fire_station: "CIVIC", train_station: "CIVIC",
 };
 
 const CIVIC_AMENITY = new Set([
   // BLD-004
-  "school", "university", "college", "kindergarten", "hospital", "place_of_worship", "townhall", "library",
-  "fire_station", "police",
+  "hospital", "place_of_worship", "townhall", "library", "fire_station", "police",
 ]);
 
 /** BLD-003: levels from `building:levels`, else `height` in metres. */
@@ -160,6 +166,7 @@ export function buildingLook(tags: Tags): BuildingLook | null {
     // BLD-004
     if (tags.shop) look = "RET";
     else if (tags.office) look = "COM";
+    else if (EDUCATION_AMENITY.has(tags.amenity ?? "")) look = "EDU";
     else if (CIVIC_AMENITY.has(tags.amenity ?? "")) look = "CIVIC";
   }
   // BLD-003
@@ -168,7 +175,8 @@ export function buildingLook(tags: Tags): BuildingLook | null {
 }
 
 /** REN-009: base colour of a look, before shading. */
-export const lookColor = (look: BuildingLook) => (look === "CIVIC" ? CTX_COLORS.civic : KINDS[look].color);
+export const lookColor = (look: BuildingLook) =>
+  look === "EDU" ? CTX_COLORS.education : look === "CIVIC" ? CTX_COLORS.civic : KINDS[look].color;
 
 /** Human-readable OSM tags for a kind (HUD-002). */
 export const tagString = (k: Kind) =>

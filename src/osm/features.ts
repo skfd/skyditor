@@ -1,7 +1,7 @@
 // Turns raw OSM data into the features the lattice and the importer need (LOAD-005/006, LAT-001..004).
 import { type BBox, type Ring, type Shape, area as shapeArea, toI, union } from "../geo/clip";
 import { Projection, type LonLatBounds } from "../geo/project";
-import { type AreaClass, type BuildingLook, buildingLook, classifyArea } from "../model/kinds";
+import { type AreaClass, type BuildingLook, EDUCATION_AMENITY, buildingLook, classifyArea } from "../model/kinds";
 import { TUNE } from "../tuning";
 import ClipperLib from "clipper-lib";
 import { dataBounds, type OsmData, type OsmWay, type Tags } from "./parse";
@@ -70,7 +70,8 @@ export function halfWidth(cls: string, tags: Tags): number {
 }
 
 const isAreaish = (t: Tags) =>
-  !!(t.landuse || t.leisure || t.building || t.amenity === "parking" || t["area:highway"] || t.area === "yes" ||
+  !!(t.landuse || t.leisure || t.building || t.amenity === "parking" || EDUCATION_AMENITY.has(t.amenity ?? "") ||
+    t["area:highway"] || t.area === "yes" ||
     (t.natural && t.natural !== "coastline" && t.natural !== "tree_row") || t.waterway === "riverbank");
 
 export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Features {
