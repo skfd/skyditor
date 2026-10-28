@@ -352,8 +352,9 @@ Lots are faces between roads, fences, walls, hedges and context edges, less the 
 
 ## Proposed changes
 
-None of these are made yet. Each changes behaviour, so each goes through REQUIREMENTS.md first (§0.5).
-The values are starting points from the medians above, for the replay benchmark to refine.
+Each changes behaviour, so each goes through REQUIREMENTS.md first (§0.5). The values are starting points
+from the medians above, for the replay benchmark to refine. All seven have since been made or tried, in this
+order, each measured on the replay: see [Proposals made](#proposals-made-replay-2026-10-proposalstxt).
 
 1. **Street space to the property line (LAT-003, Q-003).** Where a separately mapped sidewalk runs along a
    barrier, street space reaches the sidewalk's far side plus a new TUNE-SIDEWALK-MARGIN of 1.5 m.
@@ -466,7 +467,7 @@ through freeform snapping.
     motorway, so strips between the carriageways connect to the painted block. SNAP-103 swallows narrow
     leftovers that touch the paint, and here they touch it through each other. 21,000 m² outside the truth
     and more than a brush radius + 5 m from every trail got painted; with `--tune SNAP_FACTOR=0` that is
-    500 m². SNAP-104 does not stop it. This is not in the proposals yet.
+    500 m². SNAP-104 does not stop it. CORR-003 now limits it (below).
 - Swallowing also does real work. With `SNAP_FACTOR=0` over all squares, the result outside truth drops from
   6.4% to 3.5% and the p90 from 15.9 to 8.4 m. But inner edges that follow nothing rise from 31% to 46%:
   swallowing is what carries many edges onto context, fences and paths. The fix is to limit how far it
@@ -474,15 +475,81 @@ through freeform snapping.
 
 **Which number each proposal should move.**
 
-| Proposal | Watch |
-|---|---|
-| 1. Street space to the property line | Result outside truth and edge distances, property-line squares |
-| 2. Kerb style where the area is kerb style | The same, kerb squares: they must not get worse |
-| 3. Snap to fences, walls and hedges | Inner edges that follow a fence; that follow nothing |
-| 4. Buildings: follow the wall | Inner edges that follow a building; buildings split |
-| 5. Straight free edges | Bends per 100 m of inner edge that follows nothing |
-| 6. Fewer barriers | Result edge → truth edge, p90 |
-| Swallowing that stays near the stroke | Result outside truth and p90, without more edges that follow nothing |
+| Proposal | Watch | Moved (all squares unless named) |
+|---|---|---|
+| 1. Street space to the property line | Result outside truth and edge distances, property-line squares | Outside 7.8% → 4.5%, truth edge median 1.4 → 0.9 m |
+| 2. Kerb style where the area is kerb style | The same, kerb squares: they must not get worse | Unchanged |
+| 3. Snap to fences, walls and hedges | Inner edges that follow a fence; that follow nothing | Fence 20.6% → 23.6%, nothing 31.1% → 28.3% |
+| 4. Buildings: follow the wall | Inner edges that follow a building; buildings split | Building 7.7% → 14.8%, split 7.3% → 7.5% |
+| 5. Straight free edges | Bends per 100 m of inner edge that follows nothing | 7.4 → 3.2 |
+| 6. Fewer barriers | Result edge → truth edge, p90 | 14.1 → 13.9 m (private streets only) |
+| Swallowing that stays near the stroke | Result outside truth and p90, without more edges that follow nothing | Outside 4.1% → 3.6%, p90 13.9 → 8.4 m, nothing 20.0% → 20.6% |
+
+### Proposals made (`replay-2026-10-proposals.txt`)
+
+Made in this order, one commit each, with the replay run after each. Saved run:
+`replay-results-2026-10-proposals.json.gz`.
+
+| Step | IoU | Outside truth | Truth missed | Result → truth edge, p90 | Inner edges: nothing / fence / building | Bends per 100 m, free edge | Buildings split |
+|---|---|---|---|---|---|---|---|
+| Baseline | 0.894 | 6.4% | 4.7% | 15.9 m | 31.1 / 20.6 / 7.7% | 9.9 | 7.4% |
+| 1 + 2. Property line, or kerb (LAT-003, LAT-009) | 0.907 | 4.2% | 5.5% | 14.4 m | 31.1 / 20.6 / 7.8% | 9.9 | 7.4% |
+| 3. Fences, walls, hedges (SNAP-108) | 0.908 | 4.2% | 5.4% | 14.6 m | 28.3 / 23.6 / 7.7% | 10.0 | 7.3% |
+| 4. Building margin 0.5 m (TUNE-BUILDING-MARGIN) | 0.910 | 4.1% | 5.4% | 14.6 m | 21.6 / 24.3 / 14.8% | 7.4 | 7.5% |
+| 5. Straight free edges (SNAP-111) | 0.909 | 4.1% | 5.5% | 14.1 m | 20.0 / 25.4 / 14.6% | 3.2 | 7.5% |
+| 6. Private streets (LAT-001) | 0.909 | 4.1% | 5.5% | 13.9 m | 20.0 / 25.4 / 14.6% | 3.2 | 7.5% |
+| 7. Swallow near the paint (CORR-003) | 0.912 | 3.6% | 5.6% | 8.4 m | 20.6 / 25.5 / 14.8% | 3.3 | 7.5% |
+| Mappers | | | | | 14.8 / 34.7 / 14.5% | 1.9 | 4.8% |
+
+Now, by street style:
+
+| | All | Kerb (60) | Property line (164) | Mappers |
+|---|---|---|---|---|
+| Overlap (IoU) | 0.912 | 0.906 | 0.916 | |
+| Truth missed | 5.6% | 6.6% | 4.8% | |
+| Result outside truth | 3.6% | 3.2% | 4.0% | |
+| Result edge → truth edge, median / p90 | 1.1 / 8.4 m | 1.1 / 6.9 m | 0.9 / 8.4 m | |
+| Truth edge → result edge, median / p90 | 0.9 / 5.6 m | 1.1 / 8.6 m | 0.9 / 4.6 m | |
+| Inner edges that follow nothing | 20.6% | 19.0% | 21.4% | 14.8% |
+| … that follow a fence, wall or hedge | 25.5% | 19.1% | 27.1% | 34.7% |
+| … that follow a building | 14.8% | 19.5% | 15.9% | 14.5% |
+| Bends per 100 m of edge | 4.7 | 3.6 | 5.3 | 3.5 |
+| Bends per 100 m of inner edge that follows nothing | 3.3 | 3.0 | 3.5 | 1.9 |
+| Buildings split | 7.5% | 6.1% | 8.0% | 4.8% |
+
+**How each went.**
+
+1. **Street space to the property line.** Property-line half-widths per class, `width=*` only widening
+   (width ÷ 2 + TUNE-WIDTH-VERGE), and the land from a street's centreline to TUNE-SIDEWALK-MARGIN past each
+   sidewalk running along it within TUNE-SIDEWALK-REACH. The first run split more buildings (7.4% → 10.3%):
+   the wider street space cut into buildings standing on the property line. Street space past the kerb now
+   stops at building walls, which brought that back to 7.4%. Truth missed rises (property-line squares
+   3.7% → 4.8%) as the price of result outside truth falling (7.8% → 4.0%).
+2. **Kerb style.** The editor judges the style from the sidewalk running within 6 m of existing landuse
+   edges, inside against outside, with at least TUNE-STYLE-EVIDENCE of it. Against the study's verdicts it
+   agrees on 59 of 60 kerb squares and 159 of 164 property-line ones; of the 41 unknown, it calls 5 kerb. The
+   replay judges from the full data, landuse included, as the editor would; only the painting hides it.
+3. **Fences.** A smaller gain than the mappers' 35% suggests: a fence divides cells only where it cuts the
+   block apart, and a fence that ends inside the block does not.
+4. **Building walls.** Inner edges that follow a building now match the mappers.
+5. **Straight free edges.** Douglas–Peucker at TUNE-STRAIGHTEN × brush radius on each stretch off the
+   piece outline and the cells, then corners within 20° of square made square. 1.0 instead of 0.5 gives 2.4
+   bends but IoU 0.905. A rounded outer corner of a stroke becomes a chamfer, not a square corner.
+6. **Fewer barriers.** Only private residential and living streets. Living streets that are dead ends,
+   loops or rings were tried as well: in the 23 squares they change, they add 38,600 m² of result, of which
+   16,300 m² is truth (Warsaw 8_5 −0.030 IoU, Riga 7_3 −0.020). There, mappers stop at the living street.
+7. **Swallowing near the paint (CORR-003).** A swallowed leftover reaches at most TUNE-SWALLOW-REACH ×
+   brush radius from the paint. Kyiv 1_4 goes from 0.612 to 0.671 IoU; 143 of the 174 squares that change get
+   better. Kerb squares miss a little more (truth edge → result edge p90 5.9 → 8.6 m): Berlin maps 1–3 m
+   landuse strips around parks, which the idealised strokes barely reach and swallowing used to fill end to
+   end. Reach 2.5 gives p90 9.1 m overall and 7.9 m there; 4 gives 10.4 and 7.4.
+
+**What is left.**
+
+- Edges that follow nothing: 20.6% against 14.8%. Fences that end inside a block are the obvious next target.
+- Bends per 100 m of all edge: 4.7 against 3.5, and 5.3 in property-line squares. Street edges now step around
+  building fronts and follow sidewalk geometry.
+- Buildings split: 7.5% against 4.8%, untouched by any of this.
 
 **Limits.** One idealised stroke pattern at one wobble. Only careful, block-by-block squares, so it says
 nothing about neighbourhood-style areas (Q-009). Sidewalk style is unknown for 41 squares. The first

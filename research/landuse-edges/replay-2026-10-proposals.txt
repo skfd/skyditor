@@ -1,0 +1,50 @@
+265 squares replayed, 0 failed; 6.3 s per square.
+Street style, study -> editor: kerb -> kerb 59, kerb -> property_line 1, property_line -> kerb 5, property_line -> property_line 159, unknown -> kerb 5, unknown -> property_line 36.
+
+== all (265 squares, 46.26 km² of truth)
+Overlap: IoU 0.912; truth missed 5.6%, result outside truth 3.6%.
+Strokes: 11562; claimed whole 0.6% of painted area; truth no brush fits 0.0%.
+Result edge to truth edge: median 1.1 m, p90 8.4 m, within 1 m 49.4%, within 3 m 74.6%.
+Truth edge to result edge: median 0.9 m, p90 5.6 m, within 1 m 53.3%, within 3 m 79.1%.
+result  inner edges 654.4 km: fence 25.5%, building 14.8%, context 30.6%, minor way 6.8%, street 1.8%, nothing 20.6%
+result  vertices turning >= 5 deg: 4.7 per 100 m of edge, 3.3 per 100 m of inner edge that follows nothing
+result  buildings split: 7.5% of 48031 touching landuse
+truth   inner edges 618.8 km: fence 34.7%, building 14.5%, context 33.8%, minor way 1.2%, street 1.0%, nothing 14.8%
+truth   vertices turning >= 5 deg: 3.5 per 100 m of edge, 1.9 per 100 m of inner edge that follows nothing
+truth   buildings split: 4.8% of 48080 touching landuse
+
+== kerb (60 squares, 12.03 km² of truth)
+Overlap: IoU 0.906; truth missed 6.6%, result outside truth 3.2%.
+Strokes: 2459; claimed whole 0.8% of painted area; truth no brush fits 0.0%.
+Result edge to truth edge: median 1.1 m, p90 6.9 m, within 1 m 48.9%, within 3 m 75.8%.
+Truth edge to result edge: median 1.1 m, p90 8.6 m, within 1 m 47.8%, within 3 m 73.9%.
+result  inner edges 125.2 km: fence 19.1%, building 19.5%, context 33.7%, minor way 7.4%, street 1.3%, nothing 19.0%
+result  vertices turning >= 5 deg: 3.6 per 100 m of edge, 3.0 per 100 m of inner edge that follows nothing
+result  buildings split: 6.1% of 12136 touching landuse
+truth   inner edges 123.2 km: fence 25.8%, building 18.5%, context 36.7%, minor way 2.3%, street 1.9%, nothing 14.7%
+truth   vertices turning >= 5 deg: 4.3 per 100 m of edge, 1.6 per 100 m of inner edge that follows nothing
+truth   buildings split: 5.1% of 12166 touching landuse
+
+== property_line (164 squares, 28.37 km² of truth)
+Overlap: IoU 0.916; truth missed 4.8%, result outside truth 4.0%.
+Strokes: 8063; claimed whole 0.6% of painted area; truth no brush fits 0.0%.
+Result edge to truth edge: median 0.9 m, p90 8.4 m, within 1 m 50.1%, within 3 m 75.4%.
+Truth edge to result edge: median 0.9 m, p90 4.6 m, within 1 m 55.9%, within 3 m 82.1%.
+result  inner edges 434.6 km: fence 27.1%, building 15.9%, context 27.5%, minor way 6.9%, street 1.3%, nothing 21.4%
+result  vertices turning >= 5 deg: 5.3 per 100 m of edge, 3.5 per 100 m of inner edge that follows nothing
+result  buildings split: 8.0% of 32979 touching landuse
+truth   inner edges 405.6 km: fence 36.4%, building 16.1%, context 30.6%, minor way 1.0%, street 0.3%, nothing 15.6%
+truth   vertices turning >= 5 deg: 3.3 per 100 m of edge, 2.1 per 100 m of inner edge that follows nothing
+truth   buildings split: 4.7% of 32993 touching landuse
+
+== unknown (41 squares, 5.86 km² of truth)
+Overlap: IoU 0.901; truth missed 7.3%, result outside truth 3.0%.
+Strokes: 1040; claimed whole 0.4% of painted area; truth no brush fits 0.0%.
+Result edge to truth edge: median 1.4 m, p90 13.6 m, within 1 m 45.7%, within 3 m 66.7%.
+Truth edge to result edge: median 0.9 m, p90 6.6 m, within 1 m 50.8%, within 3 m 73.3%.
+result  inner edges 94.5 km: fence 26.7%, building 3.4%, context 40.5%, minor way 5.5%, street 4.9%, nothing 19.0%
+result  vertices turning >= 5 deg: 3.8 per 100 m of edge, 2.3 per 100 m of inner edge that follows nothing
+result  buildings split: 7.4% of 2916 touching landuse
+truth   inner edges 90.0 km: fence 39.2%, building 2.1%, context 44.1%, minor way 0.6%, street 2.9%, nothing 11.1%
+truth   vertices turning >= 5 deg: 2.5 per 100 m of edge, 1.5 per 100 m of inner edge that follows nothing
+truth   buildings split: 4.8% of 2921 touching landuse
