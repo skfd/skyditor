@@ -1,0 +1,50 @@
+# name country region lat lon — a city for the planet-run grid (grid.py). Comments start with #.
+# region is the osm-extracts store name holding the city (osm_extracts.py path <region>), or a .osm.pbf path.
+# Centres are moved inland where the city centre is on the water, so fewer squares fall in the sea.
+# Kerb style in the first batch
+berlin      DE berlin            52.5200   13.4050
+hamburg     DE hamburg           53.5600   10.0000
+bremen      DE bremen            53.0790    8.8017
+munich      DE oberbayern        48.1372   11.5756
+karlsruhe   DE karlsruhe-regbez  49.0069    8.4037
+dresden     DE sachsen           51.0504   13.7373
+leipzig     DE sachsen           51.3397   12.3731
+prague      CZ czech-republic    50.0755   14.4378
+brno        CZ czech-republic    49.1951   16.6068
+tallinn     EE estonia           59.4200   24.7200
+tartu       EE estonia           58.3780   26.7290
+vienna      AT austria           48.2082   16.3738
+graz        AT austria           47.0707   15.4395
+# Property-line style in the first batch
+helsinki    FI finland           60.2000   24.9400
+tampere     FI finland           61.4978   23.7610
+turku       FI finland           60.4518   22.2666
+utrecht     NL utrecht           52.0907    5.1214
+amersfoort  NL utrecht           52.1561    5.3878
+rotterdam   NL zuid-holland      51.9244    4.4777
+den_haag    NL zuid-holland      52.0600    4.3300
+amsterdam   NL noord-holland     52.3676    4.9041
+warsaw      PL mazowieckie       52.2297   21.0122
+krakow      PL malopolskie       50.0647   19.9450
+wroclaw     PL dolnoslaskie      51.1079   17.0385
+gdansk      PL pomorskie         54.3600   18.6000
+# Not sampled before
+copenhagen  DK denmark           55.6761   12.5683
+aarhus      DK denmark           56.1600   10.1700
+riga        LV latvia            56.9496   24.1052
+vilnius     LT lithuania         54.6872   25.2797
+zurich      CH switzerland       47.3769    8.5417
+bern        CH switzerland       46.9480    7.4474
+stockholm   SE sweden            59.3293   18.0686
+gothenburg  SE sweden            57.7089   11.9746
+paris       FR ile-de-france     48.8566    2.3522
+london      GB greater-london    51.5074   -0.1278
+budapest    HU hungary           47.4979   19.0402
+kyiv        UA work/regions/ukraine.osm.pbf  50.4501  30.5234
+lviv        UA work/regions/ukraine.osm.pbf  49.8397  24.0297
+toronto     CA ontario           43.6800  -79.4000
+ottawa      CA ontario           45.3800  -75.7000
+guelph      CA ontario           43.5448  -80.2482
+montreal    CA quebec            45.5017  -73.5673
+vancouver   CA british-columbia  49.2500 -123.1000
+calgary     CA alberta           51.0447 -114.0719

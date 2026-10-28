@@ -1,5 +1,5 @@
 """Loads an OSM XML file into local metres (x east, y north) around its centre, with shapely geometry."""
-import math
+import gzip, math
 import xml.etree.ElementTree as ET
 from shapely.geometry import LineString, Polygon, box
 from shapely.ops import polygonize, unary_union
@@ -16,7 +16,7 @@ FENCE = {"fence", "wall", "hedge", "retaining_wall", "city_wall"}
 
 class Area:
     def __init__(self, path, centre=None, core_half=300):
-        root = ET.parse(path).getroot()
+        root = ET.parse(gzip.open(path) if str(path).endswith(".gz") else path).getroot()
         raw = {n.get("id"): (float(n.get("lat")), float(n.get("lon"))) for n in root.iter("node")}
         if centre:
             self.lat0, self.lon0 = centre
