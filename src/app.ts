@@ -624,7 +624,7 @@ export class App {
     const claims = events.filter((e) => e.type === "claim").length;
     for (const e of events) {
       // FEEL-002: simultaneous claims ripple outwards from the cursor.
-      const delay = claims > 1 ? (TUNE.POP_STAGGER * Math.hypot(e.at[0] - cursor[0], e.at[1] - cursor[1])) / 10 : 0;
+      const delay = claims > 1 ? TUNE.POP_STAGGER * Math.hypot(e.at[0] - cursor[0], e.at[1] - cursor[1]) : 0;
       switch (e.type) {
         case "claim": {
           const path = pathOf(e.region);

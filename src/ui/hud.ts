@@ -25,6 +25,7 @@ export const TOOLS: ToolDef[] = [
     color: KINDS[k].color,
     tags: tagString(k),
   })),
+  // DENS-001 / KIND-007: the density tools and the eraser, each with its key.
   { id: "UP", tool: { type: "density", dir: 1 }, label: "Density up", key: "A", icon: ICONS.UP, color: "#e2683c", tags: "one step up the residential ladder" },
   { id: "DOWN", tool: { type: "density", dir: -1 }, label: "Density down", key: "Z", icon: ICONS.DOWN, color: "#6f9bd1", tags: "one step down the residential ladder" },
   { id: "ERASE", tool: { type: "erase" }, label: "Eraser", key: "X", icon: ICONS.ERASE, color: "#9a8f80", tags: "removes painted landuse" },

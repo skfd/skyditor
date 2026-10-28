@@ -148,7 +148,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     addArea(`way/${w.id}`, t, [toRing(pts)]);
   }
 
-  // LOAD-005/006: multipolygons from member ways.
+  // LOAD-005 / LOAD-006: multipolygons from member ways; rings that cannot close are skipped and counted.
   for (const r of osm.relations) {
     if (r.tags.type !== "multipolygon" || !classifyArea(r.tags)) continue;
     const parts: number[][] = [];

@@ -148,7 +148,7 @@ export class Stroke {
         continue;
       }
       const next = tier + dir;
-      if (next < 1 || next > 6) {
+      if (next < 1 || next > 6) { // DENS-003: the ladder ends bump instead of wrapping
         events.push({ type: "bump", piece: p, at: [x, y] });
         continue;
       }

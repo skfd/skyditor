@@ -35,8 +35,9 @@ and not only what is *formally compliant*.
 
 - IDs are `AREA-NNN` (for example `SNAP-004`). They are never reused or renumbered.
 - A retired requirement stays in the file, struck through, with a note on what replaced it.
-- Numeric feel and tuning values live in the **tuning table (§16)** as `TUNE-*` IDs. Requirements refer
-  to them by ID instead of repeating numbers. The code mirrors the table in `src/tuning.ts`.
+- Numeric feel and tuning values live in the **tuning table (§16)** as `TUNE-*` IDs, one ID per row.
+  Requirements refer to them by ID instead of repeating numbers. The code mirrors the table in
+  `src/tuning.ts`, and `npm test` fails when a row and its mirror disagree.
 
 ### 0.3 Corrections (CORR)
 
@@ -57,8 +58,14 @@ has been absorbed into a rewritten requirement, it may be retired.
 
 - Code that implements a requirement cites its ID in a nearby comment, for example `// SNAP-004`.
 - Tests name the IDs they verify in the test title, for example `it("SNAP-004: leftover strip …")`.
-- `npm run trace` lists every requirement with its implementing and testing locations, and fails if the
-  code cites an ID that does not exist here.
+- A requirement that cannot be traced the usual way says so in a `Trace:` line after its statement:
+  - `Trace: manual` — implemented and cited in code, but checked by hand in the running app rather
+    than by a unit test (animation, sound, layout, input bindings, network).
+  - `Trace: policy` — holds by construction or review; nothing in the code to cite (non-goals, what the
+    user must never see).
+- `npm run trace` lists every requirement with its implementing and testing locations. It fails if code
+  or tests cite an ID that does not exist here, and if a requirement without a `Trace:` line is cited
+  nowhere in the code. Requirements that could have a test but don't are counted, not failed.
 
 ### 0.5 Change protocol
 
@@ -96,10 +103,12 @@ has been absorbed into a rewritten requirement, it may be retired.
 
 **GEN-001** The editor shall run in a desktop web browser without a server component, other than public
 OSM data services.
+  Trace: policy
 
 **GEN-002** The editor shall never show the user its internal concepts (atoms, pieces, coverage,
 thresholds, buffers). The user sees only: map, landuse colours, brush, tools, and results.
   Why: the snapping can get as clever as it needs to internally; the user just paints.
+  Trace: policy
 
 **GEN-003** The editor shall keep all geometry in a local planar coordinate system, in metres, centred on
 the loaded area.
@@ -112,6 +121,7 @@ TUNE-GEOM-SCALE.
 a keyboard. Keys are shortcuts, never the only way to do something.
   Why: people paint with a mouse or a finger and may have no hand, or no keyboard, for keys. Alt-click
   picking (PAINT-008) is a shortcut for choosing a palette tile, so the palette covers it.
+  Trace: manual
 
 ---
 
@@ -121,9 +131,11 @@ a keyboard. Keys are shortcuts, never the only way to do something.
 
 **LOAD-002** When the user picks a place from the search results, the editor shall load a square area of
 side TUNE-AREA-SIDE centred on that place.
+  Trace: manual
 
 **LOAD-003** When loading an area by bounding box, the editor shall first query the Overpass API and, if
 that fails, query the OSM API 0.6 `map` call.
+  Trace: manual
 
 **LOAD-004** When the user drops an `.osm` (XML) or Overpass JSON file onto the editor, the editor shall
 load that file. The area is the file's declared bounds, or the extent of its nodes if there are none.
@@ -136,13 +148,16 @@ and count the skipped ring in the load report.
 
 **LOAD-007** While an area is loading, the editor shall show the current loading stage (fetching,
 reading, building blocks, reading landuse).
+  Trace: manual
 
 **LOAD-008** If loading fails, then the editor shall show a short reason and return to the start screen,
 without changing any area that was already loaded.
+  Trace: manual
 
 **LOAD-009** When the page URL contains `#map=<lat>/<lon>`, the editor shall load the area centred there,
 and it shall keep that fragment updated with the loaded area's centre. The demo area uses `#demo`.
   Why: repeatable dev sessions and shareable places.
+  Trace: manual
 
 ---
 
@@ -195,6 +210,7 @@ only becomes a notch in the atom.
 **KIND-002** The editor shall present R1–R6 as one ordered ladder, from rural to high-rise, and never as
 unrelated categories.
   Why: residential density is a progression. The UI, colour, height and sound should all say so.
+  Trace: manual
 
 **KIND-003** The editor shall give each tier a colour on one continuous ramp, and a slab height
 TUNE-LIFT that strictly increases from R1 to R6.
@@ -253,6 +269,7 @@ the user has changed it.
 
 **IMP-009** Where the "original outlines" view is on (key `O`), the editor shall draw the unmodified OSM
 outlines of paintable features on top of the map.
+  Trace: manual
 
 ### Overlaps and disputes
 
@@ -378,6 +395,7 @@ cursor has moved at least TUNE-TRAIL-STEP × brush radius from the previous poin
 
 **PAINT-003** While a stroke is active, the editor shall draw the brush trail as a soft translucent band in
 the kind's colour.
+  Trace: manual
 
 **PAINT-004** The editor shall never change the kind or shape of exclusive-context pieces or water by
 painting, erasing or density changes. Settling a dispute in favour of the context (DISP-004) is the only
@@ -394,6 +412,7 @@ that piece alone, unless it is disputed (DISP-002). It is not a claim.
 
 **PAINT-008** When the user Alt-clicks a piece, the editor shall select that piece's kind as the current
 tool. For unspecified residential, or an empty spot, nothing changes.
+  Trace: manual
 
 **PAINT-009** If the cursor enters exclusive context or water during a paint or eraser stroke, then the
 editor shall play the *reject* feedback (FEEL-004), at most once per stroke. A tap that settles a dispute
@@ -408,6 +427,7 @@ gesture (CAM-006).
 **PAINT-011** While any finger of a two-finger gesture is still on the map, the editor shall not start a
 stroke.
   Why: lifting the fingers one at a time must not paint with the last one.
+  Trace: manual
 
 ---
 
@@ -430,6 +450,7 @@ piece.
 **SNAP-005** While a stroke is active, the editor shall show each partly covered unit piece charging: a
 dashed outline and a light fill in the stroke's colour, both growing with covered fraction ÷
 TUNE-CLAIM-COVERAGE. A charging piece shall never look claimed.
+  Trace: manual
 
 **SNAP-006** When a stroke ends, the editor shall drop the charge of every unit piece that was not
 claimed, with no change to the piece.
@@ -470,6 +491,7 @@ building within that margin of the result shall be left out, with the same margi
 
 **SNAP-105** While a stroke is active, the editor shall show the snapped freeform result as a live preview
 in the stroke's colour, updated at least every TUNE-PREVIEW-INTERVAL.
+  Trace: manual
 
 **SNAP-106** When a stroke ends, the editor shall apply the snapped freeform result. Its shape shall be
 simplified with tolerance TUNE-SIMPLIFY, and it shall settle into place with the claim animation
@@ -527,6 +549,7 @@ recently reverted step.
 
 **UNDO-004** When an undo or redo changes pieces, the editor shall animate them with the short settle
 animation (FEEL-006), so the user can see what changed.
+  Trace: manual
 
 ---
 
@@ -534,14 +557,18 @@ animation (FEEL-006), so the user can see what changed.
 
 **CAM-001** When the user turns the mouse wheel or pinches, the editor shall zoom towards the cursor, with
 smooth motion (TUNE-ZOOM-*).
+  Trace: manual
 
 **CAM-002** When the user drags with the secondary or middle button, or with the primary button while
 holding Space, the editor shall pan the map. After release, it shall coast to a stop (TUNE-PAN-*).
+  Trace: manual
 
 **CAM-003** When the user presses an arrow key, the editor shall pan the map smoothly in that direction.
+  Trace: manual
 
 **CAM-004** When an area finishes loading, or the user presses `F` or the fit button (HUD-006), the editor shall move the camera to fit
 the whole area.
+  Trace: manual
 
 **CAM-005** The editor shall keep the zoom within TUNE-ZOOM-MIN..TUNE-ZOOM-MAX pixels per metre, and keep the
 view centre within the area.
@@ -549,14 +576,18 @@ view centre within the area.
 **INP-001** When the user presses `[` or `]`, presses a brush size button (HUD-006), or turns the wheel
 while holding Shift, the editor shall shrink or grow the brush within TUNE-BRUSH-MIN..TUNE-BRUSH-MAX
 pixels, by TUNE-BRUSH-STEP per press.
+  Trace: manual
 
 **INP-002** When the user presses a tool key (KIND-001, KIND-007, DENS-001), the editor shall select that
 tool.
+  Trace: manual
 
 **INP-003** When the user presses `B`, the editor shall toggle the building layer. When the user presses
 `M`, it shall toggle sound. When the user presses `H` or `?`, it shall toggle the help panel.
+  Trace: manual
 
 **INP-004** The editor shall not open the browser context menu over the map.
+  Trace: manual
 
 **CAM-006** When the user drags two fingers on the map, the editor shall pan and zoom at once: the map point
 under the fingers' midpoint stays under it, and the zoom follows the change in the fingers' spread. After
@@ -576,17 +607,21 @@ TUNE-ZOOM-STEP towards the centre of the view, with smooth motion.
 overlay context, landuse slabs, buildings, the edges of disputed pieces (REN-013), the stroke trail and
 preview, and the brush cursor.
   Why: overlay context (grass, parking) lives inside landuse; painted land must look fully painted.
+  Trace: manual
 
 **REN-002** The editor shall draw each landuse piece as a *slab*: the top face at its true position, and a
 darker side face directly below it, offset downwards by the kind's lift in screen pixels, scaled with
 zoom within TUNE-LIFT-ZOOM-CLAMP.
   Why: height reads as density at a glance, but the top face stays exactly where the data is.
+  Trace: manual
 
 **REN-003** The editor shall draw slabs in north-to-south order, so that southern slabs hide the sides of
 northern slabs.
+  Trace: manual
 
 **REN-004** The editor shall draw a thin gap (TUNE-PIECE-GAP) between neighbouring pieces of different
 kinds within an atom.
+  Trace: manual
 
 ~~**REN-005** Where the building layer is on, the editor shall draw OSM building footprints as faint shapes
 over the landuse.~~ Retired: replaced by REN-009 and REN-010.
@@ -594,11 +629,14 @@ over the landuse.~~ Retired: replaced by REN-009 and REN-010.
 **REN-006** While a paint tool is selected and the cursor is over the map, the editor shall faintly outline
 the atoms within TUNE-HINT-RADIUS × brush radius of the cursor.
   Why: it shows where things will snap, without explaining why.
+  Trace: manual
 
 **REN-007** When the cursor is over a piece, the editor shall highlight that piece slightly.
+  Trace: manual
 
 **REN-008** The editor shall keep 60 frames per second on the demo area on a typical laptop, and shall
 redraw only when something changed or is animating.
+  Trace: manual
 
 **REN-009** Where the building layer is on, the editor shall draw each building whose look (BLD-001) is
 not unknown in its look's colour mixed TUNE-BUILDING-SHADE of the way towards the neutral building colour,
@@ -609,6 +647,7 @@ context colour (REN-015).
 
 **REN-010** Where the building layer is on, the editor shall draw buildings with the look unknown as faint
 shapes in the neutral building colour.
+  Trace: manual
 
 **REN-011** Where the building layer is on, the editor shall draw each building that disagrees with its
 land (BLD-007) with a dark edge in its look's colour and a ripple: a copy of that edge that grows out of the
@@ -619,6 +658,7 @@ step.
 **REN-012** The editor shall draw a disputed piece in its own kind, striped with its rival's colour
 (TUNE-DISPUTE-STRIPE).
   Why: both claims stay visible. Stripes already read as "not settled" (KIND-004).
+  Trace: manual
 
 **REN-013** The editor shall edge each disputed piece with small red spikes pointing outwards,
 TUNE-SPIKE-SPACING apart, that creep along the edge at TUNE-SPIKE-SPEED.
@@ -627,6 +667,7 @@ TUNE-SPIKE-SPACING apart, that creep along the edge at TUNE-SPIKE-SPEED.
 **REN-014** While the only motion on screen is the ripples (REN-011) and spikes (REN-013), the editor shall
 redraw at most once every TUNE-AMBIENT-INTERVAL.
   Why: slow motion needs few frames. Constant full-rate redraws would cost battery for nothing (REN-008).
+  Trace: manual
 
 **REN-015** The editor shall draw each exclusive-context piece flat, in the colour of its class, each class
 clearly distinct from the others and from the paintable kinds:
@@ -656,62 +697,79 @@ spikes, stripes or motion.
 
 **FEEL-001** When a piece is claimed, the editor shall play the *pop*: the slab rises from the ground to its
 lift with an overshoot (TUNE-POP-*), a brief light flash fades out, and the pop sound plays.
+  Trace: manual
 
 **FEEL-002** When several pieces are claimed at the same moment, the editor shall stagger their pops by
 distance from the cursor (TUNE-POP-STAGGER).
+  Trace: manual
 
 **FEEL-003** Where sound is on, the editor shall play claim sounds whose pitch rises with tier; commercial,
 retail and industrial each have their own pitch outside the residential range.
+  Trace: manual
 
 **FEEL-004** When an action is rejected, the editor shall play the *reject*: a short horizontal shake of the
 brush cursor with a red tint, and a low sound.
+  Trace: manual
 
 **FEEL-005** When a density step hits the top or bottom of the ladder, the editor shall play the *bump*: a
 small hop of the slab, with no change.
+  Trace: manual
 
 **FEEL-006** When pieces change because of undo or redo, the editor shall play a shortened pop without
 overshoot.
+  Trace: manual
 
 **FEEL-007** When an area finishes loading, the editor shall reveal the existing landuse with a quick pop
 wave from the centre outwards, lasting no longer than TUNE-REVEAL-MAX.
+  Trace: manual
 
 **FEEL-008** Where the user prefers reduced motion, the editor shall scale every animation duration by
 TUNE-REDUCED-MOTION and leave out overshoot, shake and stagger. Ripples (REN-011) become a steady outline,
 and spikes (REN-013) stand still.
+  Trace: manual
 
 **FEEL-009** The editor shall never make the user wait for an animation: input stays live during every
 animation, and the model is updated before the animation starts.
+  Trace: manual
 
 ### 14.3 HUD
 
 **HUD-001** The editor shall show a palette with the residential ladder as one connected strip of six tiles
 (R1→R6) whose icons grow in height, followed by commercial, retail, industrial, density up/down and the
 eraser.
+  Trace: manual
 
 **HUD-002** When the user points at a palette tile, the editor shall show the tile's name, its key, and the
 OSM tags it stands for.
+  Trace: manual
 
 **HUD-003** The editor shall show a *district mix* bar: the share of the area's land held by each kind
 (R1–R6, unspecified residential, commercial, retail, industrial, exclusive context, void). Each segment
 moves smoothly to its new value after every change.
   Why: like a city-builder's zoning meter — it tells you what the district is made of.
+  Trace: manual
 
 **HUD-004** The editor shall show the brush cursor as a ring in the current tool's colour, with its radius
 following the brush size.
+  Trace: manual
 
 **HUD-005** The editor shall show the OSM attribution "© OpenStreetMap contributors" whenever OSM data is
 on screen.
+  Trace: manual
 
 **HUD-006** The editor shall show map controls at the side of the map: undo and redo (UNDO-001, UNDO-002),
 zoom in and out (CAM-007), fit area (CAM-004), and brush grow and shrink (INP-001) around a dot that shows
 the brush size. Undo and redo shall look disabled while there is nothing to undo or redo.
   Why: GEN-005. Each control does exactly what its key does.
+  Trace: manual
 
 **HUD-007** The editor shall show toggle buttons for the building layer (INP-003) and the original
 outlines (IMP-009), each showing whether its layer is on.
+  Trace: manual
 
 **HUD-008** The editor shall list, in the help panel, the pointer or touch way of doing each action next to
 its key.
+  Trace: manual
 
 **HUD-009** While any piece is disputed, the editor shall show a button in the top bar with the number of
 places where the map disagrees (one per disputed piece). It is hidden while there are none.
@@ -724,29 +782,36 @@ flash it.
 **HUD-011** When a change settles the last disputed piece, the editor shall say briefly that the map no
 longer disagrees anywhere.
   Why: finishing the list is a small win. It should feel like one.
+  Trace: manual
 
 **HUD-012** When the user presses a badge (REN-016), the editor shall show next to it what the area is
 tagged as, the landuse tag it lacks, and a link that opens the area on openstreetmap.org in a new tab.
 Pressing anywhere else closes it.
   Why: the editor writes no tags (NG-001), so the fix happens in OSM. The link takes the user straight
   there.
+  Trace: manual
 
 ---
 
 ## 15. Non-goals for M0
 
 **NG-001** The editor shall not upload, export, or otherwise write OSM data in M0.
+  Trace: policy
 
 **NG-002** The editor shall not edit any feature other than the landuse kinds in §5.
+  Trace: policy
 
 **NG-003** The editor shall not show a raster basemap.
   Why: the lattice *is* the map. Roads and blocks come from the same data the user is painting on.
+  Trace: policy
 
 ---
 
 ## 16. Tuning table
 
-All numbers here are starting values to be tuned by feel. The code mirrors them in `src/tuning.ts`.
+All numbers here are starting values to be tuned by feel. The code mirrors them in `src/tuning.ts`, and
+`tests/tuning.test.ts` reads this table and fails when a row and its mirror disagree. One ID per row; a
+range or a per-key list is written as it is in the code, in the same order.
 
 | ID | Value | Meaning |
 |----|-------|---------|
@@ -760,7 +825,8 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-NEST-INSIDE | 0.9 | Share of the smaller feature's land that must lie inside the larger one for nesting (CORR-001). |
 | TUNE-NEST-SIZE | 0.8 | Largest land area of the smaller feature, as a share of the larger one's, for nesting (CORR-001). |
 | TUNE-BRUSH-DEFAULT | 30 px | Initial brush radius. |
-| TUNE-BRUSH-MIN / MAX | 8 / 120 px | Brush radius limits. |
+| TUNE-BRUSH-MIN | 8 px | Smallest brush radius. |
+| TUNE-BRUSH-MAX | 120 px | Largest brush radius. |
 | TUNE-BRUSH-STEP | 1.15 | Brush radius factor per key or button press. |
 | TUNE-TRAIL-STEP | 0.2 | Trail point spacing, as a fraction of brush radius. |
 | TUNE-UNIT-FACTOR | 14 | Unit piece limit, as a multiple of brush disc area. |
@@ -786,7 +852,8 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-SIMPLIFY | 0.4 m | Simplification tolerance of committed freeform shapes. |
 | TUNE-SLIVER-AREA | 40 m² | Pieces smaller than this get merged after a change. |
 | TUNE-PREVIEW-INTERVAL | 50 ms | Maximum freeform preview staleness. |
-| TUNE-TAP-MOVE / TAP-TIME | 6 px / 350 ms | Tap detection. |
+| TUNE-TAP-MOVE | 6 px | Farthest a tap may move. |
+| TUNE-TAP-TIME | 350 ms | Longest a tap may last. |
 | TUNE-LIFT | R1 1, R2 2, R3 3, R4 4, R5 6, R6 9 (px) | Slab height per tier at 1 px/m. |
 | TUNE-LIFT-NONRES | 3 px | Slab height of commercial, retail, industrial. |
 | TUNE-LIFT-ZOOM-CLAMP | 0.5 .. 1.6 | Zoom scale factor applied to lift. |
@@ -795,9 +862,10 @@ All numbers here are starting values to be tuned by feel. The code mirrors them 
 | TUNE-POP-DURATION | 340 ms | Claim pop length. |
 | TUNE-POP-OVERSHOOT | 1.7 | Back-ease overshoot constant. |
 | TUNE-POP-FLASH | 200 ms | Flash fade length. |
-| TUNE-POP-STAGGER | 14 ms per 10 m | Pop stagger for simultaneous claims. |
+| TUNE-POP-STAGGER | 1.4 ms per m | Pop stagger for simultaneous claims, per metre from the cursor. |
 | TUNE-REVEAL-MAX | 900 ms | Longest load reveal. |
-| TUNE-ZOOM-MIN / MAX | 0.08 / 12 px/m | Zoom limits. |
+| TUNE-ZOOM-MIN | 0.08 px/m | Farthest zoom out. |
+| TUNE-ZOOM-MAX | 12 px/m | Closest zoom in. |
 | TUNE-ZOOM-STEP | 1.6 | Zoom factor per zoom button press. |
 | TUNE-ZOOM-HALFLIFE | 70 ms | Zoom smoothing half-life. |
 | TUNE-PAN-HALFLIFE | 160 ms | Pan coasting half-life. |

@@ -17,10 +17,14 @@
 ## Checks
 
 ```sh
-npm test            # vitest
+npm test            # vitest; includes tests/tuning.test.ts, which checks §16 against src/tuning.ts
 npm run typecheck   # tsc
-npm run trace       # fails on IDs cited in code/tests that REQUIREMENTS.md doesn't define
+npm run trace       # fails on IDs cited in code/tests that REQUIREMENTS.md doesn't define, and on
+                    # requirements cited nowhere in code (unless marked `Trace: policy`, see §0.4)
 ```
+
+Requirements checked by hand rather than by a unit test carry `Trace: manual`; `trace` lists the ones
+that have neither a marker nor a test, so a new testable requirement without a test shows up there.
 
 Tests build tiny maps in local metres with `Sketch` (`tests/helpers.ts`), e.g.
 `new Sketch(300).grid(200)` → nine blocks, roads every 200 m.
