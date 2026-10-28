@@ -28,6 +28,10 @@ export const ICONS: Record<string, string> = {
   PLUS: svg(`<path d="M14 7v14M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
   MINUS: svg(`<path d="M7 14h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>`),
   BUILDINGS: svg(`${ground}<path d="M4 24V12h9v12z M15 24V5h9v19z M17.5 8h4v2h-4z M17.5 12h4v2h-4z M17.5 16h4v2h-4z M6.5 15h4v2h-4z"/>`),
+  // PEEK-001: an aerial view — a tilted square of ground with a cloud.
+  IMAGERY: svg(`<path d="M14 7l10 6-10 6L4 13z" opacity="0.55"/><path d="M14 11l6 3.6-6 3.6-6-3.6z"/><path d="M6 6.5a2.5 2.5 0 0 1 4.6-1.3A3 3 0 0 1 16 7H6z" opacity="0.7"/>`),
+  // PEEK-003: a camera.
+  PHOTOS: svg(`<path d="M4 9h5l2-2.5h6L19 9h5v13H4z"/><circle cx="14" cy="15" r="3.6" fill="#fff"/><circle cx="14" cy="15" r="1.8"/>`),
   // TYPE-006: the brush target — a brush ring over a house.
   TARGET: svg(`<path d="M5 24v-9l7-6 7 6v9h-5v-5h-4v5z"/><circle cx="19" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3 2.4"/>`),
   // TYPE-012: a question mark in a round mark, the unsure building's badge.

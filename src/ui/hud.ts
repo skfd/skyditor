@@ -66,6 +66,8 @@ export class Hud {
       "btn-buildings": ICONS.BUILDINGS,
       "btn-outlines": ICONS.OUTLINES,
       "btn-target": ICONS.TARGET, // TYPE-006
+      "btn-imagery": ICONS.IMAGERY, // PEEK-001
+      "btn-photos": ICONS.PHOTOS, // PEEK-003
     };
     for (const [id, icon] of Object.entries(icons)) $(`#${id}`).innerHTML = icon;
   }
@@ -109,6 +111,15 @@ export class Hud {
     b.setAttribute("aria-pressed", String(buildings));
     b.title = buildings ? "Painting buildings. Switch to land (T)" : "Painting land. Switch to buildings (T)";
     document.body.classList.toggle("target-buildings", buildings);
+  }
+
+  /** PEEK-001 / PEEK-003: the peek buttons show whether their peek is on; the imagery credit shows with the imagery. */
+  setPeeks(imagery: boolean, photos: boolean, credit: string) {
+    $("#btn-imagery").setAttribute("aria-pressed", String(imagery));
+    $("#btn-photos").setAttribute("aria-pressed", String(photos));
+    const c = $("#imagery-credit");
+    c.hidden = !imagery;
+    c.textContent = imagery ? ` · ${credit}` : "";
   }
 
   /** TYPE-012: how many buildings are still to decide, hidden at none. */
