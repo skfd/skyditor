@@ -842,11 +842,14 @@ write when output arrives? Decide before output exists.
 **Q-002** OSM has no established tag for high-rise residential areas. Options: `residential=apartments`
 plus a `building:levels` hint, `residential=urban`, or a proposal. Until this is decided, R6 is
 "R5 with more height" and does not round-trip through import.
+  In use (44-city run, `research/landuse-edges/`): `residential=*` is on 12% of residential polygons, most
+  often `apartments` (1,345), `urban` (793), `rural` (237), `detached` (204) and `single_family` (136).
 
 ~~**Q-003** Should output landuse stop at the kerb (our atom edge) or extend to road centrelines? The current
 lattice stops at the kerb, which matches the common "don't glue landuse to roads" practice.~~ Answered:
 neither. Landuse never shares nodes with roads, and it stops at the property line, beyond the sidewalk
 (see Q-008 and `research/landuse-edges/`). Street space (LAT-003) does not do this yet; requirements to follow.
+The study's README proposes them, with values.
 
 **Q-004** Should painting suggest a tier from the buildings underneath (count, footprint, levels)? Good
 candidate for M1.
@@ -868,8 +871,16 @@ same way) is an error of the same family as a dispute. IMP-001 currently picks o
 should the editor show it, and how does the user settle it?
 
 **Q-008** Should the editor match the local mapping style for where landuse meets the street? Well-mapped
-areas use two styles: to the kerb, with sidewalks inside the landuse (Munich, Berlin, Prague, Tallinn), and
-to the property line, about 1–2 m beyond a separately mapped sidewalk (Helsinki, Karlsruhe, Warsaw).
-For now the editor uses the property-line style everywhere (Q-003). Later it should detect the style from
-the existing landuse in the loaded area and follow it.
+areas use two styles: to the kerb, with sidewalks inside the landuse (Berlin, Vilnius, Kyiv), and to the
+property line, a median 1.4–1.9 m beyond a separately mapped sidewalk (Finland, Poland, Latvia, Great
+Britain, Canada, Hamburg, Munich). For now the editor uses the property-line style everywhere (Q-003).
+Later it should detect the style from the existing landuse in the loaded area and follow it. The 44-city
+run in `research/landuse-edges/` says this works where sidewalks are mapped separately: a city keeps one
+style (88–93% of square pairs agree), and one 600 m square with about 20 sidewalk crossings decides it.
   Why: an editor that pulls every edit towards one style fights the local mappers.
+
+**Q-009** Most OSM landuse is not drawn block by block. In the 44-city run, 61% of residential street
+length in squares with landuse runs inside it. In the Netherlands, Austria, Switzerland, France, Hungary,
+Denmark and Sweden, almost no square is block by block. The editor writes landuse per block. Should it
+also offer the neighbourhood style where that is the local habit, or leave such areas as they are?
+  Why: the same reasoning as Q-008, one level up.

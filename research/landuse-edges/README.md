@@ -1,9 +1,12 @@
 # Research: how good OSM landuse edges are drawn
 
-Handoff for running this analysis on a planet file. The goal is to find out how careful mappers draw
-landuse in cities, so Skyditor's snapping produces edges they would accept. These numbers will become
-requirements and tuning values (REQUIREMENTS.md §0.5): street space (LAT-003, LAT-007, TUNE-HALFWIDTH)
-and freeform snapping (SNAP-103, SNAP-108, SNAP-109, TUNE-SIMPLIFY).
+How careful mappers draw landuse in cities, so Skyditor's snapping produces edges they would accept.
+These numbers feed requirements and tuning values (REQUIREMENTS.md §0.5): street space (LAT-003, LAT-007,
+TUNE-HALFWIDTH) and freeform snapping (SNAP-103, SNAP-108, SNAP-109, SNAP-106).
+
+Two runs so far: a first batch of 12 hand-picked areas, and a run over 44 cities (3,564 squares) that
+answers the six questions the first batch raised. The answers and the changes they suggest are in
+[44-city run](#44-city-run-geofabrik-october-2026) and [Proposed changes](#proposed-changes).
 
 ## Why
 
@@ -20,34 +23,59 @@ from the road it sits.
   is roads inside a block, such as estate access roads, which the landuse surrounds together with their
   sidewalks. Q-003 is answered this way.
 - **Later: follow the local style** (Q-008). Some cities consistently map to the kerb. The editor should
-  detect the style from the existing landuse and follow it. Nothing is built for this yet.
+  detect the style from the existing landuse and follow it. Nothing is built for this yet. The 44-city
+  run says this is feasible where sidewalks are mapped separately.
 
 ## Running it
 
 Needs Python ≥ 3.10 with `shapely>=2` and `numpy`, plus [osmium-tool](https://osmcode.org/osmium-tool/).
+On this machine osmium runs in docker (image `name-ru-repair-osmium`, as `~/Code/osm-extracts` uses).
+
+**Many cities (the 44-city run).** `cities.txt` lists each city with the regional extract that holds it,
+named as in the shared OSM store (`python ~/Code/osm-extracts/osm_extracts.py fetch --url <geofabrik url>`).
 
 ```sh
-pip install shapely numpy
+python grid.py cities.txt work/                                  # 9 x 9 squares per city -> work/squares/
+python analyze.py --areas work/areas.txt 'work/squares/*.osm.gz' > work/results.json
+python report.py work/results.json > report.txt                  # pooled answers to Q1-Q6
+```
+
+- `grid.py` cuts each city's bbox out of its region, renumbers it, then cuts 81 squares 700 m wide whose
+  centres are 1.2 km apart, so a city's grid runs from the centre about 5 km out. Each city takes 1–3 min.
+- `analyze.py` takes about 15 min for all 3,564 squares on 22 processes. It expands quoted globs itself,
+  since thousands of paths overflow the Windows command line.
+- `results-2026-10.json.gz` and `report-2026-10.txt` are this run's output. `report.py` reads the gzip.
+
+**Not from the planet history file.** The local planet is a full-history file. osmium cuts history only
+with `complete_ways`, two passes, and each extract keeps id sets of about a gigabyte because planet ids are
+spread so widely: 16 city extracts in one pass needed 42 GB. Regional Geofabrik extracts plus `renumber`
+before cutting squares avoid both problems.
+
+**A few hand-picked areas (the first batch).**
+
+```sh
 python extracts.py areas.txt > extracts.json                       # one bbox per area, 700 m square
-osmium extract -c extracts.json -s smart -d extracts/ planet.osm.pbf   # one pass over the planet
-python analyze.py --areas areas.txt extracts/*.osm > results.json
-python summarize.py results.json
+osmium extract -c extracts.json -s smart -d extracts/ region.osm.pbf
+python analyze.py --areas areas.txt 'extracts/*.osm' > results.json
+python summarize.py results.json                                   # one table row per area
 ```
 
 - `-s smart` keeps multipolygons that reach outside the square complete. The first batch came from the
-  OSM API `map` call, which drops incomplete relations, so planet runs should cover slightly more.
+  OSM API `map` call, which drops incomplete relations.
 - The analysis uses the central 600 m (`core_half` in `osmload.py`). The extra 50 m on each side
   supplies the roads and neighbours that edge points near the border are measured against.
-- `analyze.py` runs one process per file. Each area takes a few seconds.
 - No files are written outside the working directory, and nothing is uploaded.
 
 | File | What it does |
 |---|---|
-| `areas.txt` | Sample centres: `name lat lon`. |
+| `cities.txt` | Cities for the grid: `name country region lat lon`. |
+| `grid.py` | Cuts the sample squares for `cities.txt`; writes `work/areas.txt` with each square's city and country. |
+| `areas.txt` | First-batch sample centres: `name lat lon`. |
 | `extracts.py` | Writes the osmium config for `areas.txt`. |
-| `osmload.py` | Loads OSM XML into local metres; holds the tag sets, which mirror LAT-001, SNAP-108 and KIND-001. |
-| `analyze.py` | All metrics, writing one JSON object per area. |
-| `summarize.py` | Prints the results as tables. |
+| `osmload.py` | Loads OSM XML (or `.osm.gz`) into local metres; holds the tag sets, which mirror `src/osm/classes.ts`. |
+| `analyze.py` | All metrics, writing one JSON object per square. |
+| `report.py` | Screens and pools the squares, and prints the answers to Q1–Q6. |
+| `summarize.py` | Prints one row per area; for a handful of areas. |
 
 ## What it measures
 
@@ -65,15 +93,22 @@ Its boundaries are sampled every 2 m inside the central square.
 | `nodes_shared_with_landuse_pct` | Landuse nodes also used by another landuse or context polygon. |
 | `nodes_per_100m`, `segment_m`, `turn_pct` | Node density, segment lengths, and turning angle at each vertex. |
 | `buildings_split_pct` | Buildings touching landuse with between 5% and 95% of their area inside it. |
+| `h_facing`, `h_beyond`, `h_width`, `h_lanes` | Histograms (0.25 m bins) of the facing distance by class and sidewalk state, of the distance past the sidewalk, and by `width`/`lanes`. They add up across squares. |
+| `sidewalk_by_class` | Rays that cross a sidewalk: [sidewalk inside landuse, outside], by class. |
+| `q2_*` | Car-road length [inside landuse, total] by class and how it ends (dead end, loop, ring, through), and by `access`, `service`, `motor_vehicle`, `lanes`. An end outside the square is not judged. |
+| `inner_first`, `inner_any` | Inner-edge samples by first match and by every match. Targets: fence, wall, hedge, retaining wall, kerb line, building wall (parallel within 20°), crossing a building, inside a building, context edge, neighbouring paintable landuse, footway or path, service road. |
+| `nothing_runs` | Runs of consecutive inner samples that follow nothing: length, largest distance from the chord, vertices turning ≥ 5° and their angles. |
+| `q4_lot_areas`, `q4_block_areas`, `q4_fit` | Faces between roads, fences, walls, hedges and context edges, less street space (TUNE-HALFWIDTH); the blocks between roads alone; and how much landuse area whole faces cover when a face counts at ≥ 60% or ≥ 80% inside one polygon. |
 
 **Known limitations.** The centreline is a stand-in for the road, since there are no kerb lines.
-Sidewalks are only seen where they are mapped separately. "Follows a building" includes edges that run
-along a wall and edges that cross one. Each area is a single 600 m square.
+Sidewalks are only seen where they are mapped separately, so a square's street style is only known where
+they are. Each area is a single 600 m square.
 
 ## First batch (12 areas, OSM API, October 2026)
 
 These were picked by reputation, not by a measured quality score. Vienna Josefstadt had no paintable
-landuse and is left out.
+landuse and is left out. The 44-city run supersedes this batch wherever the two overlap. In particular,
+Munich and Tallinn come out mostly property line there, and Prague is undecided.
 
 **Glue.** Landuse never sits on roads: at most 0.8% of nodes are shared with them, and almost no edge
 comes within 0.5 m of a centreline.
@@ -122,7 +157,7 @@ small gaps).
 
 ## Questions for the planet run
 
-Each answer changes something specific in the editor.
+Each answer changes something specific in the editor. The 44-city run answers all six, below.
 
 1. **Distance at the street, by road class, in property-line areas.** Report the median and spread of the
    edge distance from the centreline, with and without a separately mapped sidewalk, and of the distance
@@ -140,13 +175,207 @@ Each answer changes something specific in the editor.
 6. **Shape targets.** Nodes per 100 m and corner angles for edges that follow nothing. → TUNE-SIMPLIFY and
    how strictly free edges are straightened.
 
+## 44-city run (Geofabrik, October 2026)
+
+44 cities in 17 countries (`cities.txt`): the first batch's cities, more cities in those countries, eight
+countries not sampled before, and six Canadian cities. Each city got a 9 × 9 grid of 600 m squares
+1.2 km apart, 3,564 squares in all, cut from Geofabrik extracts of 2026-10-25 to 27. All the numbers below
+are in [report-2026-10.txt](report-2026-10.txt).
+
+The squares were screened as "Choosing more areas" in the first batch suggested:
+
+- **Block by block:** paintable landuse covers ≥ 20% of the square, and ≤ 10% of its barrier-road length
+  runs inside landuse. 582 of the 3,202 squares with any paintable landuse pass.
+- **Careful:** block by block, plus ≥ 25 inner-edge samples of which ≤ 10% follow nothing. 265 squares pass.
+- **Street style:** a square with ≥ 20 rays that cross a separately mapped sidewalk is *kerb* when the
+  sidewalk is inside the landuse on most of them, otherwise *property line*. Only block-by-block squares
+  are styled, since where streets run inside landuse their sidewalks are inside it too.
+
+Q3 uses the block-by-block squares, so that the "nothing" screen does not decide its own answer. The other
+questions use the careful squares.
+
+### Most landuse is not drawn block by block
+
+Of the 2,492 squares where paintable landuse covers at least 20%, 61% of residential street length (and
+71% of residential dead ends) runs inside landuse. Only 582 squares are block by block. The Netherlands,
+Austria, Switzerland, France, Hungary, Denmark and Sweden have almost none: landuse there is drawn across
+whole neighbourhoods. Those squares say nothing about where an edge meets the street, so these countries
+drop out of Q1 and Q5.
+
+The block-by-block squares cluster in Warsaw, Turku, Helsinki, Toronto, Berlin, Riga, Kyiv, Wrocław and
+Vilnius. A block-based editor writes the minority style. That is a choice, not a mistake; see Q-009 in
+REQUIREMENTS.md.
+
+### Q1. Distance at the street
+
+Property-line squares (164), edge distance from the road centreline in metres: median (p25–p75), and
+how many squares each row comes from.
+
+| Class | No sidewalk mapped | Sidewalk mapped: edge from centreline | Edge past the sidewalk |
+|---|---|---|---|
+| primary | 9.9 (6.9–15.4), 20 sq | 10.9 (8.9–12.9), 38 sq | 1.9 (1.4–2.9) |
+| secondary | 12.4 (8.6–16.9), 47 sq | 11.1 (9.4–14.1), 62 sq | 1.9 (1.1–2.9) |
+| tertiary | 10.1 (7.9–13.6), 72 sq | 9.1 (7.6–12.1), 96 sq | 1.6 (1.1–2.6) |
+| unclassified | 8.1 (5.6–11.1), 41 sq | 9.6 (7.4–12.1), 34 sq | 1.9 (1.1–2.9) |
+| residential | 5.6 (4.4–7.4), 142 sq | 7.1 (5.9–9.1), 140 sq | **1.4** (0.9–1.9) |
+| living_street | 4.4 (2.9–6.4), 43 sq | 6.4 (5.1–9.1), 14 sq | 1.9 (1.4–2.4) |
+| pedestrian | 4.9 (3.6–9.1), 16 sq | 7.1, 4 sq (too few) | – |
+
+- **Past the sidewalk:** the edge sits 1.4–1.9 m beyond a separately mapped sidewalk (medians by class),
+  usually 1–3 m. That is the front-yard strip, and it is consistent across countries.
+- **Kerb squares (60), for contrast:** with the sidewalk inside, the edge is 4.4–6.4 m from the
+  centreline for every class. Today's TUNE-HALFWIDTH (residential 5 m, primary 9 m) is a kerb-style
+  table: right for residential streets, too wide for kerb-style arterials, too narrow for property-line
+  ones.
+- **`width=*` and `lanes=*` do not beat the class.** On the samples that carry a `width`, class explains
+  12.7% of the variance in distance and width 12.0%; both together explain 18.6%. On samples with `lanes`,
+  class explains 16.7% and lanes 8.2%. The property line sits about width ÷ 2 + 3 m from the centreline
+  (width 6 m → 6.1 m, 10 m → 9.4 m). Taking width ÷ 2 alone, as LAT-003 does, puts it at the kerb.
+- **Spread is wide.** Even within one class and style, p25–p75 spans 3–6 m. A fixed half-width will be
+  off by a couple of metres on many streets, and only a mapped sidewalk pins the edge down.
+
+### Q2. Which roads end up inside a block
+
+Share of road length inside landuse. The first column uses the block-by-block squares. That screen caps
+barrier roads at 10% inside, so for barrier classes it is a lower bound. The second column uses all 2,492
+squares with cover, which neighbourhood-style squares dominate.
+
+| Road | Block by block | All squares |
+|---|---|---|
+| service, any | 60–73% | 64–74% |
+| … `service=driveway` / `parking_aisle` / `alley` | 71% / 66% / 63% | 75% / 71% / 81% |
+| residential, through | 2.4% | 61% |
+| residential, dead end | 8.3% | 71% |
+| residential, `access=private` | 45% (2.2 km) | 86% |
+| living_street, through | 8.1% | 67% |
+| living_street, dead end / loop / ring | 30% / 38% / 66% | 80% / 87% / 92% |
+| living_street, `access=private` | 66% (2.1 km) | 94% |
+| pedestrian, dead end | 22% | 62% |
+| tertiary and above | ≤ 0.6% | 15–31% |
+
+- Service roads are mostly inside, as LAT-001 already has it (not barriers).
+- Residential dead ends mostly stay outside the landuse even in careful areas (8%). LAT-007, a notch
+  rather than a split, fits them.
+- The candidates to stop being barriers are private residential and living streets, and living streets
+  that are dead ends, loops or rings. The lengths are small (a few km), so treat them as a direction, not
+  a measurement.
+
+### Q3. What inner edges follow
+
+1,119 km of inner-block edge (more than 20 m from any road) in the block-by-block squares. *Any* counts
+every target within reach (1 m; 0.3 m for landuse edges); *first* assigns each sample to one.
+
+| Target | Any | First |
+|---|---|---|
+| Context edge (park, school grounds, parking, other landuse) | 48% | 31% |
+| Neighbouring paintable landuse | 30% | 13% |
+| Fence | 23% | 23% |
+| Building wall (edge runs along it) | 11% | 10% |
+| Wall | 4.1% | 3.9% |
+| Hedge | 1.3% | 1.1% |
+| Footway or path | 1.6% | 0.5% |
+| Service road | 1.6% | 0.4% |
+| Crosses a building, or runs inside one | 1.6% | 0.3% |
+| Retaining wall; kerb line | 0.4%; 0.0% | |
+| **Nothing** | | **16%** |
+
+- The ranking is: context edges, fences, neighbouring landuse, building walls, walls, hedges. Paths and
+  service roads, which SNAP-108 relies on, come last at under 1% each.
+- Edges run *along* buildings seven times as often as they cross or enter them (11% against 1.6%). SNAP-109's "never through a
+  building" is right; its 2.5 m yard is not. The edge sits on the wall, within 1 m.
+- Fences matter most in Poland (40%), Latvia (50%) and Czechia (37%), and least in Canada (5%). In
+  Canada, 29% of inner edges follow nothing.
+- **Edges that follow nothing** (176 km in 4,559 runs) are mostly straight: within 1 m of the straight
+  line for 97% of runs under 10 m, 84% at 10–30 m, 67% at 30–60 m, and 28–46% beyond 60 m, where they
+  bend at a corner or two.
+
+### Q4. Lots
+
+Lots are faces between roads, fences, walls, hedges and context edges, less the editor's street space.
+
+- They are big. The lot a typical square metre of landuse lies in has 10,000 m²; the block it lies in
+  has 20,500 m². Fences divide a block into about two.
+- Whole lots cover only **23–25%** of the landuse area in careful squares (≥ 80% or ≥ 60% of the lot
+  inside one polygon). The rate is 29% in kerb squares and 16–29% by country.
+- So **picking lots cannot replace freeform painting.** Most landuse polygons cut across lots along lines
+  that no fence or context edge marks, likely between several landuse polygons in one block. Fences are
+  still worth snapping to (Q3).
+
+### Q5. How the style varies
+
+| Country | Careful squares: kerb / property line | Block-by-block squares: kerb / property line |
+|---|---|---|
+| Finland | 0 / 39 | 1 / 98 |
+| Poland | 4 / 47 | 6 / 78 |
+| Latvia | 0 / 16 | 1 / 30 |
+| Great Britain | 0 / 7 | 0 / 12 |
+| Canada | 3 / 23 | 18 / 60 |
+| Estonia | 0 / 2 | 1 / 9 |
+| Germany | 36 / 22 | 61 / 43 (Berlin kerb; Hamburg, Munich property line) |
+| Lithuania | 8 / 3 | 10 / 3 |
+| Ukraine | 8 / 4 | 28 / 7 |
+| Czechia | 1 / 1 | 4 / 4 |
+
+- **Property line is the common style:** Finland, Poland, Latvia, Great Britain, Canada and Estonia, plus
+  Hamburg and Munich. Kerb dominates in Berlin, Vilnius and Kyiv.
+- **A city keeps its style.** Two styled squares of the same city agree 93% of the time 1.2 km apart,
+  91% at 2.4 km and 88% at 3.6 km or more. Within one square, the minority side has a median 1% of the
+  sidewalk rays, and only 8% of squares are mixed (≥ 30%).
+- **Every class follows the square's style:** in kerb squares 80–89% of rays have the sidewalk inside, for
+  every class; in property-line squares 4–17%.
+- **Detecting it needs mapped sidewalks.** One 600 m square with ≥ 20 sidewalk rays is enough, and a
+  1.2 km loaded area (TUNE-AREA-SIDE) usually holds several. Without separately mapped sidewalks there is
+  no reliable cue: residential edges sit 5.6 m (property line) against 4.6 m (kerb) from the centreline,
+  and their spreads overlap.
+
+### Q6. Shape
+
+- **Edges that follow nothing** have 1.3 vertices per 100 m (turns ≥ 5°, runs ≥ 20 m, length-weighted).
+  The median run has none: it is one straight segment. A third of their corners (34%) are right angles.
+- **All paintable edges** in careful squares: median 4.2 nodes per 100 m, segments 11 m, 20% of vertices
+  at right angles, and no buildings split (median 0%).
+- For comparison, the test stroke in [Why](#why) commits 15 nodes per 100 m, none of them following anything.
+- **Neighbours:** 74% of the edge facing a neighbouring polygon within 8 m is shared exactly (< 0.25 m),
+  6% has a 0.25–2 m gap, and 20% sits 2–8 m away. Closing small gaps (SNAP-103) matches practice.
+- **Tags:** `residential=*` is on 12% of residential polygons (3,007 of 25,417): `apartments` 1,345,
+  `urban` 793, `rural` 237, `detached` 204, `single_family` 136, `terrace` 64. This bears on Q-001 and Q-002.
+
+## Proposed changes
+
+None of these are made yet. Each changes behaviour, so each goes through REQUIREMENTS.md first (§0.5).
+The values are starting points from the medians above, for the replay benchmark to refine.
+
+1. **Street space to the property line (LAT-003, Q-003).** Where a separately mapped sidewalk runs along a
+   barrier, street space reaches the sidewalk's far side plus a new TUNE-SIDEWALK-MARGIN of 1.5 m.
+   Elsewhere it uses property-line half-widths: residential 6, living_street 4.5, pedestrian 5,
+   unclassified 8, tertiary 10, secondary 11, primary 11 m. Trunk and motorway are unmeasured and stay
+   as they are. `width=*` should only widen, as width ÷ 2 + 3 m, never narrow: on its own it predicts no
+   better than the class and lands at the kerb.
+2. **Kerb style where the area is kerb style (Q-008).** When the loaded area has ≥ 20 sidewalk crossings
+   and most have the sidewalk inside landuse, use today's kerb-style half-widths (TUNE-HALFWIDTH as it
+   is) and ignore sidewalks. Otherwise use property line.
+3. **Snap to fences, walls and hedges (SNAP-108).** Add them to the ways that divide an atom into cells,
+   alongside paths and service roads. They follow 28% of inner edges, against about 1% for paths and
+   service roads.
+4. **Buildings: follow the wall (SNAP-109, TUNE-BUILDING-MARGIN).** Keep "never through a building". Cut
+   the yard from 2.5 m to about 0.5 m, so an edge near a building runs along its wall as mappers draw it.
+5. **Straight free edges (SNAP-106).** An edge that follows nothing should become one straight segment,
+   or a few with square corners where the stroke turns. That is a new requirement, not a larger
+   TUNE-SIMPLIFY: mappers draw 1.3 vertices per 100 m there, against 15 from the test stroke.
+6. **Fewer barriers (LAT-001, LAT-007).** Consider treating `access=private` residential and living
+   streets, and living streets that are dead ends, loops or rings, like service roads. The evidence is
+   thin (a few km); confirm with the replay benchmark first.
+7. **No lot picking (Q4).** Whole lots would paint about a quarter of the landuse. Keep freeform.
+
 ## Choosing more areas
 
-The first batch was picked by hand. With a planet file, it's better to screen candidates and then sample.
-Cut a grid of 600 m squares over a few dozen cities, run `analyze.py`, and keep squares with high
-`paint_cover`, a low `roads_inside_landuse_pct` (block by block) and little "nothing" in
-`inner_edge_follows_pct`. Report results for those, and keep the rest as a contrast. Mix densities:
-city centres, perimeter blocks, housing estates, detached suburbs, and industrial land.
+The 44-city grid was cut blind and screened afterwards. To sharpen what is thin:
+
+- Kerb-style cities beyond Berlin, Vilnius and Kyiv: other German, Czech and Ukrainian cities.
+- Cities with separately mapped sidewalks in the neighbourhood-style countries (NL, AT, CH, FR, HU, DK,
+  SE): their block-by-block pockets, if any.
+- Trunk and motorway frontage, pedestrian streets and living streets, which have few squares each.
+- Detached suburbs, which a 5 km grid barely reaches.
 
 ## What comes next: a replay benchmark
 

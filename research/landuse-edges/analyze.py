@@ -23,8 +23,11 @@ SHARED = 0.3        # m: closer than this counts as the same line
 ALONG = 20.0        # degrees: an edge near a building outline and this parallel to it runs along the wall
 BIN = 0.25          # m: histogram bin for distances
 CAR = BARRIER_HW | {"service"}
+# TUNE-HALFWIDTH in src/tuning.ts, the editor's street space half-width per class, m.
+STREET_HALF = {"motorway": 12, "trunk": 10, "primary": 9, "secondary": 8, "tertiary": 7, "unclassified": 5,
+               "residential": 5, "living_street": 4, "pedestrian": 4, "road": 5}
 # What an inner edge can follow, in the order used when one sample matches several (first match).
-TARGETS = ["fence", "wall", "hedge", "retaining_wall", "kerb", "building wall", "other landuse edge",
+TARGETS = ["fence", "wall", "hedge", "retaining_wall", "kerb", "building wall", "context edge", "neighbouring landuse",
            "footway/path", "service road", "inside building", "crosses building"]
 
 
@@ -274,9 +277,11 @@ def _analyze(path, centre=None, meta=None):
                     if bext[j].distance(pt) < FOLLOWS:
                         hit.append("building wall" if angdiff(ang, direction(bext[j], pt)) < math.radians(ALONG)
                                    else "crosses building")
-                cands = [j for j in ztree.query(pt.buffer(SHARED)) if zones[j][0] != aid]
-                if any(zbound[j].distance(pt) < SHARED for j in cands):
-                    hit.append("other landuse edge")
+                cands = [j for j in ztree.query(pt.buffer(SHARED)) if zones[j][0] != aid and zbound[j].distance(pt) < SHARED]
+                if any(j < len(paint) for j in cands):
+                    hit.append("neighbouring landuse")
+                if any(j >= len(paint) for j in cands):
+                    hit.append("context edge")
                 if near(mtree, pt, FOLLOWS): hit.append("footway/path")
                 if near(stree, pt, FOLLOWS): hit.append("service road")
                 if bptree is not None and "building wall" not in hit and "crosses building" not in hit and \
@@ -357,25 +362,26 @@ def _analyze(path, centre=None, meta=None):
     R["buildings_touching"] = len(touching)
     R["buildings_split_pct"] = share(sum(0.05 < b.intersection(paint_union).area / b.area < 0.95 for b in touching), len(touching))
 
-    # 4. Lots: faces cut by roads, fences, walls, hedges and context edges. Faces touching the square's edge
-    # are cut short and left out. A lot "fits" a landuse polygon when at least 60% of it lies in that polygon
-    # (lots run to the road centreline, landuse stops short of it); q4_fit sums, per polygon, the polygon area
-    # those fitting lots cover, against the polygon area: how much of the landuse whole lots could paint.
-    dividers = road_lines + [l for k in ("fence", "wall", "hedge", "retaining_wall") for l in barriers.get(k, [])] \
-        + [o[1].boundary for o in other] + [core.exterior]
-    faces = [f for f in polygonize(unary_union([d.intersection(core.buffer(1)) for d in dividers]))
+    # 4. Lots: faces cut by roads, fences, walls, hedges and context edges, less street space (the editor's
+    # TUNE-HALFWIDTH, mirrored in STREET_HALF). Faces touching the square's edge are cut short and left out. A lot
+    # "fits" a landuse polygon when at least 60% (or 80%) of it lies in that polygon; q4_fit sums the polygon
+    # area those fitting lots cover, against the polygon area: how much of the landuse whole lots could paint.
+    dividers = road_lines + [l for k in ("fence", "wall", "hedge", "retaining_wall") for l in barriers.get(k, [])]         + [o[1].boundary for o in other] + [core.exterior]
+    street = unary_union([l.buffer(STREET_HALF.get(hw.replace("_link", ""), 5)) for _, l, hw, *_ in roads])
+    faces = [f.difference(street) for f in polygonize(unary_union([d.intersection(core.buffer(1)) for d in dividers]))
              if f.area > 20 and not f.intersects(core.exterior)]
+    faces = [f for f in faces if f.area > 20]
     blocks = [f for f in polygonize(unary_union([l.intersection(core.buffer(1)) for l in road_lines] + [core.exterior]))
               if f.area > 20 and not f.intersects(core.exterior)]
     R["q4_lot_areas"] = [round(f.area) for f in faces if f.intersects(paint_union)]
-    R["q4_block_areas"] = [round(f.area) for f in blocks if f.intersects(paint_union)]
-    fit = [0.0, 0.0]
+    R["q4_block_areas"] = [round(f.difference(street).area) for f in blocks if f.intersects(paint_union)]
+    fit = [0.0, 0.0, 0.0]
     ftree = STRtree(faces) if faces else None
     for aid, g, *_ in paint:
         gc = g.intersection(core)
         if gc.area < 100:
             continue
-        fit[1] += gc.area
+        fit[2] += gc.area
         if ftree is None:
             continue
         for j in ftree.query(gc):
@@ -383,7 +389,9 @@ def _analyze(path, centre=None, meta=None):
             ov = f.intersection(gc).area
             if ov >= 0.6 * f.area:
                 fit[0] += ov
-    R["q4_fit"] = [round(fit[0]), round(fit[1])]
+            if ov >= 0.8 * f.area:
+                fit[1] += ov
+    R["q4_fit"] = [round(x) for x in fit]
     return R
 
 

@@ -122,23 +122,25 @@ def main():
         print(f"{c + ' ' + city:24} {len(rs):7} {len(p):6} {sum(blockwise(r) for r in p):6} {len(cc):8} "
               f"{st['kerb']:6} {st['property line']:5} {st['unknown']:8}")
 
-    section("Q5. Street style by country (careful squares; all squares with paint in brackets)")
+    # Only block-by-block squares say anything about style: where streets run inside the landuse, their
+    # sidewalks are inside it too, whatever the mappers' habit at the street edge.
+    section("Q5. Street style by country (careful squares; block-by-block squares in brackets)")
     by = collections.defaultdict(collections.Counter)
-    byall = collections.defaultdict(collections.Counter)
+    byb = collections.defaultdict(collections.Counter)
     for r in ca:
         by[r.get("country", "?")][r["style"]] += 1
-    for r in rows:
-        byall[r.get("country", "?")][r["style"]] += 1
+    for r in bb:
+        byb[r.get("country", "?")][r["style"]] += 1
     print(f"{'country':8} {'kerb':>10} {'prop':>10} {'unknown':>10}   kerb share of decided")
-    for c in sorted(byall):
-        a, b = by[c], byall[c]
+    for c in sorted(byb):
+        a, b = by[c], byb[c]
         dec = a["kerb"] + a["property line"]
         decb = b["kerb"] + b["property line"]
         print(f"{c:8} {a['kerb']:4} ({b['kerb']:3}) {a['property line']:4} ({b['property line']:3}) {a['unknown']:4} ({b['unknown']:3})"
               f"   {round(100 * a['kerb'] / dec) if dec else '-':>3}% ({round(100 * b['kerb'] / decb) if decb else '-'}%)")
     # Does style hold across a city? Agreement between decided squares of the same city, by grid distance.
     agree = collections.defaultdict(lambda: [0, 0])
-    dec = [r for r in rows if r["style"] != "unknown"]
+    dec = [r for r in bb if r["style"] != "unknown"]
     for city in {r.get("city") for r in dec}:
         cs = [r for r in dec if r.get("city") == city]
         for i, a in enumerate(cs):
@@ -149,7 +151,7 @@ def main():
                 d = "1 (1.2 km)" if d == 1 else "2 (2.4 km)" if d == 2 else "3+ (3.6+ km)"
                 agree[d][0] += a["style"] == b["style"]
                 agree[d][1] += 1
-    print("\nTwo squares of the same city with a decided style agree (all squares with paint):")
+    print("\nTwo block-by-block squares of the same city with a decided style agree:")
     for d in sorted(agree):
         print(f"  grid distance {d}: {round(100 * agree[d][0] / agree[d][1])}% of {agree[d][1]} pairs")
     # How decided is one square? The minority's share of sidewalk rays.
@@ -177,19 +179,23 @@ def main():
         bey = pool(rs, "h_beyond")
         for cls in MAIN:
             print(f"  {cls}")
+            # sq = squares contributing at least 10 samples, so a row from a handful of squares shows as such.
+            sq = lambda key, k: sum(sum(r.get(key, {}).get(k, {}).values()) >= 10 for r in rs)
             for state in ("sidewalk outside", "sidewalk inside", "no sidewalk"):
                 h = fac.get(f"{cls}|{state}")
                 if h and sum(h.values()) >= 30:
-                    print(f"    {state:18} {fmt(hstats(h))}")
+                    print(f"    {state:18} {fmt(hstats(h))} sq={sq('h_facing', f'{cls}|{state}')}")
             h = bey.get(cls)
             if h and sum(h.values()) >= 30:
-                print(f"    {'past the sidewalk':18} {fmt(hstats(h))}")
+                print(f"    {'past the sidewalk':18} {fmt(hstats(h))} sq={sq('h_beyond', cls)}")
         print()
     rs = [r for r in ca if r["style"] == "property line"]
     allfac = pool(rs, "h_facing", lambda k: k.split("|")[0])
     print("Edge distance in property-line squares by country (all classes; residential):")
     for c in sorted({r.get("country") for r in rs}):
         cr = [r for r in rs if r.get("country") == c]
+        if len(cr) < 5:
+            continue
         a = pool(cr, "h_facing", lambda k: k.split("|")[0])
         tot = collections.Counter()
         for h in a.values():
@@ -218,16 +224,24 @@ def main():
         if sum(byw[w].values()) >= 50:
             print(f"    width {w:>3} m: {fmt(hstats(byw[w]))}")
 
-    section("Q2. Roads inside landuse (block-by-block squares): % of length inside, of total m")
+    # The block-by-block screen caps barrier roads inside landuse at MAX_INSIDE %, so its barrier-class rates
+    # are lower bounds; the second column has every square with enough cover, any drawing style.
+    covered = [r for r in rows if r["paint_cover"] >= MIN_COVER]
+    section(f"Q2. Roads inside landuse: % of length inside (block-by-block squares | all {len(covered)} squares "
+            f"with cover >= {MIN_COVER})")
 
     def q2(key, top=25, minlen=300):
-        acc = collections.defaultdict(lambda: [0.0, 0.0])
-        for r in bb:
-            for k, (i, t) in r.get(key, {}).items():
-                acc[k][0] += i; acc[k][1] += t
-        items = sorted(((k, v) for k, v in acc.items() if v[1] >= minlen), key=lambda kv: -kv[1][1])[:top]
+        accs = []
+        for rs in (bb, covered):
+            acc = collections.defaultdict(lambda: [0.0, 0.0])
+            for r in rs:
+                for k, (i, t) in r.get(key, {}).items():
+                    acc[k][0] += i; acc[k][1] += t
+            accs.append(acc)
+        items = sorted(((k, v) for k, v in accs[0].items() if v[1] >= minlen), key=lambda kv: -kv[1][1])[:top]
         for k, (i, t) in items:
-            print(f"  {k:36} {100 * i / t:5.1f}% of {round(t):8} m")
+            ia, ta = accs[1][k]
+            print(f"  {k:36} {100 * i / t:5.1f}% of {round(t):8} m | {100 * ia / ta:5.1f}% of {round(ta):8} m")
 
     print("By class and how the road ends (dead end: an end that joins nothing inside the square; loop: both ends"
           " on the same road; closed: a ring):")
@@ -252,7 +266,7 @@ def main():
     print(f"  {'nothing':20} {'':6} {100 * first.get('nothing', 0) / n:5.1f}%")
     print("\nBy country, first match (%):")
     keys = ["fence", "wall", "hedge", "retaining_wall", "kerb", "building wall", "crosses building", "inside building",
-            "other landuse edge", "footway/path", "service road", "nothing"]
+            "context edge", "neighbouring landuse", "footway/path", "service road", "nothing"]
     print(f"  {'':5} {'n':>6} " + " ".join(f"{k[:9]:>9}" for k in keys))
     for c in sorted({r.get("country") for r in bb}):
         f = collections.Counter()
@@ -283,18 +297,23 @@ def main():
               f"blocks between roads: {len(blocks)}, median {np.median(blocks):.0f} m².")
         print(f"Area-weighted (the lot a typical square metre is in): lots {wmedian(lots):.0f} m², "
               f"blocks {wmedian(blocks):.0f} m².")
-    print("\nShare of landuse area that whole lots would cover (a lot counts when >= 60% of it is in the polygon):")
+    print("\nShare of landuse area that whole lots would cover (a lot, less street space, counts when >= 60% or"
+          " >= 80% of it is in the polygon):")
+
+    def fit(f):
+        t = sum(x[2] for x in f)
+        return f"{100 * sum(x[0] for x in f) / t:5.1f}% | {100 * sum(x[1] for x in f) / t:5.1f}% of {t / 1e6:6.2f} km²"
+
     for c in sorted({r.get("country") for r in ca}):
-        f = [r["q4_fit"] for r in ca if r.get("country") == c]
-        a, t = sum(x[0] for x in f), sum(x[1] for x in f)
-        lc = [a_ for r in ca if r.get("country") == c for a_ in r["q4_lot_areas"]]
-        if t:
-            print(f"  {c:4} {100 * a / t:5.1f}% of {t / 1e6:6.2f} km²; lots area-weighted median {wmedian(lc):7.0f} m²")
+        cr = [r for r in ca if r.get("country") == c]
+        if len(cr) >= 5:
+            lc = [a_ for r in cr for a_ in r["q4_lot_areas"]]
+            print(f"  {c:4} {fit([r['q4_fit'] for r in cr])}; lots area-weighted median {wmedian(lc):7.0f} m²")
     for st in ("property line", "kerb"):
         f = [r["q4_fit"] for r in ca if r["style"] == st]
-        a, t = sum(x[0] for x in f), sum(x[1] for x in f)
-        if t:
-            print(f"  {st:14} squares: {100 * a / t:.1f}%")
+        if f:
+            print(f"  {st:14} squares: {fit(f)}")
+    print(f"  all careful squares: {fit([r['q4_fit'] for r in ca])}")
 
     section("Q6. Shape of edges that follow nothing (block-by-block squares)")
     if runs:
