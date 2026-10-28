@@ -414,7 +414,7 @@ stroke.
 ## 8. Snapping — unit pieces
 
 **SNAP-001** The editor shall treat a piece as a unit piece when its area is at most
-min(TUNE-UNIT-ABS-MAX, TUNE-UNIT-FACTOR × π × brush radius²).
+min(TUNE-UNIT-ABS-MAX, TUNE-UNIT-FACTOR × π × brush radius²). → see CORR-002
   Why: zoom becomes precision. Zoomed out, the brush grabs whole blocks; zoomed in, it paints parts of
   blocks.
 
@@ -814,6 +814,15 @@ IMP-010 to IMP-012. Land areas and overlaps are measured inside atoms only.
   Observed: smaller-wins also decided near-duplicates (a few square metres decided between commercial and
   retail), gave whole drift strips to one side, and settled real disagreements silently.
   Why: "the smaller one is more specific" is only true when one feature is clearly drawn inside the other.
+
+**CORR-002** (corrects SNAP-001) The editor shall never treat a piece as a unit piece, whatever its area,
+once a freeform result (SNAP-106) has drawn part of its outline: the pieces of the result, what it leaves
+of the pieces it shrinks, the void it leaves behind, and any piece these later merge into.
+  Observed: after painting a U into a block, the void inside the U stayed joined to the void around it.
+  Zoomed out, that leftover fell under the unit limit, so brushing the whole gap charged it to about 20%
+  and let go with no change, every time.
+  Why: unit pieces are the blocks and mapped areas the user finds on the map. A leftover shaped by the
+  user's own paint is not one of them, and land the user has brushed over must take the paint.
 
 ---
 

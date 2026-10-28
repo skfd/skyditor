@@ -104,6 +104,50 @@ describe("open pieces", () => {
   });
 });
 
+describe("leftovers of freeform paint", () => {
+  // A U painted zoomed in (r = 8): the void inside it stays joined to the void around it, about 31 000 m².
+  const u = async () => {
+    const w = await grid().world();
+    paint(w, R2, 8, [[-35, -60], [-35, 60], [35, 60], [35, -60]]);
+    return w;
+  };
+
+  it("CORR-002: the inside of a painted U takes paint brushed over it, even zoomed out", async () => {
+    const w = await u();
+    expect(at(w, 0, 0)!.area).toBeLessThan(unitLimit(30)); // small enough to have been all-or-nothing
+    const { step } = paint(w, R2, 30, [[0, -60], [0, 45]]);
+    expect(step).not.toBeNull();
+    expect(at(w, 0, 0)?.kind).toBe("R2");
+    expect(at(w, -20, -50)?.kind).toBe("R2");
+    expect(at(w, -80, 0)?.kind).toBe(null); // outside the U, beyond the brush
+  });
+
+  it("CORR-002: a tap on the leftover paints where it lands, not the whole leftover", async () => {
+    const w = await u();
+    paint(w, R2, 30, [[-75, 0]], true);
+    expect(at(w, -75, 0)?.kind).toBe("R2");
+    expect(at(w, 75, 0)?.kind).toBe(null);
+  });
+
+  it("CORR-002: a block cleared whole is a unit piece again", async () => {
+    const w = await grid().world();
+    paint(w, R2, 30, [[0, 0]], true);
+    paint(w, ERASE, 30, [[0, 0]], true);
+    expect(at(w, 0, 0)?.kind).toBe(null);
+    paint(w, COM, 30, [[0, 0]], true);
+    expect(at(w, -90, 90)?.kind).toBe("COM");
+  });
+
+  it("CORR-002: a density step keeps painted land out of all-or-nothing claims", async () => {
+    const w = await u();
+    paint(w, UP, 8, [[-35, 0], [-35, 10]]);
+    expect(at(w, -35, 0)?.kind).toBe("R3");
+    paint(w, COM, 30, [[35, -60], [35, 0]]); // brushes the right arm only
+    expect(at(w, 35, -40)?.kind).toBe("COM");
+    expect(at(w, -35, 0)?.kind).toBe("R3");
+  });
+});
+
 describe("overlap", () => {
   it("OVL-002 / OVL-001: new paint takes its part of another kind; pieces still tile the block", async () => {
     const s = grid();

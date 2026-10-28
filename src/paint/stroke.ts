@@ -6,8 +6,8 @@ import { type Atom, type Piece, World, makePiece, normalize } from "../model/wor
 import { TUNE } from "../tuning";
 import { distToSegment, samplesOf } from "./samples";
 import {
-  type Freeform, type Tool, applyRegion, changes, claimWhole, freeformIn, settleForContext, settles, strokeShape, toolKind,
-  unitLimit,
+  type Freeform, type Tool, applyRegion, changes, claimWhole, freeformIn, isUnit, settleForContext, settles, strokeShape,
+  toolKind, unitLimit,
 } from "./snap";
 
 export type StrokeEvent =
@@ -80,7 +80,7 @@ export class Stroke {
     for (const atom of this.world.atomsIn(box)) {
       this.dirty.add(atom);
       for (const p of atom.pieces) {
-        if (p.area > this.limit || !changes(this.tool, p)) continue;
+        if (!isUnit(p, this.limit) || !changes(this.tool, p)) continue;
         if (p.bbox.maxX < box.minX || p.bbox.minX > box.maxX || p.bbox.maxY < box.minY || p.bbox.minY > box.maxY) continue;
         const s = samplesOf(p);
         let cov = this.coverage.get(p);
@@ -155,7 +155,7 @@ export class Stroke {
       const atom = this.world.atoms[p.atom];
       this.snapshot(atom);
       // DISP-001: a density step answers the dispute, so the stepped piece has no rival.
-      const stepped = makePiece(atom, tierKind(next), p.shape, { source: p.source, modified: !!p.source });
+      const stepped = makePiece(atom, tierKind(next), p.shape, { source: p.source, modified: !!p.source, drawn: p.drawn });
       atom.pieces = normalize(atom, [...atom.pieces.filter((q) => q !== p), stepped]);
       const result = pieceCovering(atom, p, stepped.kind!);
       if (result) {
@@ -233,7 +233,7 @@ export class Stroke {
         this.preview.clear();
       } else {
         // SNAP-004: a tap claims the whole unit piece under it.
-        if (isTap && p && p.area <= this.limit && changes(this.tool, p)) events.push(this.claim(this.world.atoms[p.atom], p));
+        if (isTap && p && isUnit(p, this.limit) && changes(this.tool, p)) events.push(this.claim(this.world.atoms[p.atom], p));
         // DISP-005: a press held on disputed context without moving is no tap, and changes nothing there.
         if (!isTap && !this.rejected && settles(this.tool, p)) {
           this.rejected = true;

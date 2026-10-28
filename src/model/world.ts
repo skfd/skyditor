@@ -16,6 +16,7 @@ export interface Piece {
   readonly bbox: BBox;
   readonly source?: string; // IMP-008: originating OSM element
   readonly modified: boolean; // IMP-008 / OVL-004
+  readonly drawn: boolean; // CORR-002: freeform paint drew part of its outline, so it is never a unit piece
   readonly rival?: Rival; // IMP-012: set while the piece is disputed
 }
 
@@ -52,7 +53,7 @@ export function makePiece(
   atom: Atom | number,
   kind: Kind | null,
   shape: Shape,
-  extra: { ctx?: CtxClass; source?: string; modified?: boolean; rival?: Rival } = {},
+  extra: { ctx?: CtxClass; source?: string; modified?: boolean; rival?: Rival; drawn?: boolean } = {},
 ): Piece {
   return {
     id: nextPieceId++,
@@ -65,6 +66,7 @@ export function makePiece(
     source: extra.source,
     modified: extra.modified ?? false,
     rival: extra.rival,
+    drawn: extra.drawn ?? false,
   };
 }
 
@@ -114,6 +116,7 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
               source: biggest.source,
               modified: cluster.some((p) => p.modified) || !sameSource,
               rival: biggest.rival,
+              drawn: cluster.some((p) => p.drawn), // CORR-002
             }),
           );
         }
@@ -121,6 +124,8 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
     }
   }
   const prevVoids = atom.pieces.filter((p) => p.kind === null);
+  // CORR-002: a changed void is drawn where it meets a drawn piece, or covers where one was.
+  const drawn = [...out, ...atom.pieces].filter((p) => p.drawn);
   const voidShape = difference(atom.shape, union(...out.map((p) => p.shape)));
   for (const comp of components(voidShape)) {
     const a = area(comp);
@@ -131,7 +136,7 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
       (v) => Math.abs(v.area - a) < 0.01 && v.bbox.minX === b.minX && v.bbox.maxX === b.maxX &&
         v.bbox.minY === b.minY && v.bbox.maxY === b.maxY,
     );
-    out.push(same ?? makePiece(atom, null, comp));
+    out.push(same ?? makePiece(atom, null, comp, { drawn: drawn.some((p) => touches(p.shape, comp)) }));
   }
   return out;
 }
