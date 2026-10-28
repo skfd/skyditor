@@ -25,6 +25,9 @@
         <!-- TYPE-012 -->
         <button id="btn-guesses" class="disputes todo" hidden></button>
         <div id="mix" title="District mix"><div class="bar"></div></div>
+        <!-- PEEK-001 / PEEK-003 -->
+        <button id="btn-imagery" class="icon toggle" title="Aerial imagery (hold V)" aria-label="Aerial imagery" aria-pressed="false"></button>
+        <button id="btn-photos" class="icon toggle" title="Street photos (P)" aria-label="Street photos" aria-pressed="false"></button>
         <!-- TYPE-006 -->
         <button id="btn-target" class="icon toggle" title="Painting land. Switch to buildings (T)" aria-label="Paint buildings" aria-pressed="false"></button>
         <!-- HUD-007 -->
@@ -58,7 +61,12 @@
     <div id="hint" role="status"></div>
     <div id="toast" role="status"></div>
     <!-- HUD-005 -->
-    <div id="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+    <div id="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors<span id="imagery-credit" hidden></span></div>
+    <!-- PEEK-003 -->
+    <aside id="photo" hidden aria-label="Street photos">
+      <header><h4></h4><button class="close ghost" title="Close">×</button></header>
+      <div class="body"></div>
+    </aside>
 
     <aside id="help">
       <h3>Paint the city</h3>
@@ -79,6 +87,8 @@
         <dt><kbd>G</kbd></dt><dd>Agree with a guessed building type</dd>
         <dt><kbd>X</kbd></dt><dd>Eraser</dd>
         <dt>Top-right button · <kbd>T</kbd></dt><dd>Paint land ↔ paint buildings</dd>
+        <dt>Top-right button · hold <kbd>V</kbd></dt><dd>Peek at aerial imagery</dd>
+        <dt>Top-right button · <kbd>P</kbd></dt><dd>Street photos of the building under the cursor</dd>
         <dt>Click · tap</dt><dd>Fill one block</dd>
         <dt><kbd>Alt</kbd> + click</dt><dd>Pick a colour from the map</dd>
         <dt>Side buttons · <kbd>[</kbd> <kbd>]</kbd> · <kbd>Shift</kbd>+wheel</dt><dd>Brush size</dd>

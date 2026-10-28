@@ -82,6 +82,16 @@ describe("the app mounts", () => {
     expect($("#btn-target")!.innerHTML).toContain("<svg");
   });
 
+  it("PEEK-001 / PEEK-003: the peek buttons are there, off, and the photo panel and imagery credit are hidden", () => {
+    for (const id of ["imagery", "photos"]) {
+      const b = $(`#btn-${id}`)!;
+      expect(b.getAttribute("aria-pressed")).toBe("false");
+      expect(b.innerHTML, `${id} has an icon`).toContain("<svg");
+    }
+    expect($("#photo")!.hidden).toBe(true);
+    expect($("#imagery-credit")!.hidden).toBe(true);
+  });
+
   it("HUD-005: the OSM attribution is on the page", () => {
     expect($("#attribution")!.textContent).toContain("OpenStreetMap contributors");
   });

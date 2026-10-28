@@ -1,13 +1,16 @@
 // Glue: input, the frame loop, and turning model events into feedback.
 import { area, toI, toM } from "./geo/clip";
 import { squareAround } from "./geo/project";
-import { paintable, statusOf } from "./model/buildings";
+import { type Building, paintable, statusOf } from "./model/buildings";
 import { describeGuess } from "./model/guess";
 import { History, type Step } from "./model/history";
 import { KINDS, type Kind } from "./model/kinds";
 import { type Stage, worldFromText } from "./model/load";
 import type { Piece, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
+import { IMAGERY, TileCache } from "./osm/imagery";
+import { type Photo, bestPhoto, photoLinks, searchPanoramax } from "./osm/photos";
+import { PhotoPanel } from "./ui/photos";
 import { type Target, type Tool, onBuildings } from "./paint/snap";
 import { Stroke, type StrokeEvent } from "./paint/stroke";
 import { Anims } from "./render/anim";
@@ -70,6 +73,14 @@ export class App {
   private lastDraw = 0;
   private disputes = 0; // HUD-009
   private lastDispute: [number, number] | null = null; // HUD-010: where the last jump went
+  private imageryHeld = false; // PEEK-001: V held down
+  private imageryOn = false; // PEEK-001: the button, until pressed again
+  private readonly tiles = new TileCache(() => (this.dirty = true)); // PEEK-005
+  private photosOn = false; // PEEK-003
+  private readonly photoPanel = new PhotoPanel(() => this.togglePhotos(false));
+  private readonly photoCache = new Map<number, Promise<Photo[]>>(); // by building, for this area
+  private photoFor: number | null = null; // the building the panel shows
+  private photoAt: { x: number; y: number; azimuth: number | null } | null = null;
   private toDecide = 0; // TYPE-012
   private lastDecide: [number, number] | null = null; // TYPE-012: where the last jump went
   private lastFrame = performance.now();
@@ -83,6 +94,7 @@ export class App {
     this.hud.setBrush(this.brushPx);
     this.hud.setLayers(this.showBuildings, this.showOriginals);
     this.hud.setTarget(false);
+    this.hud.setPeeks(false, false, IMAGERY.attribution);
     this.bindInput();
     this.bindStart();
     window.addEventListener("resize", () => this.resize());
@@ -170,6 +182,10 @@ export class App {
     this.badges.set(world.issues);
     this.lastDispute = null;
     this.lastDecide = null;
+    this.photoCache.clear();
+    this.photoFor = null;
+    this.photoAt = null;
+    this.photoPanel.hide();
     this.updateMix(true);
     this.dirty = true;
   }
@@ -251,6 +267,8 @@ export class App {
     on("btn-outlines", () => this.toggleOriginals());
     on("btn-disputes", () => this.nextDispute());
     on("btn-target", () => this.toggleTarget()); // TYPE-006
+    on("btn-imagery", () => this.setImagery(!this.imageryOn, this.imageryHeld)); // PEEK-001
+    on("btn-photos", () => this.togglePhotos()); // PEEK-003
     on("btn-guesses", () => this.nextToDecide()); // TYPE-012
   }
 
@@ -295,6 +313,62 @@ export class App {
     this.dirty = true;
   }
 
+  /** PEEK-001: on while the key is held or the button is pressed. */
+  private setImagery(on: boolean, held: boolean) {
+    this.imageryOn = on;
+    this.imageryHeld = held;
+    this.hud.setPeeks(this.imageryOn || this.imageryHeld, this.photosOn, IMAGERY.attribution);
+    this.dirty = true;
+  }
+
+  /** PEEK-003 */
+  private togglePhotos(force?: boolean) {
+    this.photosOn = force ?? !this.photosOn;
+    this.hud.setPeeks(this.imageryOn || this.imageryHeld, this.photosOn, IMAGERY.attribution);
+    if (!this.photosOn) {
+      this.photoPanel.hide();
+      this.photoFor = null;
+      this.photoAt = null;
+    } else this.hud.toast("Point at a building to see street photos of it");
+    this.dirty = true;
+  }
+
+  /** PEEK-003 / PEEK-004 / PEEK-005: the best photo of the building, found in the background. */
+  private showPhotosFor(b: Building) {
+    if (!this.world || this.photoFor === b.geom.id) return;
+    this.photoFor = b.geom.id;
+    const proj = this.world.features.proj;
+    const g = b.geom;
+    const x = toM(g.cx), y = toM(g.cy);
+    const lat = proj.lat(y), lon = proj.lon(x);
+    const label = b.look && b.look in KINDS ? KINDS[b.look as Kind].label : b.look === "EDU" ? "School" : b.look === "CIVIC" ? "Civic building" : "Building";
+    const title = `${label} · ${b.tags.building ?? "building"}`;
+    const links = photoLinks(lat, lon);
+    this.photoAt = null;
+    this.photoPanel.show({ title, state: "loading", links });
+    let search = this.photoCache.get(g.id);
+    if (!search) {
+      search = searchPanoramax(squareAround(lat, lon, 2 * TUNE.PHOTO_RADIUS));
+      this.photoCache.set(g.id, search);
+    }
+    search.then(
+      (photos) => {
+        if (this.photoFor !== g.id) return;
+        const best = bestPhoto(photos, proj, x, y);
+        if (!best) this.photoPanel.show({ title, state: "none", links }); // PEEK-004
+        else {
+          this.photoAt = { x: proj.x(best.photo.lon), y: proj.y(best.photo.lat), azimuth: best.photo.azimuth };
+          this.photoPanel.show({ title, state: "photo", photo: best.photo, distance: best.distance, links: photoLinks(lat, lon, best.photo) });
+        }
+        this.dirty = true;
+      },
+      (err: Error) => {
+        this.photoCache.delete(g.id);
+        if (this.photoFor === g.id) this.photoPanel.show({ title, state: "error", links, detail: err.message });
+      },
+    );
+  }
+
   /** TYPE-012: flies to the next building still to decide, north to south, and flashes it. */
   private nextToDecide() {
     if (!this.world) return;
@@ -318,7 +392,13 @@ export class App {
 
   /** TYPE-005: what the editor thinks about the building under the cursor, while buildings are what the brush acts on. */
   private hintAt(wx: number, wy: number, sx: number, sy: number) {
-    if (!this.world || !onBuildings(this.tool, this.target)) return this.hud.hint(null);
+    if (!this.world) return;
+    if (this.photosOn) {
+      // PEEK-003: the panel follows the building under the cursor.
+      const b = this.world.buildingAt(toI(wx), toI(wy));
+      if (b) this.showPhotosFor(b);
+    }
+    if (!onBuildings(this.tool, this.target)) return this.hud.hint(null);
     const b = this.world.buildingAt(toI(wx), toI(wy));
     const g = b && this.world.guessOf(b);
     if (!g) return this.hud.hint(null);
@@ -391,6 +471,7 @@ export class App {
     window.addEventListener("blur", () => {
       this.space = false;
       this.arrows.clear();
+      if (this.imageryHeld) this.setImagery(this.imageryOn, false); // PEEK-001: a lost keyup must not leave it on
     });
     // LOAD-004
     window.addEventListener("dragover", (e) => {
@@ -447,6 +528,11 @@ export class App {
     this.canvas.setPointerCapture(e.pointerId);
     this.hover = null;
     this.hud.hint(null);
+    if (this.photosOn) {
+      // PEEK-003: a tap shows photos too, for fingers that cannot hover.
+      const b = this.world.buildingAt(toI(wx), toI(wy));
+      if (b) this.showPhotosFor(b);
+    }
     // PAINT-001: the brush radius is fixed in metres for the whole stroke. TYPE-006: the target is fixed too.
     this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy, TUNE.TAP_MOVE / this.camera.scale, this.target);
     this.strokeStart = { sx, sy, t: performance.now(), moved: 0 };
@@ -593,6 +679,12 @@ export class App {
       this.dirty = true;
       return;
     }
+    if ((k === "v" || k === "V") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // PEEK-001: held, not toggled.
+      if (down && e.repeat) return;
+      this.setImagery(this.imageryOn, down);
+      return;
+    }
     if (!down) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && (k === "z" || k === "Z")) {
@@ -638,8 +730,12 @@ export class App {
       case "j":
       case "J":
         return this.nextToDecide(); // TYPE-012
+      case "p":
+      case "P":
+        return this.togglePhotos(); // PEEK-003
       case "Escape":
         this.hud.toggleHelp(false);
+        if (this.photosOn) this.togglePhotos(false);
         return;
     }
   }
@@ -805,6 +901,8 @@ export class App {
           hover: this.hover,
           showBuildings: this.showBuildings,
           showOriginals: this.showOriginals,
+          imagery: this.imageryOn || this.imageryHeld ? this.tiles : null, // PEEK-001
+          photo: this.photosOn ? this.photoAt : null, // PEEK-003
           anims: this.anims,
           panning: !!this.pan || this.touchLock || this.space,
         },

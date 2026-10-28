@@ -5,6 +5,7 @@ import { type BuildingLook, CTX_COLORS, type Kind, KINDS, disagreesWithLand, loo
 import type { Atom, BuildingSet, Piece, Rival, World } from "../model/world";
 import type { Stroke } from "../paint/stroke";
 import { type Target, type Tool, onBuildings } from "../paint/snap";
+import { type TileCache, tileAt, tileBounds, tileZoom } from "../osm/imagery";
 import { TUNE } from "../tuning";
 import type { Anims } from "./anim";
 import type { Camera } from "./camera";
@@ -24,6 +25,7 @@ export const COLORS = {
   dispute: "#d6363c", // REN-013
   unsure: "#e5961a", // TYPE-004: the unsure mark, the amber of the missing-landuse badge (REN-016)
   agree: "#4f9d69", // TYPE-007
+  camera: "#2b7de9", // PEEK-003: where a photo was taken
 };
 
 export interface RenderState {
@@ -36,6 +38,8 @@ export interface RenderState {
   hover: Piece | null;
   showBuildings: boolean;
   showOriginals: boolean;
+  imagery: TileCache | null; // PEEK-001: set while the imagery peek is on
+  photo: { x: number; y: number; azimuth: number | null } | null; // PEEK-003: where the shown photo was taken, metres
   anims: Anims;
   panning: boolean;
 }
@@ -486,6 +490,50 @@ export class Renderer {
       ctx.setLineDash([]);
     }
 
+    // PEEK-001: imagery over the map, with every building outline on top of it.
+    if (st.imagery) {
+      this.drawImagery(st.imagery, cam, px);
+      if (st.showBuildings) {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 1.4 * px;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
+        const sets = new Map<number, BuildingSet>();
+        for (const s of this.world.buildingSets()) sets.set(s.atom, s);
+        for (const s of [sets.get(-1), ...atoms.map((a) => sets.get(a.id))]) {
+          if (!s) continue;
+          const g = this.gfxOf(s);
+          ctx.stroke(g.faint);
+          for (const [, path] of g.typed) ctx.stroke(path);
+          for (const [, path] of g.guessed) ctx.stroke(path);
+        }
+      }
+    }
+
+    // PEEK-003: the camera that took the shown photo, and the way it looks.
+    if (st.photo) {
+      const { x, y, azimuth } = st.photo;
+      ctx.save();
+      ctx.translate(x, y);
+      if (azimuth !== null) {
+        ctx.rotate((azimuth * Math.PI) / 180);
+        const reach = 28 * px;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, reach, -Math.PI / 2 - 0.45, -Math.PI / 2 + 0.45);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(43, 125, 233, 0.28)";
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, 5 * px, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.camera;
+      ctx.fill();
+      ctx.lineWidth = 2 * px;
+      ctx.strokeStyle = "#fff";
+      ctx.stroke();
+      ctx.restore();
+    }
+
     const painting = st.tool.type !== "density" && !onBuildings(st.tool, st.target); // TYPE-006: no lattice hints on buildings
     // REN-006: lattice hints around the cursor.
     if (st.cursor && painting && !st.panning) {
@@ -552,6 +600,29 @@ export class Renderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (st.cursor && !st.panning) this.drawCursor(st, now);
     return ambient;
+  }
+
+  /** PEEK-001: the tiles under the view, each placed by its lon/lat corners through the area's projection. */
+  private drawImagery(tiles: TileCache, cam: Camera, px: number) {
+    const { ctx } = this;
+    const proj = this.world.features.proj;
+    const z = tileZoom(cam.scale, proj.lat0, this.dpr);
+    const v = cam.view();
+    const [x0, y0] = tileAt(proj.lon(v.minX), proj.lat(v.minY), z);
+    const [x1, y1] = tileAt(proj.lon(v.maxX), proj.lat(v.maxY), z);
+    ctx.save();
+    ctx.globalAlpha = TUNE.PEEK_ALPHA;
+    ctx.imageSmoothingEnabled = true;
+    for (let ty = Math.floor(y0); ty <= Math.floor(y1); ty++)
+      for (let tx = Math.floor(x0); tx <= Math.floor(x1); tx++) {
+        const img = tiles.get(z, tx, ty);
+        if (!img) continue;
+        const b = tileBounds(tx, ty, z);
+        const left = proj.x(b.minLon), top = proj.y(b.maxLat);
+        // A hair of overlap hides the seams between tiles.
+        ctx.drawImage(img, left, top, proj.x(b.maxLon) - left + px, proj.y(b.minLat) - top + px);
+      }
+    ctx.restore();
   }
 
   private drawSlab(p: Piece, s: number, now: number, anims: Anims, hovered: boolean) {

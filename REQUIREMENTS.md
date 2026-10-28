@@ -810,8 +810,13 @@ types are editable (§17). NG-004 replaces it.
 §17.
   Trace: policy
 
-**NG-003** The editor shall not show a raster basemap.
-  Why: the lattice *is* the map. Roads and blocks come from the same data the user is painting on.
+~~**NG-003** The editor shall not show a raster basemap.~~ Retired: the imagery peek (PEEK-001) is a raster
+the user holds up for a moment. NG-005 replaces it.
+
+**NG-005** The editor shall not show a raster basemap, other than the imagery peek (PEEK-001), which is never
+on by itself.
+  Why: the lattice *is* the map. Roads and blocks come from the same data the user is painting on. Imagery
+  is evidence the user asks for, not the ground they paint on.
   Trace: policy
 
 ---
@@ -909,6 +914,40 @@ view, and flash it. The button is hidden while there are none.
 
 **TYPE-013** While buildings are the target, when the user Alt-clicks a typed building, the editor shall
 select its look's tile, if the palette has one.
+  Trace: manual
+
+### Peeks: imagery and street photos
+
+Deciding what a building is often takes one look at the roof or the front door. The peeks bring that
+evidence to the building under the cursor and take it away again, so the lattice stays the map.
+
+**PEEK-001** While the user holds `V`, or after pressing the imagery button until it is pressed again, the
+editor shall show aerial imagery over the map at TUNE-PEEK-ALPHA, with every building outline drawn on top
+and the imagery's attribution shown, and shall take it away on release.
+  Why: the lattice colours still show through, the outlines say which footprint is which, and nothing is
+  traced from the imagery: the user only looks.
+  Trace: manual
+
+**PEEK-002** The editor shall take imagery and street photos only from sources whose terms allow their use
+for OpenStreetMap editing, and never from Google Maps or Street View.
+  Why: what the user decides here ends up in OSM (§15). A source OSM may not be derived from would poison
+  every edit.
+  Trace: policy
+
+**PEEK-003** While the photo peek is on (key `P`, or its button), when the user points at or taps a
+building, the editor shall show, beside the map, the nearest open street-level photo that faces that
+building, when it was taken, where it was taken from on the map with the direction it looks in, and links
+that open the spot in Panoramax, Mapillary and KartaView in a new tab.
+  Why: a photo answers "house or flats?" in a second. The links are for when the open photo is not enough.
+  Trace: manual
+
+**PEEK-004** If no photo was taken within TUNE-PHOTO-RADIUS of the building, then the editor shall say so and
+still offer the links.
+  Why: open coverage is patchy. The user should still get somewhere in one click.
+
+**PEEK-005** The editor shall never make the user wait for imagery or photos: tiles and photos arrive in the
+background, the map stays live, and a slow or failed request shows as such beside the map.
+  Why: FEEL-009, for the network.
   Trace: manual
 
 **TYPE-014** The editor shall use guesses only for drawing (TYPE-004, TYPE-005) and for the agree tool

@@ -62,6 +62,11 @@ export const TUNE = {
   GUESS_NEIGHBOUR_SHARE: 0.75, // TUNE-GUESS-NEIGHBOUR-SHARE: share of them with one look for that look to count
   GUESS_ALPHA: 0.55, // TUNE-GUESS-ALPHA: opacity of a guessed building, before its hatch
 
+  // Peeks (PEEK-*)
+  PEEK_ALPHA: 0.78, // TUNE-PEEK-ALPHA: opacity of the imagery peek over the map
+  PHOTO_RADIUS: 80, // TUNE-PHOTO-RADIUS: how far from a building a street photo may have been taken, m
+  PHOTO_TURN: 0.4, // TUNE-PHOTO-TURN: how much a photo looking away from the building costs, m per degree
+
   // Disputes
   RIPPLE_PERIOD: 2400, // TUNE-RIPPLE-PERIOD: time between ripples of a disagreeing building, ms
   RIPPLE_REACH: 12, // TUNE-RIPPLE-REACH: how far a ripple grows out of the footprint, px
