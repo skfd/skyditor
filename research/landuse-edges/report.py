@@ -12,7 +12,7 @@ the careful squares. A square's street style comes from its sidewalks: with at l
 separately mapped sidewalk, it is "kerb" when the sidewalk is inside the landuse on most of them, else
 "property line".
 """
-import collections, json, math, sys
+import collections, gzip, json, math, sys
 import numpy as np
 
 BIN = 0.25
@@ -21,7 +21,7 @@ MAIN = ["primary", "secondary", "tertiary", "unclassified", "residential", "livi
 
 
 def load(path):
-    rows = json.load(open(path))
+    rows = json.load(gzip.open(path) if path.endswith(".gz") else open(path))
     errs = [r for r in rows if "error" in r]
     return [r for r in rows if "paint_cover" in r], rows, errs
 

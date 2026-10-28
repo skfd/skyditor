@@ -1,0 +1,392 @@
+
+## Sample
+
+3564 squares, 0 failed, 3202 with paintable landuse and roads; 582 block by block; 265 careful.
+Screens: cover >= 0.2, roads inside <= 10.0%, inner samples >= 25, nothing <= 10.0%, style needs >= 20 sidewalk rays.
+
+country city             squares  paint  block  careful   kerb  prop  unknown (careful)
+AT graz                       81     79      0        0      0     0        0
+AT vienna                     81     79      0        0      0     0        0
+CA calgary                    81     77      2        1      0     0        1
+CA guelph                     81     64      2        0      0     0        0
+CA montreal                   81     71     13        6      0     6        0
+CA ottawa                     81     73      3        0      0     0        0
+CA toronto                    81     77     42       17      0    17        0
+CA vancouver                  81     72     18        3      3     0        0
+CH bern                       81     67      0        0      0     0        0
+CH zurich                     81     70      1        0      0     0        0
+CZ brno                       81     71      6        1      0     1        0
+CZ prague                     81     80      5        1      1     0        0
+DE berlin                     81     80     63       39     33     6        0
+DE bremen                     81     69      6        4      0     0        4
+DE dresden                    81     75      2        1      0     0        1
+DE hamburg                    81     80     23       11      0     7        4
+DE karlsruhe                  81     69      2        1      0     1        0
+DE leipzig                    81     73     11        4      2     2        0
+DE munich                     81     79     15        8      1     6        1
+DK aarhus                     81     72      0        0      0     0        0
+DK copenhagen                 81     67      3        1      0     0        1
+EE tallinn                    81     58      7        2      0     2        0
+EE tartu                      81     71      7        1      0     0        1
+FI helsinki                   81     71     42       15      0    15        0
+FI tampere                    81     58     19        2      0     1        1
+FI turku                      81     79     55       29      0    23        6
+FR paris                      81     59      0        0      0     0        0
+GB london                     81     79     13        7      0     7        0
+HU budapest                   81     77      0        0      0     0        0
+LT vilnius                    81     81     21       18      8     3        7
+LV riga                       81     75     34       18      0    16        2
+NL amersfoort                 81     54      1        0      0     0        0
+NL amsterdam                  81     75      0        0      0     0        0
+NL den_haag                   81     76      1        0      0     0        0
+NL rotterdam                  81     73      2        0      0     0        0
+NL utrecht                    81     67      0        0      0     0        0
+PL gdansk                     81     75     22        6      0     4        2
+PL krakow                     81     81     17        8      4     3        1
+PL warsaw                     81     81     42       38      0    34        4
+PL wroclaw                    81     74     28        6      0     6        0
+SE gothenburg                 81     74      2        0      0     0        0
+SE stockholm                  81     76      3        2      0     0        2
+UA kyiv                       81     71     28       10      7     3        0
+UA lviv                       81     73     21        5      1     1        3
+
+## Q5. Street style by country (careful squares; all squares with paint in brackets)
+
+country        kerb       prop    unknown   kerb share of decided
+AT          0 ( 17)    0 ( 86)    0 ( 55)     -% (17%)
+CA          3 ( 87)   23 (285)    1 ( 62)    12% (23%)
+CH          0 ( 14)    0 ( 53)    0 ( 70)     -% (21%)
+CZ          1 ( 55)    1 ( 46)    0 ( 50)    50% (54%)
+DE         36 ( 99)   22 (178)   10 (248)    62% (36%)
+DK          0 (  5)    0 ( 14)    1 (120)     -% (26%)
+EE          0 (  6)    2 ( 47)    1 ( 76)     0% (11%)
+FI          0 (  1)   39 (142)    7 ( 65)     0% (1%)
+FR          0 (  2)    0 ( 40)    0 ( 17)     -% (5%)
+GB          0 (  8)    7 ( 68)    0 (  3)     0% (11%)
+HU          0 ( 13)    0 ( 27)    0 ( 37)     -% (32%)
+LT          8 ( 29)    3 (  5)    7 ( 47)    73% (85%)
+LV          0 (  2)   16 ( 59)    2 ( 14)     0% (3%)
+NL          0 ( 11)    0 ( 27)    0 (307)     -% (29%)
+PL          4 ( 17)   47 (194)    7 (100)     8% (8%)
+SE          0 ( 25)    0 ( 28)    2 ( 97)     -% (47%)
+UA          8 ( 61)    4 ( 26)    3 ( 57)    67% (70%)
+
+Two squares of the same city with a decided style agree (all squares with paint):
+  grid distance 1 (1.2 km): 81% of 4512 pairs
+  grid distance 2 (2.4 km): 80% of 7192 pairs
+  grid distance 3+ (3.6+ km): 79% of 33615 pairs
+
+Minority share of sidewalk rays within one square: median 4%, 15% of decided squares have >= 30% (mixed).
+
+Sidewalk inside landuse by road class, pooled rays (kerb squares | property-line squares):
+  primary         86% of  36588 |  10% of  62620
+  secondary       85% of  69543 |   9% of 116315
+  tertiary        83% of  73530 |   9% of 124453
+  unclassified    82% of   8952 |  12% of  22919
+  residential     87% of 246574 |   8% of 392850
+  living_street   83% of   5452 |  25% of   8140
+  pedestrian      70% of   1154 |  10% of   1620
+
+## Q1. Edge distance from the road centreline, by class (m: median (p25-p75; p10-p90))
+
+### property line squares (164)
+
+  primary
+    sidewalk outside    10.9 ( 8.9-12.9; p10-90  7.1-17.4) n=8821
+    sidewalk inside      5.9 ( 4.9- 7.1; p10-90  3.9- 9.4) n=1008
+    no sidewalk          9.9 ( 6.9-15.4; p10-90  4.4-21.4) n=4955
+    past the sidewalk    1.9 ( 1.4- 2.9; p10-90  0.9- 6.1) n=8821
+  secondary
+    sidewalk outside    11.1 ( 9.4-14.1; p10-90  8.1-18.6) n=17175
+    sidewalk inside      6.9 ( 5.6- 9.1; p10-90  4.6- 9.6) n=760
+    no sidewalk         12.4 ( 8.6-16.9; p10-90  5.9-25.9) n=7677
+    past the sidewalk    1.9 ( 1.1- 2.9; p10-90  0.9- 5.4) n=17175
+  tertiary
+    sidewalk outside     9.1 ( 7.6-12.1; p10-90  6.1-16.6) n=23673
+    sidewalk inside      6.1 ( 4.6- 9.4; p10-90  1.4-10.1) n=1076
+    no sidewalk         10.1 ( 7.9-13.6; p10-90  6.1-20.4) n=14296
+    past the sidewalk    1.6 ( 1.1- 2.6; p10-90  0.9- 6.4) n=23673
+  unclassified
+    sidewalk outside     9.6 ( 7.4-12.1; p10-90  6.1-17.9) n=3888
+    sidewalk inside      3.6 ( 3.1- 4.6; p10-90  2.4- 5.1) n=257
+    no sidewalk          8.1 ( 5.6-11.1; p10-90  3.9-17.6) n=7719
+    past the sidewalk    1.9 ( 1.1- 2.9; p10-90  0.9-10.4) n=3888
+  residential
+    sidewalk outside     7.1 ( 5.9- 9.1; p10-90  4.9-11.4) n=102267
+    sidewalk inside      4.6 ( 3.4- 5.9; p10-90  2.4- 7.6) n=5719
+    no sidewalk          5.6 ( 4.4- 7.4; p10-90  3.1-10.4) n=109791
+    past the sidewalk    1.4 ( 0.9- 1.9; p10-90  0.6- 3.1) n=102267
+  living_street
+    sidewalk outside     6.4 ( 5.1- 9.1; p10-90  4.4-14.4) n=1948
+    sidewalk inside      4.4 ( 3.1- 6.9; p10-90  2.1- 8.4) n=339
+    no sidewalk          4.4 ( 2.9- 6.4; p10-90  2.1- 9.4) n=17745
+    past the sidewalk    1.9 ( 1.4- 2.4; p10-90  0.9- 7.4) n=1948
+  pedestrian
+    sidewalk outside     7.1 ( 5.4- 9.9; p10-90  3.9-20.9) n=742
+    no sidewalk          4.9 ( 3.6- 9.1; p10-90  2.4-18.4) n=4558
+    past the sidewalk    1.6 ( 1.1- 4.1; p10-90  0.9-17.6) n=742
+  service
+
+### kerb squares (60)
+
+  primary
+    sidewalk outside    14.4 (10.9-17.9; p10-90  9.4-25.1) n=1180
+    sidewalk inside      6.4 ( 5.1- 8.1; p10-90  3.9- 9.6) n=6452
+    no sidewalk          6.4 ( 4.9-10.9; p10-90  3.6-16.4) n=3000
+    past the sidewalk    3.6 ( 2.1- 7.9; p10-90  1.6-16.4) n=1180
+  secondary
+    sidewalk outside    10.9 ( 9.9-12.6; p10-90  9.1-14.9) n=3606
+    sidewalk inside      5.9 ( 4.6- 7.1; p10-90  3.9- 8.4) n=13970
+    no sidewalk          6.1 ( 5.1- 8.4; p10-90  3.1-10.9) n=3266
+    past the sidewalk    2.1 ( 1.6- 2.9; p10-90  1.1- 3.9) n=3606
+  tertiary
+    sidewalk outside    11.4 ( 9.9-11.9; p10-90  8.9-13.6) n=2569
+    sidewalk inside      5.6 ( 4.6- 6.4; p10-90  3.9- 7.6) n=10508
+    no sidewalk          4.4 ( 3.1- 8.6; p10-90  2.4-13.1) n=1818
+    past the sidewalk    1.9 ( 1.4- 2.1; p10-90  0.6- 2.6) n=2569
+  unclassified
+    sidewalk outside    10.6 (10.1-10.9; p10-90  9.9-13.4) n=165
+    sidewalk inside      4.4 ( 3.6- 5.9; p10-90  3.1- 6.6) n=1663
+    no sidewalk          5.6 ( 3.9- 6.4; p10-90  2.9- 7.4) n=2253
+    past the sidewalk    1.1 ( 0.9- 1.1; p10-90  0.6- 3.9) n=165
+  residential
+    sidewalk outside    10.4 ( 8.6-13.1; p10-90  6.1-16.4) n=9729
+    sidewalk inside      4.9 ( 3.9- 5.9; p10-90  2.9- 7.1) n=66857
+    no sidewalk          4.6 ( 2.9- 7.1; p10-90  2.1- 9.6) n=14441
+    past the sidewalk    2.4 ( 1.6- 3.4; p10-90  1.1- 5.1) n=9729
+  living_street
+    sidewalk outside    10.1 ( 8.1-10.6; p10-90  8.1-10.9) n=378
+    sidewalk inside      4.4 ( 2.6- 6.4; p10-90  1.9- 8.6) n=892
+    no sidewalk          4.9 ( 2.9- 5.6; p10-90  2.1- 7.1) n=2285
+    past the sidewalk    2.1 ( 1.9- 2.1; p10-90  1.9- 2.4) n=378
+  pedestrian
+    sidewalk outside    10.9 ( 9.6-11.1; p10-90  9.4-11.9) n=70
+    sidewalk inside      4.6 ( 1.9- 5.6; p10-90  1.6- 5.6) n=248
+    no sidewalk          5.1 ( 3.6- 5.4; p10-90  1.1- 9.6) n=465
+    past the sidewalk    2.9 ( 1.6- 3.4; p10-90  1.6- 3.6) n=70
+  service
+
+Edge distance in property-line squares by country (all classes; residential):
+  CA     23 squares  all   6.6 ( 5.4- 8.6; p10-90  4.6-10.4) n=65837
+                residential   6.1 ( 5.4- 7.6; p10-90  4.4- 9.4) n=50052
+  CZ      1 squares  all  12.9 (10.6-23.6; p10-90  8.6-28.9) n=772
+                residential  12.9 (10.6-23.6; p10-90  8.6-28.9) n=772
+  DE     22 squares  all   8.6 ( 6.4-10.9; p10-90  4.9-13.4) n=45674
+                residential   7.6 ( 5.9- 9.4; p10-90  4.6-11.1) n=29329
+  EE      2 squares  all   6.6 ( 5.6-10.6; p10-90  4.6-15.1) n=2615
+                residential   6.1 ( 5.4- 7.4; p10-90  4.4-15.1) n=1752
+  FI     39 squares  all   6.4 ( 4.4- 9.4; p10-90  3.4-13.6) n=73151
+                residential   5.1 ( 4.1- 7.1; p10-90  3.1- 9.4) n=50344
+  GB      7 squares  all   6.1 ( 4.6- 8.1; p10-90  3.1-14.9) n=31120
+                residential   5.9 ( 4.4- 7.1; p10-90  2.6-10.4) n=20330
+  LT      3 squares  all   6.9 ( 4.6-10.9; p10-90  3.4-15.4) n=2181
+                residential   5.4 ( 4.6- 6.1; p10-90  3.6-23.1) n=98
+  LV     16 squares  all   6.4 ( 4.1- 8.6; p10-90  2.6-10.9) n=34142
+                residential   6.6 ( 5.4- 8.6; p10-90  4.1-10.4) n=11664
+  PL     47 squares  all   8.1 ( 5.9-12.1; p10-90  4.4-18.4) n=83343
+                residential   7.4 ( 5.4- 9.6; p10-90  4.4-13.4) n=52106
+  UA      4 squares  all  14.4 ( 4.9-19.4; p10-90  2.4-26.1) n=2722
+                residential  12.6 ( 2.6-15.9; p10-90  1.9-20.4) n=1330
+
+Variance of the distance explained (R², property-line squares), compared on the same samples:
+  samples with width=*: class (0.127, 19141), width (0.12, 19104), class+width (0.186, 18940)  (R², n)
+  samples with lanes=*: class (0.167, 192346), lanes (0.082, 192346), class+lanes (0.187, 192296)
+  all samples: class (0.162, 341557)
+
+  distance by width=* (all classes, property-line squares):
+    width   2 m:   2.6 ( 2.4- 3.4; p10-90  2.4- 3.4) n=59
+    width   3 m:   4.9 ( 3.4- 7.6; p10-90  2.9- 8.4) n=1025
+    width   4 m:   3.6 ( 2.4- 5.4; p10-90  2.1- 8.9) n=1325
+    width   5 m:   6.1 ( 4.9- 8.1; p10-90  3.1-11.1) n=2804
+    width   6 m:   6.1 ( 4.9- 8.6; p10-90  4.1-10.6) n=5110
+    width   7 m:   6.6 ( 5.1- 9.1; p10-90  4.6-10.9) n=2737
+    width   8 m:   6.6 ( 5.1- 8.1; p10-90  4.6- 9.1) n=2559
+    width   9 m:   7.9 ( 6.4-10.9; p10-90  6.1-14.4) n=663
+    width  10 m:   9.4 ( 8.4-10.1; p10-90  5.4-13.4) n=1173
+    width  11 m:   7.9 ( 5.6- 8.9; p10-90  5.1- 9.9) n=1001
+    width  12 m:  13.1 (12.1-14.4; p10-90 10.1-15.9) n=121
+    width  13 m:   0.9 ( 0.6-10.9; p10-90  0.6-11.1) n=54
+    width  15 m:   9.9 ( 9.6-10.6; p10-90  9.6-10.9) n=60
+    width  17 m:  11.9 (11.4-12.4; p10-90 10.9-12.9) n=413
+
+## Q2. Roads inside landuse (block-by-block squares): % of length inside, of total m
+
+By class and how the road ends (dead end: an end that joins nothing inside the square; loop: both ends on the same road; closed: a ring):
+  service|dead end                      66.9% of   975874 m
+  residential|through                    2.4% of   934467 m
+  service|through                       60.3% of   825970 m
+  secondary|through                      0.4% of   271855 m
+  tertiary|through                       0.6% of   267281 m
+  primary|through                        0.1% of   207148 m
+  service|loop                          63.0% of   143365 m
+  unclassified|through                   4.4% of    89062 m
+  residential|dead end                   8.3% of    86712 m
+  trunk|through                          0.0% of    66182 m
+  living_street|through                  8.1% of    63250 m
+  service|closed                        72.6% of    37953 m
+  motorway|through                       0.0% of    37614 m
+  motorway_link|through                  0.3% of    23948 m
+  pedestrian|through                     9.8% of    22741 m
+  trunk_link|through                     0.0% of    20218 m
+  primary_link|through                   0.2% of    13697 m
+  living_street|dead end                29.6% of    11367 m
+  pedestrian|dead end                   22.5% of     9974 m
+  residential|loop                       5.4% of     9597 m
+  unclassified|dead end                  7.7% of     7390 m
+  secondary_link|through                 0.0% of     6735 m
+  tertiary|loop                          0.0% of     2900 m
+  residential|closed                     4.9% of     2658 m
+  secondary|loop                         0.0% of     2382 m
+  secondary|dead end                     0.0% of     2362 m
+  tertiary_link|through                  0.0% of     2212 m
+  trunk|dead end                         0.0% of     1862 m
+  primary|dead end                       0.0% of     1636 m
+  living_street|loop                    38.1% of     1414 m
+  primary|loop                           0.0% of     1404 m
+  unclassified|loop                      0.0% of     1299 m
+  pedestrian|closed                      0.2% of     1230 m
+  motorway|dead end                      0.0% of     1114 m
+  tertiary|closed                        0.0% of     1026 m
+  unclassified|closed                    0.0% of      512 m
+  pedestrian|loop                       55.9% of      406 m
+  tertiary|dead end                      0.7% of      383 m
+  living_street|closed                  65.8% of      324 m
+
+By access=*:
+  service|-                             62.5% of  1495812 m
+  residential|-                          2.8% of  1024398 m
+  service|private                       72.0% of   362261 m
+  secondary|-                            0.4% of   276385 m
+  tertiary|-                             0.5% of   270504 m
+  primary|-                              0.1% of   209941 m
+  unclassified|-                         4.5% of    94945 m
+  living_street|-                       10.0% of    72968 m
+  trunk|-                                0.0% of    67407 m
+  motorway|-                             0.0% of    38728 m
+  service|no                            29.0% of    34549 m
+  pedestrian|-                          14.0% of    32950 m
+  service|customers                     77.2% of    31815 m
+  service|destination                   69.9% of    29474 m
+  motorway_link|-                        0.3% of    23755 m
+  trunk_link|-                           0.0% of    20424 m
+  service|permissive                    58.7% of    19333 m
+  primary_link|-                         0.2% of    13661 m
+  secondary_link|-                       0.0% of     6893 m
+  service|yes                           55.9% of     3313 m
+  service|delivery                      75.1% of     3175 m
+  service|permit                        49.8% of     2958 m
+  residential|no                         0.3% of     2705 m
+  residential|yes                       12.5% of     2664 m
+  tertiary_link|-                        0.0% of     2212 m
+  residential|private                   44.8% of     2201 m
+  living_street|private                 65.9% of     2097 m
+  unclassified|no                        0.0% of     1603 m
+  unclassified|private                  18.0% of     1283 m
+  pedestrian|yes                         0.1% of     1016 m
+
+Service roads by service=*:
+  -                                     57.3% of   824086 m
+  driveway                              70.5% of   733742 m
+  parking_aisle                         66.2% of   317302 m
+  alley                                 62.8% of    91827 m
+  emergency_access                      60.9% of    10662 m
+  drive-through                         83.7% of     4209 m
+  training                               0.0% of      385 m
+  fuel                                  63.7% of      351 m
+
+By motor_vehicle=* (or motorcar=*):
+  service|-                             64.7% of  1913310 m
+  residential|-                          2.8% of  1006148 m
+  secondary|-                            0.4% of   274616 m
+  tertiary|-                             0.6% of   270239 m
+  primary|-                              0.1% of   209629 m
+  unclassified|-                         4.7% of    94307 m
+  living_street|-                       11.0% of    68470 m
+  trunk|-                                0.0% of    64828 m
+  motorway|-                             0.0% of    37538 m
+  service|private                       53.3% of    33595 m
+  pedestrian|-                          12.5% of    28200 m
+  motorway_link|-                        0.3% of    23948 m
+  trunk_link|-                           0.0% of    20424 m
+  residential|destination                3.7% of    17465 m
+  service|destination                   33.3% of    15448 m
+  primary_link|-                         0.2% of    13688 m
+  service|no                            24.3% of    10974 m
+  secondary_link|-                       0.0% of     6452 m
+  residential|yes                        6.6% of     6015 m
+  living_street|destination              6.1% of     3330 m
+
+## Q3. What inner-block edges follow (block-by-block squares)
+
+559287 samples (1119 km of edge). Any = share of samples within reach of the target; first = assigned in priority order.
+
+  target                  any  first
+  other landuse edge    73.7%  44.2%
+  fence                 22.6%  22.6%
+  building wall         11.2%  10.3%
+  wall                   4.1%   3.9%
+  service road           1.6%   0.4%
+  footway/path           1.6%   0.5%
+  hedge                  1.3%   1.1%
+  crosses building       1.2%   0.2%
+  inside building        0.4%   0.1%
+  retaining_wall         0.4%   0.4%
+  kerb                   0.0%   0.0%
+  nothing                      16.1%
+
+By country, first match (%):
+             n     fence      wall     hedge retaining      kerb building  crosses b inside bu other lan footway/p service r   nothing
+  CA     69285       5.4       0.2       0.1       0.0       0.0      10.7       0.5       0.1      52.1       0.3       1.4      29.1
+  CH      1122       0.0       0.0       4.2       0.0       0.0       0.1       0.2       0.0      56.8       2.5       0.3      36.0
+  CZ     10305      36.6       0.7       0.0       2.4       0.0       8.9       0.1       0.0      31.9       0.3       0.5      18.5
+  DE     82139      15.7       4.1       0.4       0.3       0.1      18.3       0.2       0.1      46.4       0.8       0.3      13.3
+  DK       989      21.7       2.1       0.0       0.0       0.0       2.5       0.1       0.3      43.7       4.2       0.0      25.3
+  EE     13258      17.5      10.3       2.1       0.0       0.0       6.4       0.2       0.3      38.8       0.5       0.9      23.0
+  FI    128822      11.2       0.5       3.9       0.6       0.0       6.5       0.2       0.2      62.0       0.4       0.2      14.4
+  GB      7192       7.1      15.1       0.0       1.0       0.1      26.8       0.9       0.7      30.2       0.5       0.6      17.1
+  LT     16447      12.5       0.1       0.0       0.0       0.0       3.1       0.0       0.0      82.7       0.4       0.0       1.1
+  LV     36335      50.3      14.1       0.1       0.0       0.1      11.5       0.2       0.2      13.2       0.3       0.3       9.7
+  NL      2935       9.6       0.0       0.1       0.0       0.0       7.8       0.9       0.0      47.3       2.0       0.5      31.7
+  PL    147278      39.7       3.5       0.2       0.4       0.0       9.8       0.1       0.0      33.1       0.6       0.3      12.3
+  SE      2717      12.5       0.0       0.0       0.0       0.0       2.2       0.4       0.0      46.0       1.4       0.4      37.2
+  UA     40463      23.3      12.1       0.0       0.3       0.1       8.5       0.2       0.4      29.0       0.7       0.6      24.7
+
+Edges that follow nothing: 4559 runs, 176.3 km.
+  length   0-10   m:   3.1% of the length, straight (within 1 m of the chord)  96.7%
+  length  10-30   m:  18.5% of the length, straight (within 1 m of the chord)  83.9%
+  length  30-60   m:  25.7% of the length, straight (within 1 m of the chord)  67.0%
+  length  60-120  m:  27.2% of the length, straight (within 1 m of the chord)  45.6%
+  length 120-     m:  25.5% of the length, straight (within 1 m of the chord)  27.9%
+  straight overall: 55% of the length; within 2 m: 60%
+
+## Q4. Lots between roads, fences, walls, hedges and context edges (careful squares)
+
+Faces touching paintable landuse: 15015 lots, median 176 m² (p25 61, p75 640); blocks between roads: 698, median 15255 m².
+Area-weighted (the lot a typical square metre is in): lots 12144 m², blocks 23152 m².
+
+Share of landuse area that whole lots would cover (a lot counts when >= 60% of it is in the polygon):
+  CA    27.3% of   5.52 km²; lots area-weighted median   18415 m²
+  CZ    27.0% of   0.33 km²; lots area-weighted median    9399 m²
+  DE    27.8% of  14.27 km²; lots area-weighted median   16086 m²
+  DK    31.2% of   0.09 km²; lots area-weighted median    7201 m²
+  EE    27.4% of   0.53 km²; lots area-weighted median    5489 m²
+  FI    19.5% of   6.55 km²; lots area-weighted median   10756 m²
+  GB    25.7% of   1.34 km²; lots area-weighted median   10458 m²
+  LT    15.9% of   3.55 km²; lots area-weighted median   11012 m²
+  LV    28.3% of   3.68 km²; lots area-weighted median    7470 m²
+  PL    22.9% of   9.59 km²; lots area-weighted median    5607 m²
+  SE    18.6% of   0.29 km²; lots area-weighted median   11619 m²
+  UA    19.7% of   2.85 km²; lots area-weighted median   13895 m²
+  property line  squares: 23.1%
+  kerb           squares: 30.0%
+
+## Q6. Shape of edges that follow nothing (block-by-block squares)
+
+Runs of 20 m or more: 2637; vertices (turn >= 5°) per 100 m, length-weighted: 1.3; median per run 0.0.
+Turn angles at those vertices: 5-15°: 21%, 15-30°: 18%, 30-60°: 18%, 60-80°: 7%, 80-100°: 34%, 100-181°: 2%
+
+All paintable edges in careful squares (per square medians, pooled): nodes per 100 m 4.2; segment 11.0 m; right-angle vertices 20%; buildings split 0.0%.
+
+Neighbour gaps pooled (careful squares): shared (< 0.25 m bin) 74%, 0.25-2 m 6%, 2-8 m 20%.
+
+residential=* on landuse=residential (all squares): {'-': 22410, 'apartments': 1345, 'urban': 793, 'rural': 237, 'detached': 204, 'single_family': 136, 'terrace': 64, 'urban;apartments;single_family': 52}

@@ -4,12 +4,12 @@ import xml.etree.ElementTree as ET
 from shapely.geometry import LineString, Polygon, box
 from shapely.ops import polygonize, unary_union
 
-# Mirrors LAT-001 in REQUIREMENTS.md.
+# Mirrors BARRIER_HIGHWAY in src/osm/classes.ts (LAT-001), with the _link classes spelled out.
 BARRIER_HW = {"motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
               "pedestrian", "road", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link"}
-# Mirrors SNAP-108.
+# Mirrors MINOR_HIGHWAY in src/osm/classes.ts (SNAP-108).
 MINOR_HW = {"service", "footway", "path", "cycleway", "track", "steps", "bridleway"}
-# Mirrors KIND-001.
+# The paintable kinds (KIND-001).
 PAINT = {"residential", "commercial", "retail", "industrial"}
 FENCE = {"fence", "wall", "hedge", "retaining_wall", "city_wall"}
 

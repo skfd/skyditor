@@ -1,12 +1,12 @@
 """Measures how landuse edges are drawn in OSM sample areas (see README.md for what each metric means).
 
-    python analyze.py [--areas areas.txt] squares/*.osm.gz > results.json
+    python analyze.py [--areas areas.txt] 'squares/*.osm.gz' > results.json
 
 With --areas, each file named <name>.osm[.gz] is centred on that area's lat/lon (and tagged with its city and
 country when the areas file has them); otherwise on its bounds. Per-area percentiles are for reading one
 area; the `h_*` histograms and `q2_*`, `q4_*` sums are what report.py pools across areas.
 """
-import argparse, collections, json, math, os, sys, traceback
+import argparse, collections, glob, json, math, os, sys, traceback
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from shapely.geometry import LineString, Point
@@ -401,7 +401,9 @@ def main():
                 centres[f[0]] = (float(f[1]), float(f[2]))
             if len(f) >= 5:
                 metas[f[0]] = {"city": f[3], "country": f[4]}
-    jobs = [(f, centres.get(square_name(f)), metas.get(square_name(f))) for f in a.files]
+    # Patterns are expanded here too: a few thousand squares overflow the Windows command line.
+    files = [f for pat in a.files for f in (sorted(glob.glob(pat)) or [pat])]
+    jobs = [(f, centres.get(square_name(f)), metas.get(square_name(f))) for f in files]
     with ProcessPoolExecutor(a.j) as ex:
         out = list(ex.map(analyze, *zip(*jobs), chunksize=1))
     json.dump(out, sys.stdout, indent=None, separators=(",", ":"))
