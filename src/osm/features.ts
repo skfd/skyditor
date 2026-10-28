@@ -2,7 +2,8 @@
 import { type BBox, type Ring, type Shape, area as shapeArea, toI, union } from "../geo/clip";
 import { Projection, type LonLatBounds } from "../geo/project";
 import { type AreaClass, type BuildingLook, buildingLook, classifyArea } from "../model/kinds";
-import { BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, MINOR_HIGHWAY } from "./classes";
+import { BARRIER_HIGHWAY, BARRIER_RAILWAY, BARRIER_WATERWAY, EDUCATION_AMENITY, MINOR_HIGHWAY, isSidewalk } from "./classes";
+import { type StreetStyle, streetStyle } from "../lattice/style";
 import { TUNE } from "../tuning";
 import ClipperLib from "clipper-lib";
 import { dataBounds, type OsmData, type OsmWay, type Tags } from "./parse";
@@ -17,7 +18,8 @@ export interface AreaFeature {
 export interface Barrier {
   id: string;
   line: Ring;
-  halfWidth: number; // m
+  cls: string; // LAT-001
+  width: number | null; // tagged `width=*`, m
 }
 export interface BuildingFeature {
   source: string; // "way/123" (TYPE-011)
@@ -38,6 +40,8 @@ export interface Features {
   areas: AreaFeature[];
   buildings: BuildingFeature[];
   minorLines: MinorLine[];
+  sidewalks: Ring[]; // LAT-003 / LAT-009
+  style: StreetStyle; // LAT-009
   report: { skippedRings: number; ways: number; relations: number };
 }
 
@@ -57,11 +61,21 @@ export function barrierClass(tags: Tags): string | null {
   return null;
 }
 
-/** TUNE-HALFWIDTH, with `width=*` overriding. */
-export function halfWidth(cls: string, tags: Tags): number {
+/** A way's tagged `width=*` in metres, or null. */
+export function tagWidth(tags: Tags): number | null {
   const w = Number((tags.width ?? "").trim().replace(/\s*m$/, ""));
-  if (tags.width && Number.isFinite(w) && w > 0 && w < 200) return w / 2;
-  return TUNE.HALFWIDTH[cls] ?? 5;
+  return tags.width && Number.isFinite(w) && w > 0 && w < 200 ? w : null;
+}
+
+/**
+ * LAT-003: centreline to property line, never less than half the tagged width plus a verge.
+ * LAT-009: in kerb style, the kerb: the class width, or half the tagged width.
+ */
+export function halfWidth(cls: string, width: number | null, style: StreetStyle): number {
+  const kerb = TUNE.HALFWIDTH[cls] ?? 5;
+  if (style === "kerb") return width !== null ? width / 2 : kerb;
+  const line = TUNE.HALFWIDTH_PROPERTY[cls] ?? kerb;
+  return width !== null ? Math.max(line, width / 2 + TUNE.WIDTH_VERGE) : line;
 }
 
 const isAreaish = (t: Tags) =>
@@ -80,7 +94,8 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     maxY: toI(proj.y(bounds.minLat)),
   };
   const f: Features = {
-    bounds, proj, frame, barriers: [], streetAreas: [], areas: [], buildings: [], minorLines: [],
+    bounds, proj, frame, barriers: [], streetAreas: [], areas: [], buildings: [], minorLines: [], sidewalks: [],
+    style: "property_line",
     report: { skippedRings: 0, ways: osm.ways.size, relations: osm.relations.length },
   };
 
@@ -118,7 +133,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     const bc = barrierClass(t);
     if (bc) {
       const pts = partialCoords(w);
-      if (pts.length >= 2) f.barriers.push({ id: `way/${w.id}`, line: toRing(pts), halfWidth: halfWidth(bc, t) });
+      if (pts.length >= 2) f.barriers.push({ id: `way/${w.id}`, line: toRing(pts), cls: bc, width: tagWidth(t) });
       continue;
     }
     // LAT-004: highway areas of a barrier class join street space.
@@ -130,7 +145,10 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     }
     if (t.highway && MINOR_HIGHWAY.has(t.highway) && !(t.tunnel && t.tunnel !== "no")) {
       const pts = partialCoords(w);
-      if (pts.length >= 2) f.minorLines.push({ pts: new Float32Array(pts.flat()), major: t.highway === "service" });
+      if (pts.length >= 2) {
+        f.minorLines.push({ pts: new Float32Array(pts.flat()), major: t.highway === "service" });
+        if (isSidewalk(t)) f.sidewalks.push(toRing(pts));
+      }
       continue;
     }
     if (!isClosed(w) || !isAreaish(t)) continue;
@@ -172,6 +190,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     }
     addArea(`relation/${r.id}`, r.tags, intRings);
   }
+  f.style = streetStyle(f);
   return f;
 }
 

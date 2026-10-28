@@ -83,7 +83,7 @@ has been absorbed into a rewritten requirement, it may be retired.
 |------|---------|
 | **Area** | The rectangular extent of OSM data that is loaded into one session. |
 | **Barrier** | A linear OSM feature that splits land into blocks: drivable roads, railways, rivers and canals (§4). |
-| **Street space** | The land the barriers take up, at their width (LAT-003). It is never paintable. |
+| **Street space** | The land the barriers take up, out to the property line, or to the kerb where the area is mapped that way (LAT-003, LAT-009). It is never paintable. |
 | **Atom** | One connected piece of land left over when street space and water are removed from the area. In a city, roughly a *block*. Atoms are the coarse snapping lattice. |
 | **Piece** | A connected region inside one atom with one landuse value (or none). Every atom is fully divided into pieces. |
 | **Void** | A piece with no landuse. |
@@ -179,9 +179,15 @@ service roads and the like are not barriers (SNAP-108). The classes are listed i
 **LAT-002** The editor shall not treat a way tagged `tunnel` (any value except `no`), or `covered=yes`, as a
 barrier.
 
-**LAT-003** The editor shall give each barrier its real width on the map: its tagged `width` where present,
-otherwise a typical width for its class (TUNE-HALFWIDTH), with rounded ends. This street space is never
-paintable.
+**LAT-003** The editor shall give each barrier street space out to the property line, with rounded ends: a
+typical width for its class (TUNE-HALFWIDTH-PROPERTY), widened where its tagged `width` plus a verge
+(TUNE-WIDTH-VERGE) reaches farther. Where a separately mapped sidewalk runs along a street, the street space
+reaches TUNE-SIDEWALK-MARGIN past it. Past the kerb (LAT-009), street space never takes in a building. This
+street space is never paintable.
+  Why: careful mappers in most countries stop landuse at the property line, a metre or two past the sidewalk
+  (Q-003, `research/landuse-edges/`). A tagged `width` is the carriageway: half of it lands at the kerb.
+  Only a mapped sidewalk pins the property line down; the class width is a typical guess. A building front
+  standing on the property line is where it really runs.
 
 **LAT-004** The editor shall add to street space any `highway` area (closed way with `area=yes`, or an
 `area:highway` feature) of a barrier class.
@@ -195,6 +201,14 @@ land anyone paints, then the editor shall discard it.
 
 **LAT-007** The editor shall not split an atom along a dead-end barrier that ends inside it. The dead end
 only becomes a notch in the atom.
+
+**LAT-009** If the existing landuse of the loaded area keeps most of the separately mapped sidewalks along
+its edges inside it, over at least TUNE-STYLE-EVIDENCE of sidewalk, then the editor shall stop street space
+at the kerb instead: a typical kerb width for each class (TUNE-HALFWIDTH), or half its tagged `width`, with
+sidewalks left as minor ways (SNAP-108).
+  Why: Berlin, Vilnius and Kyiv map landuse to the kerb, with the sidewalk inside (Q-008). An editor that
+  pulls every edit to the property line fights the local mappers. A city keeps one style, and one 600 m
+  square of careful landuse decides it.
 
 **LAT-008** The editor shall treat as water the lakes, ponds, reservoirs, basins and river surfaces mapped
 as areas (tags in `src/osm/classes.ts`). Coastline handling is out of scope for M0.
@@ -952,8 +966,7 @@ plus a `building:levels` hint, `residential=urban`, or a proposal. Until this is
 ~~**Q-003** Should output landuse stop at the kerb (our atom edge) or extend to road centrelines? The current
 lattice stops at the kerb, which matches the common "don't glue landuse to roads" practice.~~ Answered:
 neither. Landuse never shares nodes with roads, and it stops at the property line, beyond the sidewalk
-(see Q-008 and `research/landuse-edges/`). Street space (LAT-003) does not do this yet; requirements to follow.
-The study's README proposes them, with values.
+(see Q-008 and `research/landuse-edges/`). Street space follows: LAT-003, LAT-009.
 
 **Q-004** Should painting suggest a tier from the buildings underneath (count, footprint, levels)? Good
 candidate for M1.
@@ -974,14 +987,15 @@ always wins, and the user confirms it with a tap (IMP-012, DISP-004).
 same way) is an error of the same family as a dispute. IMP-001 currently picks one class quietly. How
 should the editor show it, and how does the user settle it?
 
-**Q-008** Should the editor match the local mapping style for where landuse meets the street? Well-mapped
+~~**Q-008** Should the editor match the local mapping style for where landuse meets the street? Well-mapped
 areas use two styles: to the kerb, with sidewalks inside the landuse (Berlin, Vilnius, Kyiv), and to the
 property line, a median 1.4–1.9 m beyond a separately mapped sidewalk (Finland, Poland, Latvia, Great
 Britain, Canada, Hamburg, Munich). For now the editor uses the property-line style everywhere (Q-003).
 Later it should detect the style from the existing landuse in the loaded area and follow it. The 44-city
 run in `research/landuse-edges/` says this works where sidewalks are mapped separately: a city keeps one
 style (88–93% of square pairs agree), and one 600 m square with about 20 sidewalk crossings decides it.
-  Why: an editor that pulls every edit towards one style fights the local mappers.
+  Why: an editor that pulls every edit towards one style fights the local mappers.~~ Answered: yes, from the
+sidewalks along the existing landuse (LAT-009).
 
 **Q-009** Most OSM landuse is not drawn block by block. In the 44-city run, 61% of residential street
 length in squares with landuse runs inside it. In the Netherlands, Austria, Switzerland, France, Hungary,

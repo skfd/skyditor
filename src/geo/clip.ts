@@ -224,3 +224,17 @@ export function interiorPoint(s: Shape): [number, number] {
   const c = shapeCentroid(core);
   return contains(s, c[0], c[1]) ? c : [core[0][0].X, core[0][0].Y];
 }
+
+/** Total length in metres of the open polylines `lines` (integer coords) that lies inside `s`. */
+export function lengthInside(lines: Ring[], s: Shape): number {
+  if (lines.length === 0 || isEmpty(s)) return 0;
+  const c = new Clipper();
+  c.AddPaths(lines, PolyType.ptSubject, false);
+  c.AddPaths(s, PolyType.ptClip, true);
+  const tree = new ClipperLib.PolyTree();
+  c.Execute(ClipType.ctIntersection, tree, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+  let len = 0;
+  for (const l of Clipper.OpenPathsFromPolyTree(tree))
+    for (let i = 1; i < l.length; i++) len += Math.hypot(l[i].X - l[i - 1].X, l[i].Y - l[i - 1].Y);
+  return len / S;
+}

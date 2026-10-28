@@ -7,11 +7,20 @@ export const TUNE = {
   GEOM_SCALE: 100, // TUNE-GEOM-SCALE: integer units per metre (1 cm resolution)
   AREA_SIDE: 1200, // TUNE-AREA-SIDE: side of a searched area, m
   HALFWIDTH: {
-    // TUNE-HALFWIDTH: street space half-width per barrier class, m; `width=*` overrides with width ÷ 2
+    // TUNE-HALFWIDTH: kerb-style street space half-width per barrier class, m; `width=*` overrides with width ÷ 2
     motorway: 12, trunk: 10, primary: 9, secondary: 8, tertiary: 7, unclassified: 5,
     residential: 5, living_street: 4, pedestrian: 4, road: 5, link: 5,
     rail: 4, light_rail: 3, narrow_gauge: 3, river: 10, canal: 8,
   } as Record<string, number>,
+  HALFWIDTH_PROPERTY: {
+    // TUNE-HALFWIDTH-PROPERTY: centreline to property line per class, m; classes not listed use TUNE-HALFWIDTH
+    primary: 10.5, secondary: 11, tertiary: 9, unclassified: 8, residential: 6, living_street: 4.5, pedestrian: 5,
+    road: 6, link: 6,
+  } as Record<string, number>,
+  WIDTH_VERGE: 3, // TUNE-WIDTH-VERGE: property line past half a street's tagged `width`, m
+  SIDEWALK_MARGIN: 1.5, // TUNE-SIDEWALK-MARGIN: property line past a separately mapped sidewalk, m
+  SIDEWALK_REACH: 15, // TUNE-SIDEWALK-REACH: farthest a sidewalk runs from a street's centreline and still belongs to it, m
+  STYLE_EVIDENCE: 40, // TUNE-STYLE-EVIDENCE: sidewalk along existing landuse edges needed to call an area kerb style, m
   ATOM_MIN_AREA: 150, // TUNE-ATOM-MIN-AREA: smallest kept atom, m²
   ATOM_MIN_RADIUS: 2.5, // TUNE-ATOM-MIN-RADIUS: smallest disc an atom or imported fragment must contain, m
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleRings, barrierClass, halfWidth } from "../src/osm/features";
+import { assembleRings, barrierClass, halfWidth, tagWidth } from "../src/osm/features";
 import { parseOsm } from "../src/osm/parse";
 import { worldFromText } from "../src/model/load";
 import { Sketch } from "./helpers";
@@ -44,7 +44,9 @@ describe("reading OSM", () => {
     expect(barrierClass({ highway: "primary", tunnel: "yes" })).toBeNull();
     expect(barrierClass({ highway: "primary", tunnel: "no" })).toBe("primary");
     expect(barrierClass({ highway: "pedestrian", area: "yes" })).toBeNull();
-    expect(halfWidth("residential", { width: "12 m" })).toBe(6);
-    expect(halfWidth("residential", { width: "wide" })).toBe(5);
+    expect(tagWidth({ width: "12 m" })).toBe(12);
+    expect(tagWidth({ width: "wide" })).toBeNull();
+    expect(halfWidth("residential", 12, "kerb")).toBe(6);
+    expect(halfWidth("residential", null, "kerb")).toBe(5);
   });
 });

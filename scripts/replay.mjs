@@ -123,6 +123,13 @@ function report(results) {
   };
   const secs = sum(ok, (r) => r.ms) / Math.max(1, ok.length) / 1000;
   out.push(`${ok.length} squares replayed, ${results.length - ok.length} failed; ${secs.toFixed(1)} s per square.`);
+  // LAT-009: the editor's street style against the study's, square by square.
+  const judged = ok.filter((r) => r.detected);
+  if (judged.length) {
+    const pairs = new Map();
+    for (const r of judged) pairs.set(`${r.style} -> ${r.detected}`, (pairs.get(`${r.style} -> ${r.detected}`) ?? 0) + 1);
+    out.push(`Street style, study -> editor: ${[...pairs].sort().map(([k, n]) => `${k} ${n}`).join(", ")}.`);
+  }
   for (const [name, rs] of groups) {
     if (!rs.length) continue;
     const t = sum(rs, (r) => r.score.truth_m2), res = sum(rs, (r) => r.score.result_m2), o = sum(rs, (r) => r.score.overlap_m2);

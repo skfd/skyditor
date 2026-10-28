@@ -12,7 +12,8 @@ export interface Replay {
   name: string;
   city?: string;
   country?: string;
-  style?: string;
+  style?: string; // the study's verdict, from the existing landuse (research/landuse-edges/report.py)
+  detected?: string; // the editor's own verdict (LAT-009)
   ms: number;
   truths: number;
   strokes: number;
@@ -26,7 +27,7 @@ export function replay(text: string, meta: SquareMeta, opts: StrokeOptions = DEF
   const t0 = performance.now();
   const p = paintSquare(text, meta, opts);
   const result: Replay = {
-    name: meta.name, city: meta.city, country: meta.country, style: meta.style,
+    name: meta.name, city: meta.city, country: meta.country, style: meta.style, detected: p.sq.features.style,
     ms: 0, truths: p.sq.truth.length, strokes: p.trails.length,
     unreached_m2: p.unreached, whole_m2: p.whole, freeform_m2: p.freeform,
     score: score(p.sq, yardsticks(p.sq)),
