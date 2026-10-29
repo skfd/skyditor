@@ -261,6 +261,24 @@ export class World {
     return null;
   }
 
+  /**
+   * CORR-005: the building a tap or the pointer at a point lands on: the unsure building whose mark (`mark`
+   * units round its centre) covers the point, nearest first, else the building under it.
+   */
+  buildingHit(x: number, y: number, mark = 0): Building | null {
+    let best: Building | null = null;
+    let bestD = mark * mark;
+    if (mark > 0)
+      for (const g of this.buildingIndex.search({ minX: x - mark, minY: y - mark, maxX: x + mark, maxY: y + mark })) {
+        const d = (g.cx - x) ** 2 + (g.cy - y) ** 2;
+        if (d > bestD) continue;
+        const b = this.building(g);
+        const guess = this.guessOf(b);
+        if (guess && !guess.look) [best, bestD] = [b, d];
+      }
+    return best ?? this.buildingAt(x, y);
+  }
+
   /** TYPE-001..TYPE-003: what the editor guesses about a building, or null when it is typed or protected. */
   guessOf(b: Building): Guess | null {
     const set = this.sets.get(b.geom.atom)!;

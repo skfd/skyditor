@@ -12,7 +12,7 @@ import { IMAGERY, TileCache } from "./osm/imagery";
 import { type Photo, bestPhoto, photoLinks, searchPanoramax } from "./osm/photos";
 import { PhotoPanel } from "./ui/photos";
 import { type Target, type Tool, onBuildings } from "./paint/snap";
-import { Stroke, type StrokeEvent } from "./paint/stroke";
+import { Stroke, type StrokeEvent, changesBuilding } from "./paint/stroke";
 import { Anims } from "./render/anim";
 import { Camera } from "./render/camera";
 import { COLORS, Renderer, buildingPath, pathOf } from "./render/renderer";
@@ -58,7 +58,7 @@ export class App {
   private stroke: Stroke | null = null;
   private strokeStart = { sx: 0, sy: 0, t: 0, moved: 0 };
   private cursor: [number, number] | null = null;
-  private hover: Piece | null = null;
+  private hover: Piece | Building | null = null; // REN-007 / CORR-004: what a tap here would change
   private showBuildings = store.get("buildings") !== "off";
   private showOriginals = false;
   private pan: { id: number; x: number; y: number; t: number; vx: number; vy: number } | null = null;
@@ -280,6 +280,7 @@ export class App {
     this.toolId = id;
     this.tool = t.tool;
     this.hud.selectTool(id);
+    this.repoint();
     this.dirty = true;
   }
 
@@ -300,6 +301,7 @@ export class App {
     this.showBuildings = !this.showBuildings;
     store.set("buildings", this.showBuildings ? "on" : "off");
     this.hud.setLayers(this.showBuildings, this.showOriginals);
+    this.repoint(); // the marks come and go with the layer (CORR-005)
     this.dirty = true;
   }
 
@@ -310,6 +312,7 @@ export class App {
     this.hud.setTarget(this.target === "buildings");
     this.hud.toast(this.target === "buildings" ? "Painting building types" : "Painting land");
     this.hud.hint(null);
+    this.repoint();
     this.dirty = true;
   }
 
@@ -390,16 +393,46 @@ export class App {
     this.dirty = true;
   }
 
+  /** CORR-005: how far an unsure building's mark reaches round its centre, m. No marks while buildings are hidden. */
+  private markRadius() {
+    return this.showBuildings ? TUNE.UNSURE_MARK / this.camera.scale : 0;
+  }
+
+  /** CORR-005: the building at a point in metres, its mark included. */
+  private buildingHit(wx: number, wy: number) {
+    return this.world?.buildingHit(toI(wx), toI(wy), toI(this.markRadius())) ?? null;
+  }
+
+  /** REN-007 / CORR-004: lights up what a tap at this point would change: a piece on land, or a building. */
+  private pointAt(wx: number, wy: number) {
+    if (!this.world) return;
+    if (!onBuildings(this.tool, this.target)) {
+      this.hover = this.world.pieceAt(toI(wx), toI(wy));
+      return;
+    }
+    const b = this.buildingHit(wx, wy);
+    this.hover = b && changesBuilding(this.world, this.tool, b) ? b : null;
+  }
+
+  /** CORR-004: what the resting cursor points at changes with the tool, the target and the layers. */
+  private repoint() {
+    if (!this.cursor || this.stroke || this.pan || !this.world) return;
+    const [sx, sy] = this.cursor;
+    const [wx, wy] = this.camera.toWorld(sx, sy);
+    this.pointAt(wx, wy);
+    this.hintAt(wx, wy, sx, sy);
+  }
+
   /** TYPE-005: what the editor thinks about the building under the cursor, while buildings are what the brush acts on. */
   private hintAt(wx: number, wy: number, sx: number, sy: number) {
     if (!this.world) return;
     if (this.photosOn) {
       // PEEK-003: the panel follows the building under the cursor.
-      const b = this.world.buildingAt(toI(wx), toI(wy));
+      const b = this.buildingHit(wx, wy);
       if (b) this.showPhotosFor(b);
     }
     if (!onBuildings(this.tool, this.target)) return this.hud.hint(null);
-    const b = this.world.buildingAt(toI(wx), toI(wy));
+    const b = this.buildingHit(wx, wy);
     const g = b && this.world.guessOf(b);
     if (!g) return this.hud.hint(null);
     const text = describeGuess(g, (k) => KINDS[k as Kind]?.label ?? k);
@@ -530,11 +563,11 @@ export class App {
     this.hud.hint(null);
     if (this.photosOn) {
       // PEEK-003: a tap shows photos too, for fingers that cannot hover.
-      const b = this.world.buildingAt(toI(wx), toI(wy));
+      const b = this.buildingHit(wx, wy);
       if (b) this.showPhotosFor(b);
     }
     // PAINT-001: the brush radius is fixed in metres for the whole stroke. TYPE-006: the target is fixed too.
-    this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy, TUNE.TAP_MOVE / this.camera.scale, this.target);
+    this.stroke = new Stroke(this.world, this.tool, this.brushPx / this.camera.scale, wx, wy, TUNE.TAP_MOVE / this.camera.scale, this.target, this.markRadius());
     this.strokeStart = { sx, sy, t: performance.now(), moved: 0 };
     this.handle(this.stroke.start(), [wx, wy]);
   }
@@ -573,7 +606,7 @@ export class App {
       return;
     }
     const [wx, wy] = this.camera.toWorld(sx, sy);
-    this.hover = this.world.pieceAt(toI(wx), toI(wy)); // REN-007
+    this.pointAt(wx, wy); // REN-007 / CORR-004
     this.hintAt(wx, wy, sx, sy); // TYPE-005
   }
 

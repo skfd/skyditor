@@ -24,6 +24,7 @@ export const COLORS = {
   eraser: "#f4f1ea",
   dispute: "#d6363c", // REN-013
   unsure: "#e5961a", // TYPE-004: the unsure mark, the amber of the missing-landuse badge (REN-016)
+  unsureHover: "#c27a06", // CORR-004: the mark under the cursor, as a badge darkens on hover
   agree: "#4f9d69", // TYPE-007
   camera: "#2b7de9", // PEEK-003: where a photo was taken
 };
@@ -35,7 +36,7 @@ export interface RenderState {
   target: Target; // TYPE-006
   brushPx: number;
   cursor: [number, number] | null; // screen px
-  hover: Piece | null;
+  hover: Piece | Building | null; // REN-007 / CORR-004: a piece, or a building while the brush acts on buildings
   showBuildings: boolean;
   showOriginals: boolean;
   imagery: TileCache | null; // PEEK-001: set while the imagery peek is on
@@ -577,9 +578,25 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
 
+    // CORR-004: the building a tap would change. A light under-stroke keeps the edge readable on any colour.
+    const hb = st.hover && "geom" in st.hover ? st.hover : null;
+    if (hb) {
+      const path = buildingPath(hb.geom);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+      ctx.fill(path, "nonzero");
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(255, 252, 246, 0.9)";
+      ctx.lineWidth = 3.5 * px;
+      ctx.stroke(path);
+      ctx.strokeStyle = "rgba(40, 32, 24, 0.75)";
+      ctx.lineWidth = 1.5 * px;
+      ctx.stroke(path);
+    }
+
     // TYPE-004: the unsure marks, at a constant screen size.
     if (marks.length) {
-      const r = 7 * px;
+      const r = TUNE.UNSURE_MARK * px;
+      const [hx, hy] = hb ? [toM(hb.geom.cx), toM(hb.geom.cy)] : [NaN, NaN];
       ctx.font = `800 ${11 * px}px ${getComputedStyle(document.body).fontFamily || "sans-serif"}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -587,7 +604,7 @@ export class Renderer {
       for (const [x, y] of marks) {
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = COLORS.unsure;
+        ctx.fillStyle = x === hx && y === hy ? COLORS.unsureHover : COLORS.unsure;
         ctx.fill();
         ctx.strokeStyle = "#fff";
         ctx.stroke();

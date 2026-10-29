@@ -25,6 +25,34 @@ interface Coverage {
   count: number;
 }
 
+type BuildingEffect = Building | "reject" | "skip" | null;
+
+/** What `tool` does to one building: its changed copy, a reject (TYPE-009), a skip (TYPE-007), or nothing. */
+function buildingEffect(world: World, tool: Tool, b: Building): BuildingEffect {
+  const status = statusOf(b);
+  if (tool.type === "agree") {
+    // TYPE-007: only a guessed building takes an agree stroke; an unsure one is shown skipped.
+    const g = world.guessOf(b);
+    if (!g) return null;
+    return g.look ? typeAs(b, g.look) : "skip";
+  }
+  if (tool.type === "paint") {
+    if (status === "protected" || tool.kind === "R1") return "reject"; // TYPE-009
+    return typeAs(b, tool.kind); // TYPE-008: null when it already is that kind
+  }
+  if (tool.type === "erase") {
+    if (status === "protected") return "reject"; // TYPE-009
+    return untype(b); // TYPE-010
+  }
+  return null;
+}
+
+/** CORR-004: whether a tap with `tool` would change `b`, so pointing at it should light it up. */
+export function changesBuilding(world: World, tool: Tool, b: Building): boolean {
+  const e = buildingEffect(world, tool, b);
+  return e !== null && typeof e === "object";
+}
+
 export class Stroke {
   readonly trail: [number, number][] = []; // metres
   readonly preview = new Map<Atom, Freeform>(); // SNAP-105
@@ -46,6 +74,7 @@ export class Stroke {
     y: number,
     readonly tapMove = 0, // m; how far the cursor may move while the stroke can still be a tap (DISP-004)
     readonly target: Target = "land",
+    readonly mark = 0, // m; the radius of an unsure building's mark, which a tap lands in too (CORR-005)
   ) {
     this.limit = unitLimit(radius);
     this.onBuildings = onBuildings(tool, target);
@@ -200,21 +229,9 @@ export class Stroke {
       this.rejected = true;
       return [{ type: "reject", at }];
     };
-    const status = statusOf(b);
-    let next: Building | null = null;
-    if (this.tool.type === "agree") {
-      // TYPE-007: only a guessed building takes an agree stroke; an unsure one is shown skipped.
-      const g = this.world.guessOf(b);
-      if (!g) return [];
-      if (!g.look) return [{ type: "skip", building: b, at }];
-      next = typeAs(b, g.look);
-    } else if (this.tool.type === "paint") {
-      if (status === "protected" || this.tool.kind === "R1") return reject(); // TYPE-009
-      next = typeAs(b, this.tool.kind); // TYPE-008: null when it already is that kind
-    } else if (this.tool.type === "erase") {
-      if (status === "protected") return reject(); // TYPE-009
-      next = untype(b); // TYPE-010
-    }
+    const next = buildingEffect(this.world, this.tool, b);
+    if (next === "reject") return reject();
+    if (next === "skip") return [{ type: "skip", building: b, at }];
     if (!next) return [];
     const set = this.world.setOf(b.geom);
     if (!this.beforeB.has(set)) this.beforeB.set(set, set.items); // TYPE-011
@@ -283,7 +300,7 @@ export class Stroke {
     const [sx, sy] = this.trail[0];
     if (this.onBuildings) {
       // TYPE-007 / TYPE-008 / TYPE-010: a tap takes the building under it, however small the brush.
-      const b = isTap ? this.world.buildingAt(toI(sx), toI(sy)) : null;
+      const b = isTap ? this.world.buildingHit(toI(sx), toI(sy), toI(this.mark)) : null; // CORR-005
       if (b && !this.buildingsDone.has(b.geom.id)) events.push(...this.touchBuilding(b, [sx, sy]));
     } else if (this.tool.type !== "density") {
       const p = this.world.pieceAt(toI(sx), toI(sy));

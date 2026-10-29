@@ -5,7 +5,7 @@ import { History } from "../src/model/history";
 import { addrCount } from "../src/model/kinds";
 import type { World } from "../src/model/world";
 import type { Target, Tool } from "../src/paint/snap";
-import { Stroke } from "../src/paint/stroke";
+import { Stroke, changesBuilding } from "../src/paint/stroke";
 import { Sketch } from "./helpers";
 
 type Pt = [number, number];
@@ -16,8 +16,8 @@ const R5: Tool = { type: "paint", kind: "R5" };
 const ERASE: Tool = { type: "erase" };
 
 /** A stroke along `pts` with the brush on buildings (or on land), like tests/helpers.ts' paint(). */
-function stroke(w: World, tool: Tool, radius: number, pts: Pt[], tap = false, target: Target = "buildings") {
-  const s = new Stroke(w, tool, radius, pts[0][0], pts[0][1], 0, target);
+function stroke(w: World, tool: Tool, radius: number, pts: Pt[], tap = false, target: Target = "buildings", mark = 0) {
+  const s = new Stroke(w, tool, radius, pts[0][0], pts[0][1], 0, target, mark);
   const events = [...s.start()];
   for (let i = 1; i < pts.length; i++) {
     const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
@@ -162,6 +162,27 @@ describe("agreeing and typing", () => {
     const { step } = stroke(w, R2, 8, [[-25, -95], [-25, -75]]);
     expect(step).toBeNull(); // PAINT-006
     expect(bAt(w, -25, -85).tags.building).toBe("bungalow");
+  });
+
+  it("CORR-005: a tap on an unsure building's mark lands on it outside the footprint; a guess has no mark", async () => {
+    const w = await scene();
+    expect(guessAt(w, -55, -85)?.look).toBeNull();
+    stroke(w, R5, 1, [[-48, -85]], true); // 2 m east of the wall, 7 m from the centre
+    expect(bAt(w, -55, -85).tags.building).toBe("yes");
+    stroke(w, R5, 1, [[-48, -85]], true, "buildings", 8);
+    expect(bAt(w, -55, -85).tags.building).toBe("apartments");
+    stroke(w, R5, 1, [[-78, -85]], true, "buildings", 8); // as far from the guessed house
+    expect(bAt(w, -85, -85).tags.building).toBe("yes");
+  });
+
+  it("CORR-004: only a building the tool would change lights up under the cursor", async () => {
+    const w = await scene();
+    const [guessed, unsure, bungalow, garage] = [-85, -55, -25, 5].map((x) => bAt(w, x, -85));
+    const lit = (tool: Tool) => [guessed, unsure, bungalow, garage].map((b) => changesBuilding(w, tool, b));
+    expect(lit(AGREE)).toEqual([true, false, false, false]);
+    expect(lit(R2)).toEqual([true, true, false, false]); // the bungalow is a detached house already
+    expect(lit(R1)).toEqual([false, false, false, false]);
+    expect(lit(ERASE)).toEqual([false, false, true, false]);
   });
 
   it("TYPE-008: a paint stroke only reaches buildings whose centre the brush passes over", async () => {

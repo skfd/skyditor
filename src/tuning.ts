@@ -73,6 +73,7 @@ export const TUNE = {
   GUESS_NEIGHBOUR_MIN: 3, // TUNE-GUESS-NEIGHBOUR-MIN: typed similar neighbours needed before they count
   GUESS_NEIGHBOUR_SHARE: 0.75, // TUNE-GUESS-NEIGHBOUR-SHARE: share of them with one look for that look to count
   GUESS_ALPHA: 0.55, // TUNE-GUESS-ALPHA: opacity of a guessed building, before its hatch
+  UNSURE_MARK: 7, // TUNE-UNSURE-MARK: radius of an unsure building's mark, and of the circle a tap on it lands in, px
 
   // Peeks (PEEK-*)
   PEEK_ALPHA: 0.78, // TUNE-PEEK-ALPHA: opacity of the imagery peek over the map

@@ -675,7 +675,7 @@ the atoms within TUNE-HINT-RADIUS × brush radius of the cursor.
   Why: it shows where things will snap, without explaining why.
   Trace: manual
 
-**REN-007** When the cursor is over a piece, the editor shall highlight that piece slightly.
+**REN-007** When the cursor is over a piece, the editor shall highlight that piece slightly. → see CORR-004
   Trace: manual
 
 **REN-008** The editor shall stay smooth (60 frames per second on the demo area on a typical laptop) and
@@ -921,7 +921,7 @@ under an agree stroke are left alone; an unsure one lights up briefly, so the us
 tap lands on one, the editor shall type it with the tile's kind, once per building per stroke: `house` for
 detached houses, `semidetached_house`, `terrace`, `apartments` for apartments and for high-rise (Q-002),
 `commercial`, `retail`, `industrial`. The table is in `src/osm/classes.ts`. A building whose look is already
-the tile's kind is left alone, its more specific type kept.
+the tile's kind is left alone, its more specific type kept. → see CORR-005
   Why: the user is the override. A bungalow painted "detached houses" stays a bungalow: the editor never
   flattens information it was not asked to change.
 
@@ -1017,6 +1017,20 @@ of the brush radius from the paint. Past that, the leftover stays as it was.
   21,000 m² of them, all far from every stroke.
   Why: swallowing closes the gap between the paint and whatever it was painted up to. A strip that leads
   away from the stroke is land the user never painted near.
+
+**CORR-004** (corrects REN-007) The editor shall highlight only what a tap would change under the cursor: a
+piece while the brush acts on land, and while it acts on buildings (TYPE-006, TYPE-007) the building the
+current tool would change, and no land.
+  Observed: with buildings as the target, the land under the cursor still lit up and the buildings did not,
+  so the highlight pointed at the one thing the brush would leave alone.
+  Why: the highlight answers "what will a click do here?". Something that does not react cannot be clicked.
+
+**CORR-005** (corrects TYPE-008) The editor shall take a tap or the pointer on an unsure building's mark
+(TYPE-004) as landing on that building, also where the mark reaches past the footprint. Where marks and
+footprints overlap, the nearest mark wins. The mark's size is TUNE-UNSURE-MARK.
+  Observed: taps were tested against the footprint only. Zoomed out, a house is smaller than its mark, so
+  most taps on a mark missed the house and did nothing.
+  Why: the mark is what the user sees and aims at.
 
 ---
 
