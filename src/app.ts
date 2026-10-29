@@ -925,6 +925,7 @@ export class App {
     this.camera.width = w;
     this.camera.height = h;
     this.renderer?.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
+    this.perf.size(w, h, Math.min(2, window.devicePixelRatio || 1), window.devicePixelRatio || 1);
     this.dirty = true;
   }
 
@@ -951,6 +952,7 @@ export class App {
     // REN-014: ripples and spikes alone get a slower frame rate.
     const ambientDue = this.ambient && now - this.lastDraw >= TUNE.AMBIENT_INTERVAL;
     // REN-008: draw only when something changed or moves.
+    const changed = this.dirty;
     if (this.renderer && this.world && (this.dirty || moving || animating || ambientDue)) {
       this.lastDraw = now;
       const t0 = this.perf.on ? performance.now() : 0;
@@ -976,7 +978,7 @@ export class App {
       this.dirty = false;
       if (this.perf.on) {
         const t1 = performance.now();
-        this.perf.record(now, t1 - t0, preview, t1 - start, gap); // HUD-013
+        this.perf.record({ t: now, draw: t1 - t0, preview, work: t1 - start, late: start - now, gap, ambient: !(changed || moving || animating) }); // HUD-013
       }
     }
     this.perf.tick(now);

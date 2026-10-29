@@ -835,7 +835,6 @@ Pressing anywhere else closes it.
 redrawing: redraws per second, how long a redraw takes, and the longest stall between frames, saying it is
 idle while nothing is being redrawn. Without `?perf` it shows nothing.
   Why: REN-008 is a promise about feel. This is how to check it, and it must not cost the map anything.
-  Trace: manual
 
 ---
 
