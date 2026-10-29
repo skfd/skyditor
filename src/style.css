@@ -56,6 +56,13 @@ kbd {
   cursor: none;
   touch-action: none;
 }
+/* CORR-006: what a click will do when it will not paint. Panning, below, wins. */
+body.picking #map {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg stroke='%23fff' stroke-width='4.5'%3E%3Cpath d='M3 21l1.5-4.5L13 8l3 3-8.5 8.5z M14 7l3-3a2.1 2.1 0 0 1 3 3l-3 3z M12 6l6 6'/%3E%3C/g%3E%3Cg stroke='%23332b22' stroke-width='2' fill='%23fff'%3E%3Cpath d='M3 21l1.5-4.5L13 8l3 3-8.5 8.5z M14 7l3-3a2.1 2.1 0 0 1 3 3l-3 3z M12 6l6 6'/%3E%3C/g%3E%3C/svg%3E") 3 21, crosshair;
+}
+body.pointing #map {
+  cursor: pointer;
+}
 body.panning #map,
 body.space #map {
   cursor: grab;

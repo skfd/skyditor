@@ -1051,6 +1051,15 @@ footprints overlap, the nearest mark wins. The mark's size is TUNE-UNSURE-MARK.
   smallest brush happens to be wider than the mark.
   Why: the mark is what the user sees and aims at.
 
+**CORR-006** (corrects HUD-004) While the user holds Alt over the map, the editor shall show an eyedropper in
+place of the brush cursor; while the brush acts on land and the cursor rests on an unsure building's mark
+(TYPE-015), it shall show a pointing hand instead.
+  Observed: in both places the brush ring stayed, so the cursor promised paint where a click picks a colour
+  (PAINT-008, TYPE-013) or opens the building's card. The missing-landuse badge (REN-016), which looks the same
+  as the mark and is pressed the same way, already showed a hand.
+  Why: on a desktop the cursor says what a click will do before the user clicks.
+  Trace: manual
+
 ---
 
 ## 19. Open questions

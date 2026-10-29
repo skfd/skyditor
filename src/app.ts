@@ -64,6 +64,8 @@ export class App {
   private showOriginals = false;
   private pan: { id: number; x: number; y: number; t: number; vx: number; vy: number } | null = null;
   private space = false;
+  private alt = false; // CORR-006: Alt held over the map means a click picks a colour
+  private look: "brush" | "pick" | "point" = "brush"; // CORR-006: which cursor shows over the map
   private arrows = new Set<string>();
   private dirty = true;
   private ambient = false; // REN-014: only slow marks are moving
@@ -431,6 +433,24 @@ export class App {
     this.badges.showMark([toM(b.geom.cx), toM(b.geom.cy)], [what, how, go], this.camera);
   }
 
+  /**
+   * CORR-006: an eyedropper while Alt is held, a hand on an unsure building's mark while the brush acts on land
+   * (TYPE-015), else the brush. Both are system cursors set on the body, so the brush is not drawn under them.
+   */
+  private cursorLook() {
+    const look =
+      !this.cursor || this.stroke || this.pan || this.space ? "brush"
+      : this.alt ? "pick"
+      : this.hover && "geom" in this.hover && !onBuildings(this.tool, this.target) ? "point"
+      : "brush";
+    if (look !== this.look) {
+      document.body.classList.toggle("picking", look === "pick");
+      document.body.classList.toggle("pointing", look === "point");
+      this.look = look;
+    }
+    return look;
+  }
+
   /** CORR-004: what the resting cursor points at changes with the tool, the target and the layers. */
   private repoint() {
     if (!this.cursor || this.stroke || this.pan || !this.world) return;
@@ -520,6 +540,7 @@ export class App {
     window.addEventListener("keyup", (e) => this.onKey(e, false));
     window.addEventListener("blur", () => {
       this.space = false;
+      this.alt = false;
       this.arrows.clear();
       if (this.imageryHeld) this.setImagery(this.imageryOn, false); // PEEK-001: a lost keyup must not leave it on
     });
@@ -594,6 +615,7 @@ export class App {
     if (e.pointerType === "touch") return; // NG-006
     const [sx, sy] = this.local(e);
     this.cursor = [sx, sy];
+    this.alt = e.altKey; // CORR-006: Alt may have gone down while the page had no focus
     this.dirty = true;
     if (this.pan && e.pointerId === this.pan.id) {
       const now = performance.now();
@@ -661,6 +683,13 @@ export class App {
   private onKey(e: KeyboardEvent, down: boolean) {
     if ((e.target as HTMLElement)?.tagName === "INPUT") return;
     const k = e.key;
+    if (k === "Alt") {
+      // CORR-006. The browser would otherwise take a lone Alt as a way into its own menu.
+      this.alt = down;
+      this.dirty = true;
+      e.preventDefault();
+      return;
+    }
     if (k === " ") {
       this.space = down;
       document.body.classList.toggle("space", down);
@@ -900,7 +929,7 @@ export class App {
           tool: this.tool,
           target: this.target,
           brushPx: this.brushPx,
-          cursor: this.cursor,
+          cursor: this.cursorLook() === "brush" ? this.cursor : null, // CORR-006: the system cursor shows instead
           hover: this.hover,
           showBuildings: this.showBuildings,
           showOriginals: this.showOriginals,
