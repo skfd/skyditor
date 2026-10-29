@@ -64,10 +64,6 @@ export class App {
   private showOriginals = false;
   private pan: { id: number; x: number; y: number; t: number; vx: number; vy: number } | null = null;
   private space = false;
-  // CAM-006: touch pointers on the map, the two-finger gesture, and PAINT-011's lock until all fingers lift.
-  private touches = new Map<number, [number, number]>();
-  private pinch: { mid: [number, number]; dist: number; t: number; vx: number; vy: number } | null = null;
-  private touchLock = false;
   private arrows = new Set<string>();
   private dirty = true;
   private ambient = false; // REN-014: only slow marks are moving
@@ -256,7 +252,7 @@ export class App {
     document.getElementById("start-close")!.addEventListener("click", () => this.world && this.hud.showStart(false));
     document.getElementById("btn-help")!.addEventListener("click", () => this.hud.toggleHelp());
     document.getElementById("btn-sound")!.addEventListener("click", () => this.toggleSound());
-    // HUD-006 / HUD-007 (GEN-005): every key has a button.
+    // HUD-006 / HUD-007 (GEN-006): every key has a button.
     const on = (id: string, f: () => void) => document.getElementById(id)!.addEventListener("click", f);
     on("btn-undo", () => this.undo());
     on("btn-redo", () => this.redo());
@@ -424,7 +420,7 @@ export class App {
     const what = document.createElement("p");
     what.textContent = `${describeGuess(g, (k) => KINDS[k as Kind]?.label ?? k)}.`;
     const how = document.createElement("p");
-    how.textContent = "To decide, paint buildings: pick a tile and tap the building.";
+    how.textContent = "To decide, paint buildings: pick a tile and click the building.";
     const go = document.createElement("button");
     go.type = "button";
     go.textContent = "Paint buildings · T";
@@ -457,7 +453,7 @@ export class App {
     const g = b && this.world.guessOf(b);
     if (!g) return this.hud.hint(null);
     const text = describeGuess(g, (k) => KINDS[k as Kind]?.label ?? k);
-    const how = g.look ? "Brush with Agree, or tap, to accept" : "Pick a tile and tap to decide";
+    const how = g.look ? "Brush with Agree, or click, to accept" : "Pick a tile and click to decide";
     this.hud.hint(`${text} · ${how}`, sx, sy);
   }
 
@@ -549,15 +545,11 @@ export class App {
   }
 
   private onDown(e: PointerEvent) {
+    if (e.pointerType === "touch") return; // NG-006
     this.sound.unlock();
     const [sx, sy] = this.local(e);
     this.cursor = [sx, sy];
     this.dirty = true;
-    if (e.pointerType === "touch") {
-      this.touches.set(e.pointerId, [sx, sy]);
-      if (this.touches.size >= 2) return this.startPinch();
-      if (this.touchLock) return; // PAINT-011
-    }
     if (e.button === 1 || e.button === 2 || (e.button === 0 && this.space)) {
       // CAM-002
       this.pan = { id: e.pointerId, x: sx, y: sy, t: performance.now(), vx: 0, vy: 0 };
@@ -588,7 +580,7 @@ export class App {
     this.hover = null;
     this.hud.hint(null);
     if (this.photosOn) {
-      // PEEK-003: a tap shows photos too, for fingers that cannot hover.
+      // PEEK-003: a click shows photos too.
       const b = this.buildingHit(wx, wy);
       if (b) this.showPhotosFor(b);
     }
@@ -599,16 +591,10 @@ export class App {
   }
 
   private onMove(e: PointerEvent) {
+    if (e.pointerType === "touch") return; // NG-006
     const [sx, sy] = this.local(e);
     this.cursor = [sx, sy];
     this.dirty = true;
-    if (this.touches.has(e.pointerId)) {
-      this.touches.set(e.pointerId, [sx, sy]);
-      if (this.touchLock) {
-        if (this.pinch) this.movePinch();
-        return;
-      }
-    }
     if (this.pan && e.pointerId === this.pan.id) {
       const now = performance.now();
       const dt = Math.max(1, now - this.pan.t);
@@ -637,14 +623,6 @@ export class App {
   }
 
   private onUp(e: PointerEvent) {
-    if (this.touches.delete(e.pointerId) && this.touchLock) {
-      if (this.touches.size === 0) this.touchLock = false;
-      if (this.pinch) {
-        if (this.touches.size >= 2) Object.assign(this.pinch, this.pinchFrame());
-        else this.endPinch();
-      }
-      return;
-    }
     if (this.pan && e.pointerId === this.pan.id) {
       const idle = performance.now() - this.pan.t > 80;
       this.camera.release(idle ? 0 : this.pan.vx, idle ? 0 : this.pan.vy);
@@ -664,48 +642,6 @@ export class App {
     this.dirty = true;
   }
 
-  /** CAM-006 / PAINT-010: a second finger turns whatever the first one started into a pan and zoom. */
-  private startPinch() {
-    if (this.stroke) {
-      const reverted = this.stroke.cancel();
-      this.stroke = null;
-      if (reverted) this.settle(reverted, "before");
-    }
-    this.pan = null;
-    this.hover = null;
-    this.touchLock = true;
-    this.pinch = { ...this.pinchFrame(), t: performance.now(), vx: 0, vy: 0 };
-    document.body.classList.add("panning");
-  }
-
-  private pinchFrame() {
-    const [[ax, ay], [bx, by]] = [...this.touches.values()];
-    return { mid: [(ax + bx) / 2, (ay + by) / 2] as [number, number], dist: Math.hypot(bx - ax, by - ay) };
-  }
-
-  private movePinch() {
-    const p = this.pinch!;
-    const { mid, dist } = this.pinchFrame();
-    const now = performance.now();
-    const dt = Math.max(1, now - p.t);
-    const dx = mid[0] - p.mid[0], dy = mid[1] - p.mid[1];
-    this.camera.panBy(dx, dy);
-    if (p.dist > 0 && dist > 0) this.camera.zoomNow(dist / p.dist, mid[0], mid[1]);
-    // Smoothed release velocity for coasting, as for a mouse pan.
-    p.vx = p.vx * 0.6 + (dx / dt) * 0.4;
-    p.vy = p.vy * 0.6 + (dy / dt) * 0.4;
-    Object.assign(p, { mid, dist, t: now });
-    this.dirty = true;
-  }
-
-  private endPinch() {
-    const p = this.pinch!;
-    const idle = performance.now() - p.t > 80;
-    this.camera.release(idle ? 0 : p.vx, idle ? 0 : p.vy);
-    this.pinch = null;
-    document.body.classList.remove("panning");
-  }
-
   private onWheel(e: WheelEvent) {
     e.preventDefault();
     const unit = e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? 400 : 1;
@@ -716,7 +652,7 @@ export class App {
       return;
     }
     const [sx, sy] = this.local(e);
-    // CAM-001: pinch arrives as ctrl+wheel with small deltas.
+    // CAM-001: a trackpad pinch arrives as ctrl+wheel with small deltas.
     this.camera.zoomBy(Math.exp(-dy * (e.ctrlKey ? 0.012 : 0.0016)), sx, sy);
     this.dirty = true;
   }
@@ -970,7 +906,7 @@ export class App {
           imagery: this.imageryOn || this.imageryHeld ? this.tiles : null, // PEEK-001
           photo: this.photosOn ? this.photoAt : null, // PEEK-003
           anims: this.anims,
-          panning: !!this.pan || this.touchLock || this.space,
+          panning: !!this.pan || this.space,
         },
         now,
       );

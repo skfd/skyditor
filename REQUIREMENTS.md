@@ -91,7 +91,7 @@ has been absorbed into a rewritten requirement, it may be retired.
 | **Tier** | The step on the residential ladder (R1 rural … R6 high-rise). |
 | **Brush** | The circular painting tool. Its size is set on screen and fixed in metres for each stroke. |
 | **Stroke** | One press–drag–release gesture with the brush. One stroke is one undo step. |
-| **Tap** | A stroke with almost no movement and a short duration (TUNE-TAP-*). |
+| **Tap** | A stroke with almost no movement and a short duration (TUNE-TAP-*): a click, to the user. |
 | **Unit piece** | A piece small enough, relative to the brush, to be claimed whole (§8). |
 | **Open piece** | A piece too large to be a unit piece. It gets painted freeform and then snapped (§9). |
 | **Claim** | Turning a whole piece into the stroke's kind. |
@@ -125,9 +125,13 @@ neighbouring pieces share their edges exactly, however often the land is repaint
   Why: a crack between two pieces is a hole in the map nobody painted. How the geometry stays exact is a
   code rule (CLAUDE.md).
 
-**GEN-005** The editor shall let the user do everything with a pointer alone (mouse, pen or touch), without
-a keyboard. Keys are shortcuts, never the only way to do something.
-  Why: people paint with a mouse or a finger and may have no hand, or no keyboard, for keys. Alt-click
+~~**GEN-005** The editor shall let the user do everything with a pointer alone (mouse, pen or touch), without
+a keyboard. Keys are shortcuts, never the only way to do something.~~ Retired: the editor is a desktop tool
+now, not a touch one. GEN-006 and NG-006 replace it.
+
+**GEN-006** The editor shall let the user do everything with a mouse, trackpad or pen alone, without a
+keyboard. Keys are shortcuts, never the only way to do something.
+  Why: painting landuse is desktop work, but a hand on the mouse may have no hand free for keys. Alt-click
   picking (PAINT-008) is a shortcut for choosing a palette tile, so the palette covers it.
   Trace: manual
 
@@ -443,15 +447,12 @@ editor shall play the *reject* feedback (FEEL-004), at most once per stroke. A t
 (DISP-004) is not rejected.
   Why: protected land must not change, but silence reads as "broken".
 
-**PAINT-010** If a second finger touches the map while a stroke is active, then the editor shall cancel
+~~**PAINT-010** If a second finger touches the map while a stroke is active, then the editor shall cancel
 the stroke, restoring everything it changed without creating an undo step, and start the two-finger
-gesture (CAM-006).
-  Why: every two-finger pan starts with one finger. Without this, each pan would leave a dab of paint.
+gesture (CAM-006).~~ Retired: the map does not respond to touch (NG-006).
 
-**PAINT-011** While any finger of a two-finger gesture is still on the map, the editor shall not start a
-stroke.
-  Why: lifting the fingers one at a time must not paint with the last one.
-  Trace: manual
+~~**PAINT-011** While any finger of a two-finger gesture is still on the map, the editor shall not start a
+stroke.~~ Retired: the map does not respond to touch (NG-006).
 
 ---
 
@@ -600,7 +601,7 @@ animation (FEEL-006), so the user can see what changed.
 
 ## 13. Camera and input
 
-**CAM-001** When the user turns the mouse wheel or pinches, the editor shall zoom towards the cursor, with
+**CAM-001** When the user turns the mouse wheel or pinches on a trackpad, the editor shall zoom towards the cursor, with
 smooth motion (TUNE-ZOOM-*).
   Trace: manual
 
@@ -634,10 +635,9 @@ tool.
 **INP-004** The editor shall not open the browser context menu over the map.
   Trace: manual
 
-**CAM-006** When the user drags two fingers on the map, the editor shall pan and zoom at once: the map point
+~~**CAM-006** When the user drags two fingers on the map, the editor shall pan and zoom at once: the map point
 under the fingers' midpoint stays under it, and the zoom follows the change in the fingers' spread. After
-release, it shall coast to a stop (TUNE-PAN-*).
-  Why: the map should feel stuck to the fingers, like every other map on a touch screen.
+release, it shall coast to a stop (TUNE-PAN-*).~~ Retired: the map does not respond to touch (NG-006).
 
 **CAM-007** When the user presses the zoom-in or zoom-out button (HUD-006), the editor shall zoom by
 TUNE-ZOOM-STEP towards the centre of the view, with smooth motion.
@@ -802,13 +802,12 @@ on screen.
 **HUD-006** The editor shall show map controls at the side of the map: undo and redo (UNDO-001, UNDO-002),
 zoom in and out (CAM-007), fit area (CAM-004), and brush grow and shrink (INP-001) around a dot that shows
 the brush size. Undo and redo shall look disabled while there is nothing to undo or redo.
-  Why: GEN-005. Each control does exactly what its key does.
+  Why: GEN-006. Each control does exactly what its key does.
 
 **HUD-007** The editor shall show toggle buttons for the building layer (INP-003) and the original
 outlines (IMP-009), each showing whether its layer is on.
 
-**HUD-008** The editor shall list, in the help panel, the pointer or touch way of doing each action next to
-its key.
+**HUD-008** The editor shall list, in the help panel, the pointer way of doing each action next to its key.
   Trace: manual
 
 **HUD-009** While any piece is disputed, the editor shall show a button in the top bar with the number of
@@ -858,6 +857,12 @@ on by itself.
   Why: the lattice *is* the map. Roads and blocks come from the same data the user is painting on. Imagery
   is evidence the user asks for, not the ground they paint on.
   Trace: policy
+
+**NG-006** The editor shall not respond to touch on the map.
+  Why: Skyditor is a desktop tool. Half-supported fingers were worse than none: every two-finger pan began
+  as a dab of paint, and keeping fingers working cost gestures, targets and layout rules that a mouse never
+  needed. Ignored touches cannot paint by accident.
+  Trace: manual
 
 ---
 
@@ -912,7 +917,7 @@ how to answer.
 **TYPE-006** The editor shall offer a target switch (a top-bar button, key `T`) between land and buildings.
 While buildings are the target, the paint tiles and the eraser act on buildings (TYPE-008, TYPE-010), the
 brush cursor shows it, and the building layer is on.
-  Why: one palette, one colour language, two things it can colour. GEN-005: the button is the pointer's way.
+  Why: one palette, one colour language, two things it can colour. GEN-006: the button is the pointer's way.
   Trace: manual
 
 **TYPE-007** The editor shall offer an *agree* tool (key `G`). While an agree stroke is active, when the
@@ -981,7 +986,7 @@ for OpenStreetMap editing, and never from Google Maps or Street View.
   every edit.
   Trace: policy
 
-**PEEK-003** While the photo peek is on (key `P`, or its button), when the user points at or taps a
+**PEEK-003** While the photo peek is on (key `P`, or its button), when the user points at or clicks a
 building, the editor shall show, beside the map, the nearest open street-level photo that faces that
 building, when it was taken, where it was taken from on the map with the direction it looks in, and links
 that open the spot in Panoramax, Mapillary and KartaView in a new tab.

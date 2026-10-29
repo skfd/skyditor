@@ -394,49 +394,6 @@ describe("undo", () => {
   });
 });
 
-describe("cancel", () => {
-  it("PAINT-010: cancelling a stroke restores every piece it claimed and gives no undo step", async () => {
-    const w = await grid().world();
-    const before = atomAt(w, 0, 0).pieces;
-    const s = new Stroke(w, R2, 30, -80, -60);
-    s.start();
-    const claims = [];
-    for (const [x, y] of [[80, -60], [80, 0], [-80, 0], [-80, 60], [80, 60]] as [number, number][])
-      for (let i = 1; i <= 20; i++) {
-        const [lx, ly] = s.trail[s.trail.length - 1];
-        claims.push(...s.move(lx + ((x - lx) * i) / 20, ly + ((y - ly) * i) / 20).filter((e) => e.type === "claim"));
-      }
-    expect(claims.length).toBe(1);
-    expect(at(w, 0, 0)?.kind).toBe("R2");
-    const reverted = s.cancel();
-    expect(reverted?.atoms.length).toBe(1);
-    expect(atomAt(w, 0, 0).pieces).toBe(before); // the very same pieces, so caches and undo still match
-    expect(at(w, 0, 0)?.kind).toBe(null);
-  });
-
-  it("PAINT-010: a cancelled freeform stroke never commits its preview", async () => {
-    const w = await grid().world();
-    const s = new Stroke(w, R2, 10, -60, -80);
-    s.start();
-    for (let x = -60; x <= 60; x += 2) s.move(x, -80);
-    s.updatePreview();
-    expect(s.preview.size).toBe(1);
-    expect(s.cancel()).toBeNull(); // freeform paint only lands on release
-    expect(s.preview.size).toBe(0);
-    expect(at(w, 0, -80)?.kind).toBe(null);
-  });
-
-  it("PAINT-010: cancelling a density stroke restores the tiers", async () => {
-    const w = await grid().world();
-    paint(w, R2, 30, [[0, 0]], true);
-    const s = new Stroke(w, UP, 10, 0, 0);
-    s.start();
-    expect(at(w, 0, 0)?.kind).toBe("R3");
-    s.cancel();
-    expect(at(w, 0, 0)?.kind).toBe("R2");
-  });
-});
-
 describe("feedback", () => {
   it("PAINT-009: entering protected land during a stroke rejects once", async () => {
     const s = grid();

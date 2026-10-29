@@ -341,18 +341,6 @@ export class Stroke {
   private buildingSteps() {
     return [...this.beforeB].filter(([s, b]) => s.items !== b).map(([set, before]) => ({ set, before, after: set.items }));
   }
-
-  /** PAINT-010: reverts everything the stroke changed. Returns what was reverted, for the settle animation only. */
-  cancel(): Step | null {
-    const atoms = [...this.before].filter(([a, b]) => a.pieces !== b).map(([atom, before]) => ({ atom, before, after: atom.pieces }));
-    for (const a of atoms) a.atom.pieces = a.before;
-    const buildings = this.buildingSteps();
-    for (const b of buildings) b.set.items = b.before;
-    this.preview.clear();
-    this.coverage.clear();
-    this.dirty.clear();
-    return atoms.length || buildings.length ? { atoms, buildings } : null;
-  }
 }
 
 const overlaps = (p: Piece, region: Shape) => {
