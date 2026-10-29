@@ -1035,8 +1035,10 @@ while the brush acts on land, a piece, or an unsure building's mark (TYPE-015); 
 **CORR-005** (corrects TYPE-008) The editor shall take a tap or the pointer on an unsure building's mark
 (TYPE-004) as landing on that building, also where the mark reaches past the footprint. Where marks and
 footprints overlap, the nearest mark wins. The mark's size is TUNE-UNSURE-MARK.
-  Observed: taps were tested against the footprint only. Zoomed out, a house is smaller than its mark, so
-  most taps on a mark missed the house and did nothing.
+  Observed: pointing was tested against the footprint only. Zoomed out, a house is smaller than its mark, so
+  pointing at a mark showed no hint (TYPE-005) and no photos (PEEK-003), and a tap with land as the target
+  filled the block under it (now TYPE-015). A building tap still reached the house only because the
+  smallest brush happens to be wider than the mark.
   Why: the mark is what the user sees and aims at.
 
 ---
