@@ -507,8 +507,8 @@ export class App {
     c.addEventListener("pointermove", (e) => this.onMove(e));
     c.addEventListener("pointerup", (e) => this.onUp(e));
     c.addEventListener("pointercancel", (e) => this.onUp(e));
-    c.addEventListener("pointerleave", () => {
-      if (!this.stroke && !this.pan) {
+    c.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "touch" && !this.stroke && !this.pan) { // NG-006
         this.cursor = null;
         this.hover = null;
         this.hud.hint(null);
@@ -623,6 +623,7 @@ export class App {
   }
 
   private onUp(e: PointerEvent) {
+    if (e.pointerType === "touch") return; // NG-006
     if (this.pan && e.pointerId === this.pan.id) {
       const idle = performance.now() - this.pan.t > 80;
       this.camera.release(idle ? 0 : this.pan.vx, idle ? 0 : this.pan.vy);

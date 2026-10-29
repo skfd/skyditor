@@ -131,7 +131,7 @@ now, not a touch one. GEN-006 and NG-006 replace it.
 
 **GEN-006** The editor shall let the user do everything with a mouse, trackpad or pen alone, without a
 keyboard. Keys are shortcuts, never the only way to do something.
-  Why: painting landuse is desktop work, but a hand on the mouse may have no hand free for keys. Alt-click
+  Why: painting landuse is desktop work, but the other hand may be busy, or absent. Alt-click
   picking (PAINT-008) is a shortcut for choosing a palette tile, so the palette covers it.
   Trace: manual
 
