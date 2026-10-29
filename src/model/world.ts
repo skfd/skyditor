@@ -75,8 +75,8 @@ export function makePiece(
 
 export const isProtected = (p: Piece) => p.kind === "CTX"; // PAINT-004
 // Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013).
-const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}`;
-const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land
+export const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}`;
+export const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land
 export const SOFT_LINE_HALF_WIDTH = 0.25; // m; just enough to separate cells; swallowed again by SNAP-103, or along fences filled by SNAP-112
 
 const floatRing = (pts: Float32Array): Ring => {
@@ -144,7 +144,7 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
   return out;
 }
 
-function touchClusters(ps: Piece[]): Piece[][] {
+export function touchClusters(ps: Piece[]): Piece[][] {
   const parent = ps.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   for (let i = 0; i < ps.length; i++)
