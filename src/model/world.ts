@@ -261,11 +261,8 @@ export class World {
     return null;
   }
 
-  /**
-   * CORR-005: the building a tap or the pointer at a point lands on: the unsure building whose mark (`mark`
-   * units round its centre) covers the point, nearest first, else the building under it.
-   */
-  buildingHit(x: number, y: number, mark = 0): Building | null {
+  /** CORR-005: the unsure building whose mark (`mark` units round its centre) covers a point, nearest first. */
+  markAt(x: number, y: number, mark: number): Building | null {
     let best: Building | null = null;
     let bestD = mark * mark;
     if (mark > 0)
@@ -276,7 +273,12 @@ export class World {
         const guess = this.guessOf(b);
         if (guess && !guess.look) [best, bestD] = [b, d];
       }
-    return best ?? this.buildingAt(x, y);
+    return best;
+  }
+
+  /** CORR-005: the building a tap or the pointer at a point lands on: a mark covering it wins over a footprint. */
+  buildingHit(x: number, y: number, mark = 0): Building | null {
+    return this.markAt(x, y, mark) ?? this.buildingAt(x, y);
   }
 
   /** TYPE-001..TYPE-003: what the editor guesses about a building, or null when it is typed or protected. */

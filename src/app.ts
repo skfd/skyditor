@@ -407,11 +407,30 @@ export class App {
   private pointAt(wx: number, wy: number) {
     if (!this.world) return;
     if (!onBuildings(this.tool, this.target)) {
-      this.hover = this.world.pieceAt(toI(wx), toI(wy));
+      // TYPE-015: on land, an unsure building's mark opens its card, so it lights up too.
+      this.hover = this.world.markAt(toI(wx), toI(wy), toI(this.markRadius())) ?? this.world.pieceAt(toI(wx), toI(wy));
       return;
     }
     const b = this.buildingHit(wx, wy);
     this.hover = b && changesBuilding(this.world, this.tool, b) ? b : null;
+  }
+
+  /** TYPE-015: what an unsure building could be and how to decide, beside its mark. */
+  private showMarkCard(b: Building) {
+    const g = this.world?.guessOf(b);
+    if (!g) return;
+    const what = document.createElement("p");
+    what.textContent = `${describeGuess(g, (k) => KINDS[k as Kind]?.label ?? k)}.`;
+    const how = document.createElement("p");
+    how.textContent = "To decide, paint buildings: pick a tile and tap the building.";
+    const go = document.createElement("button");
+    go.type = "button";
+    go.textContent = "Paint buildings · T";
+    go.addEventListener("click", () => {
+      this.badges.close();
+      if (this.target === "land") this.toggleTarget();
+    });
+    this.badges.showMark([toM(b.geom.cx), toM(b.geom.cy)], [what, how, go], this.camera);
   }
 
   /** CORR-004: what the resting cursor points at changes with the tool, the target and the layers. */
@@ -557,6 +576,11 @@ export class App {
       const p = this.world.pieceAt(toI(wx), toI(wy));
       if (p && p.kind && p.kind in KINDS && TOOLS.some((t) => t.id === p.kind)) this.selectTool(p.kind);
       return;
+    }
+    if (!onBuildings(this.tool, this.target)) {
+      // TYPE-015: a tap on an unsure building's mark asks what it is; it paints no land.
+      const m = this.world.markAt(toI(wx), toI(wy), toI(this.markRadius()));
+      if (m) return this.showMarkCard(m);
     }
     this.canvas.setPointerCapture(e.pointerId);
     this.hover = null;

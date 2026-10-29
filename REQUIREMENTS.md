@@ -951,6 +951,13 @@ view, and flash it. The button is hidden while there are none.
 select its look's tile, if the palette has one.
   Trace: manual
 
+**TYPE-015** While the brush acts on land, when the user taps an unsure building's mark (TYPE-004, CORR-005),
+the editor shall paint nothing and show next to the mark which looks the building could be, how to decide,
+and a button that makes buildings the target. Pressing anywhere else closes it.
+  Why: the mark looks like the missing-landuse badge (REN-016), and the user presses it the same way to ask
+  what it means. Filling the block under it instead answers a question nobody asked.
+  Trace: manual
+
 ### Peeks: imagery and street photos
 
 Deciding what a building is often takes one look at the roof or the front door. The peeks bring that
@@ -1018,9 +1025,9 @@ of the brush radius from the paint. Past that, the leftover stays as it was.
   Why: swallowing closes the gap between the paint and whatever it was painted up to. A strip that leads
   away from the stroke is land the user never painted near.
 
-**CORR-004** (corrects REN-007) The editor shall highlight only what a tap would change under the cursor: a
-piece while the brush acts on land, and while it acts on buildings (TYPE-006, TYPE-007) the building the
-current tool would change, and no land.
+**CORR-004** (corrects REN-007) The editor shall highlight only what a tap would act on under the cursor:
+while the brush acts on land, a piece, or an unsure building's mark (TYPE-015); while it acts on buildings
+(TYPE-006, TYPE-007), the building the current tool would change, and no land.
   Observed: with buildings as the target, the land under the cursor still lit up and the buildings did not,
   so the highlight pointed at the one thing the brush would leave alone.
   Why: the highlight answers "what will a click do here?". Something that does not react cannot be clicked.

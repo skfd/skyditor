@@ -914,3 +914,16 @@ body.dropping #drop {
   color: #2a6fb0;
   font-weight: 600;
 }
+/* TYPE-015: the card's one action, styled like its link. */
+#issue button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2a6fb0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+#issue button:hover {
+  text-decoration: underline;
+}
