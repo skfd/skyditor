@@ -8,7 +8,7 @@ import { type Target, type Tool, onBuildings } from "../paint/snap";
 import { type TileCache, tileAt, tileBounds, tileZoom } from "../osm/imagery";
 import { TUNE } from "../tuning";
 import type { Anims } from "./anim";
-import type { Camera } from "./camera";
+import type { Camera, ViewBox } from "./camera";
 import { faces } from "./faces";
 import { rippleT, spikePhase, spikesAlong } from "./marks";
 
@@ -86,6 +86,40 @@ interface Hatch {
   period: number; // device px between lines
 }
 
+/** What drawLand drew, for the marks drawn over it. */
+interface Land {
+  atoms: Atom[];
+  sets: Map<number, BuildingSet>; // by atom, -1 for the buildings outside every atom
+  marks: [number, number][]; // TYPE-004
+  odd: LookedBuilding[]; // REN-011
+  disputed: Piece[]; // REN-013
+}
+
+/**
+ * REN-008: the land drawn once for a view a margin larger than the screen, then only copied while the view
+ * pans within it, and stretched while it zooms (REN-017). Where the canvas is drawn on the CPU, drawing the
+ * map costs tens of milliseconds and copying it about one.
+ */
+interface Base {
+  canvas: HTMLCanvasElement;
+  scale: number;
+  ox: number; // where the world's origin lands on it, device px
+  oy: number;
+  land: Land;
+  // What it was drawn from. Pieces and buildings are replaced, never changed, so identity is enough.
+  world: World;
+  hover: Piece | null; // REN-007
+  buildings: boolean;
+  pieces: (readonly Piece[])[]; // of land.atoms
+  items: (Building[] | undefined)[]; // of the set outside every atom, then of each of land.atoms
+}
+
+const BASE_MARGIN = 160; // CSS px of map kept beyond each edge of the screen
+const BASE_STRETCH = 1.25; // REN-017: how far a zoom stretches the copy before it is drawn again
+
+/** REN-007: the piece under the cursor, when it is a piece. */
+const hoveredPiece = (st: RenderState): Piece | null => (st.hover && !("geom" in st.hover) ? st.hover : null);
+
 /** REN-012: the colour a rival kind would have. */
 const rivalColor = (r: Rival) => (r.kind === "CTX" ? CTX_COLORS[r.ctx ?? "green"] : KINDS[r.kind].color);
 
@@ -145,7 +179,10 @@ function pathOfFloatRings(rings: Float32Array[], closed: boolean): Path2D {
 }
 
 export class Renderer {
-  private readonly ctx: CanvasRenderingContext2D;
+  private readonly screen: CanvasRenderingContext2D;
+  private ctx: CanvasRenderingContext2D; // the screen, or the base while drawing that
+  private base: Base | null = null;
+  private baseCtx: CanvasRenderingContext2D | null = null;
   private readonly pieceGfx = new WeakMap<Piece, PieceGfx>();
   private readonly atomPaths = new Map<number, Path2D>();
   private readonly atomById = new Map<number, Atom>();
@@ -161,12 +198,13 @@ export class Renderer {
   private dpr = 1;
 
   constructor(readonly canvas: HTMLCanvasElement, private world: World) {
-    this.ctx = canvas.getContext("2d", { alpha: false })!;
+    this.screen = this.ctx = canvas.getContext("2d", { alpha: false })!;
     this.setWorld(world);
   }
 
   setWorld(world: World) {
     this.world = world;
+    this.base = null;
     this.atomPaths.clear();
     this.atomById.clear();
     for (const a of world.atoms) this.atomById.set(a.id, a);
@@ -196,6 +234,7 @@ export class Renderer {
 
   resize(w: number, h: number, dpr: number) {
     if (dpr !== this.dpr) this.hatches.clear(); // drawn in device pixels
+    this.base = null;
     this.dpr = dpr;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
@@ -268,7 +307,8 @@ export class Renderer {
    * lines stay put on the land while panning.
    */
   private hatchFill(path: Path2D, rule: CanvasFillRule, h: Hatch, box: BBox | null) {
-    const { ctx, canvas } = this;
+    const { ctx } = this;
+    const { canvas } = ctx;
     const m = ctx.getTransform(); // never rotated: x on canvas = a * x + e, y = d * y + f
     let [x0, y0, x1, y1] = [0, 0, canvas.width, canvas.height];
     if (box) {
@@ -367,120 +407,45 @@ export class Renderer {
 
   /** Draws a frame. Returns true when ambient marks (REN-011, REN-013) are on screen and moving (REN-014). */
   draw(st: RenderState, now: number): boolean {
-    const { ctx, dpr } = this;
+    const { dpr } = this;
     const cam = st.camera;
     const s = cam.scale;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = COLORS.street;
-    ctx.fillRect(0, 0, cam.width, cam.height);
-    const toWorld = () =>
-      ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (cam.width / 2 - cam.cx * s), dpr * (cam.height / 2 - cam.cy * s));
-    toWorld();
+    // Where the world's origin lands on the canvas, at a whole device pixel so the base copies onto whole pixels.
+    const ox = Math.round(dpr * (cam.width / 2 - cam.cx * s));
+    const oy = Math.round(dpr * (cam.height / 2 - cam.cy * s));
+    let land: Land;
+    if (st.anims.active(now)) {
+      // Slabs rising or settling (FEEL-001) change the land every frame: it is drawn straight onto the screen.
+      this.base = null;
+      land = this.drawLand(st, now, ox, oy, cam.view());
+    } else {
+      const b = this.base && this.baseFits(this.base, st, ox, oy) ? this.base : this.drawBase(st, now, ox, oy);
+      const r = s / b.scale;
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (r === 1) this.ctx.drawImage(b.canvas, ox - b.ox, oy - b.oy);
+      else this.ctx.drawImage(b.canvas, ox - b.ox * r, oy - b.oy * r, b.canvas.width * r, b.canvas.height * r); // REN-017
+      land = b.land;
+    }
+
+    const { ctx } = this;
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, ox, oy);
     const px = 1 / s; // one screen pixel in metres
-
-    // REN-001: void land, water.
-    ctx.fillStyle = COLORS.lot;
-    ctx.fill(this.lots, "evenodd");
-    ctx.strokeStyle = COLORS.lotEdge;
-    ctx.lineWidth = px;
-    ctx.stroke(this.lots);
-    ctx.fillStyle = COLORS.water;
-    ctx.fill(this.water, "evenodd");
-
     const v = cam.view();
-    const margin = 20 * px;
-    const atoms = this.world.atomsIn({
-      minX: toI(v.minX - margin), minY: toI(v.minY - margin), maxX: toI(v.maxX + margin), maxY: toI(v.maxY + 30 * px),
-    });
-
-    const ctxPieces: Piece[] = [];
-    const slabs: Piece[] = [];
-    const disputed: Piece[] = [];
-    for (const a of atoms)
-      for (const p of a.pieces) {
-        if (p.kind === "CTX") ctxPieces.push(p);
-        else if (p.kind !== null) slabs.push(p);
-        if (p.rival) disputed.push(p);
-      }
-
-    // Exclusive context: flat. REN-004: a surface of several pieces is filled once.
-    const filled = new Set<GroupGfx>();
-    for (const p of ctxPieces) {
-      const g = this.gfx(p);
-      if (g.group && filled.has(g.group)) continue;
-      if (g.group) filled.add(g.group);
-      const path = g.group?.path ?? g.path;
-      ctx.fillStyle = CTX_COLORS[p.ctx ?? "green"];
-      ctx.fill(path, "evenodd");
-      if (p.rival) this.fillStripes(p, path, g.group?.box ?? p.bbox); // REN-012
-    }
-
-    // Overlay context (IMP-003) sits under the landuse it belongs to.
-    ctx.globalAlpha = 0.75;
-    for (const [color, path] of this.overlay) {
-      ctx.fillStyle = color;
-      ctx.fill(path, "evenodd");
-    }
-    ctx.globalAlpha = 1;
-
-    // REN-003: north to south, so southern slabs cover the sides of northern ones.
-    slabs.sort((a, b) => a.bbox.maxY - b.bbox.maxY);
-    // REN-004: a surface of several pieces gets its top with its southernmost piece, over all their sides.
-    const lastOf = new Map<GroupGfx, Piece>();
-    for (const p of slabs) {
-      const g = this.gfx(p).group;
-      if (g) lastOf.set(g, p);
-    }
-    for (const p of slabs) {
-      const g = this.gfx(p);
-      const top = !g.group ? g.path : lastOf.get(g.group) === p ? g.group.path : null;
-      this.drawSlab(p, top, s, now, st.anims, p === st.hover);
-    }
-
+    const near = (x: number, y: number, r: number) => x + r >= v.minX && x - r <= v.maxX && y + r >= v.minY && y - r <= v.maxY;
     const moving = !st.anims.reduced;
     let ambient = false;
-    const marks: [number, number][] = [];
-    if (st.showBuildings) {
-      // The sets of the atoms in view, and the buildings standing outside every atom.
-      const sets = new Map<number, BuildingSet>();
-      for (const s of this.world.buildingSets()) sets.set(s.atom, s);
-      const shown = [sets.get(-1), ...atoms.map((a) => sets.get(a.id))].filter((s): s is BuildingSet => !!s);
-      const gfx = shown.map((s) => this.gfxOf(s));
-      // REN-010
-      ctx.fillStyle = COLORS.building;
-      for (const g of gfx) ctx.fill(g.faint, "nonzero");
-      // REN-009
-      ctx.globalAlpha = TUNE.BUILDING_ALPHA;
-      for (const g of gfx)
-        for (const [color, path] of g.typed) {
-          ctx.fillStyle = color;
-          ctx.fill(path, "nonzero");
-        }
-      // TYPE-004: guesses, fainter and hatched.
-      for (const g of gfx)
-        for (const [color, path, box] of g.guessed) {
-          ctx.globalAlpha = TUNE.GUESS_ALPHA;
-          ctx.fillStyle = color;
-          ctx.fill(path, "nonzero");
-          // The hatch: a darker shade of its colour on a transparent ground.
-          ctx.globalAlpha = 0.8;
-          this.hatchFill(path, "nonzero", this.hatchOf(`guess ${color}`, 8, 1.4, darken(color, 0.7), null), box);
-        }
-      ctx.globalAlpha = 1;
-      for (const g of gfx) marks.push(...g.marks);
-      // REN-011: a steady edge, and an outline of the footprint growing out of it like a ping. With reduced
-      // motion only the edge is left (FEEL-008).
-      const odd = atoms.flatMap((a) => this.disagreeingIn(a, sets.get(a.id)));
+    const { atoms } = land;
+
+    // REN-011: an outline of the footprint growing out of its steady edge like a ping. With reduced motion only
+    // the edge is left (FEEL-008).
+    if (moving) {
       ctx.lineJoin = "round";
-      for (const b of odd) {
-        ctx.strokeStyle = b.color;
-        ctx.lineWidth = (moving ? 1.5 : 2.5) * px;
-        ctx.stroke(b.path);
-        if (!moving) continue;
+      for (const b of land.odd) {
+        const [cx, cy] = [toM(b.x), toM(b.y)];
+        if (!near(cx, cy, b.r + (TUNE.RIPPLE_REACH + 4) * px)) continue;
         ambient = true;
         const t = rippleT(now, b.x, b.y);
         const k = 1 + (TUNE.RIPPLE_REACH * t * px) / b.r;
-        const [cx, cy] = [toM(b.x), toM(b.y)];
         ctx.save();
         ctx.translate(cx, cy);
         ctx.scale(k, k);
@@ -496,16 +461,13 @@ export class Renderer {
         ctx.restore();
       }
     }
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = COLORS.minor;
-    ctx.globalAlpha = 0.7;
-    ctx.lineWidth = Math.max(1.5 * px, 2.5);
-    ctx.stroke(this.minorMajor);
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = Math.max(1 * px, 1);
-    ctx.stroke(this.minorPaths);
-    ctx.globalAlpha = 1;
+
+    const pad = (TUNE.SPIKE_SIZE + 2) * px;
+    const disputed = land.disputed.filter((p) => {
+      const b = p.bbox;
+      return near((toM(b.minX) + toM(b.maxX)) / 2, (toM(b.minY) + toM(b.maxY)) / 2, pad + Math.max(toM(b.maxX - b.minX), toM(b.maxY - b.minY)) / 2);
+    });
+    const marks = land.marks.filter(([x, y]) => near(x, y, TUNE.UNSURE_MARK * px));
 
     // REN-013: red spikes creeping round each disputed piece; they stand still with reduced motion.
     if (disputed.length) {
@@ -666,6 +628,183 @@ export class Renderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (st.cursor && !st.panning) this.drawCursor(st, now);
     return ambient;
+  }
+
+  /**
+   * Everything under the marks that move on their own (see draw): ground, land, buildings and footpaths, for
+   * the atoms near `v`, with the world's origin at device pixel (ox, oy).
+   */
+  private drawLand(st: RenderState, now: number, ox: number, oy: number, v: ViewBox): Land {
+    const { ctx, dpr } = this;
+    const s = st.camera.scale;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = COLORS.street;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, ox, oy);
+    const px = 1 / s; // one screen pixel in metres
+
+    // REN-001: void land, water.
+    ctx.fillStyle = COLORS.lot;
+    ctx.fill(this.lots, "evenodd");
+    ctx.strokeStyle = COLORS.lotEdge;
+    ctx.lineWidth = px;
+    ctx.stroke(this.lots);
+    ctx.fillStyle = COLORS.water;
+    ctx.fill(this.water, "evenodd");
+
+    const margin = 20 * px;
+    const atoms = this.world.atomsIn({
+      minX: toI(v.minX - margin), minY: toI(v.minY - margin), maxX: toI(v.maxX + margin), maxY: toI(v.maxY + 30 * px),
+    });
+
+    const ctxPieces: Piece[] = [];
+    const slabs: Piece[] = [];
+    const disputed: Piece[] = [];
+    for (const a of atoms)
+      for (const p of a.pieces) {
+        if (p.kind === "CTX") ctxPieces.push(p);
+        else if (p.kind !== null) slabs.push(p);
+        if (p.rival) disputed.push(p);
+      }
+
+    // Exclusive context: flat. REN-004: a surface of several pieces is filled once.
+    const filled = new Set<GroupGfx>();
+    for (const p of ctxPieces) {
+      const g = this.gfx(p);
+      if (g.group && filled.has(g.group)) continue;
+      if (g.group) filled.add(g.group);
+      const path = g.group?.path ?? g.path;
+      ctx.fillStyle = CTX_COLORS[p.ctx ?? "green"];
+      ctx.fill(path, "evenodd");
+      if (p.rival) this.fillStripes(p, path, g.group?.box ?? p.bbox); // REN-012
+    }
+
+    // Overlay context (IMP-003) sits under the landuse it belongs to.
+    ctx.globalAlpha = 0.75;
+    for (const [color, path] of this.overlay) {
+      ctx.fillStyle = color;
+      ctx.fill(path, "evenodd");
+    }
+    ctx.globalAlpha = 1;
+
+    // REN-003: north to south, so southern slabs cover the sides of northern ones.
+    slabs.sort((a, b) => a.bbox.maxY - b.bbox.maxY);
+    // REN-004: a surface of several pieces gets its top with its southernmost piece, over all their sides.
+    const lastOf = new Map<GroupGfx, Piece>();
+    for (const p of slabs) {
+      const g = this.gfx(p).group;
+      if (g) lastOf.set(g, p);
+    }
+    for (const p of slabs) {
+      const g = this.gfx(p);
+      const top = !g.group ? g.path : lastOf.get(g.group) === p ? g.group.path : null;
+      this.drawSlab(p, top, s, now, st.anims, p === st.hover);
+    }
+
+    const marks: [number, number][] = [];
+    let odd: LookedBuilding[] = [];
+    const sets = this.setsByAtom();
+    if (st.showBuildings) {
+      // The sets of the atoms in view, and the buildings standing outside every atom.
+      const shown = [sets.get(-1), ...atoms.map((a) => sets.get(a.id))].filter((s): s is BuildingSet => !!s);
+      const gfx = shown.map((s) => this.gfxOf(s));
+      // REN-010
+      ctx.fillStyle = COLORS.building;
+      for (const g of gfx) ctx.fill(g.faint, "nonzero");
+      // REN-009
+      ctx.globalAlpha = TUNE.BUILDING_ALPHA;
+      for (const g of gfx)
+        for (const [color, path] of g.typed) {
+          ctx.fillStyle = color;
+          ctx.fill(path, "nonzero");
+        }
+      // TYPE-004: guesses, fainter and hatched.
+      for (const g of gfx)
+        for (const [color, path, box] of g.guessed) {
+          ctx.globalAlpha = TUNE.GUESS_ALPHA;
+          ctx.fillStyle = color;
+          ctx.fill(path, "nonzero");
+          // The hatch: a darker shade of its colour on a transparent ground.
+          ctx.globalAlpha = 0.8;
+          this.hatchFill(path, "nonzero", this.hatchOf(`guess ${color}`, 8, 1.4, darken(color, 0.7), null), box);
+        }
+      ctx.globalAlpha = 1;
+      for (const g of gfx) marks.push(...g.marks);
+      // REN-011: the steady edge. Its ripple moves, so it is drawn over the land (draw).
+      odd = atoms.flatMap((a) => this.disagreeingIn(a, sets.get(a.id)));
+      ctx.lineJoin = "round";
+      ctx.lineWidth = (st.anims.reduced ? 2.5 : 1.5) * px;
+      for (const b of odd) {
+        ctx.strokeStyle = b.color;
+        ctx.stroke(b.path);
+      }
+    }
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = COLORS.minor;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = Math.max(1.5 * px, 2.5);
+    ctx.stroke(this.minorMajor);
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = Math.max(1 * px, 1);
+    ctx.stroke(this.minorPaths);
+    ctx.globalAlpha = 1;
+
+    return { atoms, sets, marks, odd, disputed };
+  }
+
+  private setsByAtom(): Map<number, BuildingSet> {
+    const sets = new Map<number, BuildingSet>();
+    for (const set of this.world.buildingSets()) sets.set(set.atom, set);
+    return sets;
+  }
+
+  /** Draws the land into the base, for the view a margin larger than the screen (see Base). */
+  private drawBase(st: RenderState, now: number, ox: number, oy: number): Base {
+    const cam = st.camera;
+    const m = Math.round(BASE_MARGIN * this.dpr);
+    const bctx = (this.baseCtx ??= document.createElement("canvas").getContext("2d", { alpha: false })!);
+    const { canvas } = bctx;
+    const [w, h] = [this.screen.canvas.width + 2 * m, this.screen.canvas.height + 2 * m];
+    if (canvas.width !== w || canvas.height !== h) [canvas.width, canvas.height] = [w, h];
+    const v = cam.view();
+    const e = BASE_MARGIN / cam.scale;
+    this.ctx = bctx;
+    let land: Land;
+    try {
+      land = this.drawLand(st, now, ox + m, oy + m, { minX: v.minX - e, minY: v.minY - e, maxX: v.maxX + e, maxY: v.maxY + e });
+    } finally {
+      this.ctx = this.screen;
+    }
+    this.base = {
+      canvas, scale: cam.scale, ox: ox + m, oy: oy + m, land,
+      world: this.world,
+      hover: hoveredPiece(st),
+      buildings: st.showBuildings,
+      pieces: land.atoms.map((a) => a.pieces),
+      items: [land.sets.get(-1)?.items, ...land.atoms.map((a) => land.sets.get(a.id)?.items)],
+    };
+    return this.base;
+  }
+
+  /** Whether the base still shows the land and covers the screen. */
+  private baseFits(b: Base, st: RenderState, ox: number, oy: number): boolean {
+    const cam = st.camera;
+    if (b.world !== this.world || b.hover !== hoveredPiece(st) || b.buildings !== st.showBuildings) return false;
+    // REN-017: stretched only while zooming, and only so far.
+    const r = cam.scale / b.scale;
+    if (r !== 1 && (!cam.settling || r > BASE_STRETCH || r < 1 / BASE_STRETCH)) return false;
+    const { width, height } = this.screen.canvas;
+    const x0 = b.ox - ox / r, y0 = b.oy - oy / r;
+    if (x0 < 0 || y0 < 0 || x0 + width / r > b.canvas.width || y0 + height / r > b.canvas.height) return false;
+    const { atoms } = b.land;
+    for (let i = 0; i < atoms.length; i++) if (atoms[i].pieces !== b.pieces[i]) return false;
+    if (st.showBuildings) {
+      const sets = this.setsByAtom();
+      if (sets.get(-1)?.items !== b.items[0]) return false;
+      for (let i = 0; i < atoms.length; i++) if (sets.get(atoms[i].id)?.items !== b.items[i + 1]) return false;
+    }
+    return true;
   }
 
   /** PEEK-001: the tiles under the view, each placed by its lon/lat corners through the area's projection. */

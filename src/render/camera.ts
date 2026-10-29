@@ -37,6 +37,11 @@ export class Camera {
     return { minX, minY, maxX, maxY };
   }
 
+  /** Whether the zoom is still easing towards its target, or flying (CAM-004). */
+  get settling(): boolean {
+    return this.fly !== null || this.scale !== this.tScale;
+  }
+
   /** CAM-001: multiplies the zoom target, keeping the world point under (sx, sy) fixed. */
   zoomBy(factor: number, sx: number, sy: number) {
     this.fly = null;
