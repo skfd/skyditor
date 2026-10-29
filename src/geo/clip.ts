@@ -148,6 +148,19 @@ export function components(s: Shape): Shape[] {
   return ClipperLib.JS.PolyTreeToExPolygons(tree).map((ex) => [ex.outer, ...ex.holes]);
 }
 
+/** `s` with every hole smaller than `maxM2` filled. */
+export function fillHoles(s: Shape, maxM2: number): Shape {
+  const out: Shape = [];
+  let filled = false;
+  for (const [outer, ...holes] of components(s)) {
+    out.push(outer);
+    for (const h of holes)
+      if (area([h]) >= maxM2) out.push(h);
+      else filled = true;
+  }
+  return filled ? union(out) : s; // union again: an island in a filled hole is no longer one
+}
+
 export function bbox(s: Shape): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const r of s)

@@ -1,5 +1,5 @@
 // Canvas renderer (REN-001..REN-014, TYPE-004).
-import { type Shape, contains, offset, toI, toM } from "../geo/clip";
+import { type Shape, contains, toI, toM } from "../geo/clip";
 import { type Building, type BuildingGeom, statusOf } from "../model/buildings";
 import { type BuildingLook, CTX_COLORS, type Kind, KINDS, disagreesWithLand, lookColor } from "../model/kinds";
 import type { Atom, BuildingSet, Piece, Rival, World } from "../model/world";
@@ -9,6 +9,7 @@ import { type TileCache, tileAt, tileBounds, tileZoom } from "../osm/imagery";
 import { TUNE } from "../tuning";
 import type { Anims } from "./anim";
 import type { Camera } from "./camera";
+import { faces } from "./faces";
 import { rippleT, spikePhase, spikesAlong } from "./marks";
 
 const BUILDING_INK = [74, 52, 40];
@@ -46,9 +47,16 @@ export interface RenderState {
 }
 
 interface PieceGfx {
-  path: Path2D;
+  of: readonly Piece[]; // the atom's pieces these were worked out among
+  path: Path2D; // the piece's own top face
   cx: number;
   cy: number;
+  group: GroupGfx | null; // REN-004: touching pieces of the same kind, drawn as one surface
+}
+
+interface GroupGfx {
+  path: Path2D;
+  outside: Path2D; // everything but the surface, to keep side faces off it
 }
 
 /** A building with a look, for REN-011. */
@@ -133,6 +141,7 @@ export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly pieceGfx = new WeakMap<Piece, PieceGfx>();
   private readonly atomPaths = new Map<number, Path2D>();
+  private readonly atomById = new Map<number, Atom>();
   private lots!: Path2D;
   private water!: Path2D;
   private readonly setGfx = new Map<number, SetGfx>(); // TYPE-004, per building set
@@ -154,6 +163,8 @@ export class Renderer {
   setWorld(world: World) {
     this.world = world;
     this.atomPaths.clear();
+    this.atomById.clear();
+    for (const a of world.atoms) this.atomById.set(a.id, a);
     const lots = new Path2D();
     for (const a of world.atoms) {
       const p = pathOf(a.shape);
@@ -187,15 +198,29 @@ export class Renderer {
   }
 
   gfx(p: Piece): PieceGfx {
-    let g = this.pieceGfx.get(p);
-    if (!g) {
-      // REN-004: a hairline gap between neighbouring pieces.
-      const inset = p.kind === null ? p.shape : offset(p.shape, -TUNE.PIECE_GAP / 2);
-      const b = p.bbox;
-      g = { path: pathOf(inset.length ? inset : p.shape), cx: toM((b.minX + b.maxX) / 2), cy: toM((b.minY + b.maxY) / 2) };
-      this.pieceGfx.set(p, g);
+    const pieces = this.atomById.get(p.atom)?.pieces;
+    const known = this.pieceGfx.get(p);
+    const current = !!pieces?.includes(p);
+    if (known && (known.of === pieces || !current)) return known;
+    // REN-004: a face depends on the neighbours, so the atom's pieces are worked out together.
+    const of = current ? pieces! : [p];
+    const groups = new Map<Shape, GroupGfx>();
+    for (const [q, f] of faces(of, TUNE.PIECE_GAP)) {
+      let group: GroupGfx | null = null;
+      if (f.group) {
+        group = groups.get(f.group) ?? null;
+        if (!group) {
+          const path = pathOf(f.group);
+          const outside = new Path2D();
+          outside.rect(-1e6, -1e6, 2e6, 2e6);
+          outside.addPath(path);
+          groups.set(f.group, (group = { path, outside }));
+        }
+      }
+      const b = q.bbox;
+      this.pieceGfx.set(q, { of, path: pathOf(f.top), cx: toM((b.minX + b.maxX) / 2), cy: toM((b.minY + b.maxY) / 2), group });
     }
-    return g;
+    return this.pieceGfx.get(p)!;
   }
 
   private hatchPattern(): CanvasPattern | null {
@@ -365,11 +390,16 @@ export class Renderer {
         if (p.rival) disputed.push(p);
       }
 
-    // Exclusive context: flat.
+    // Exclusive context: flat. REN-004: a surface of several pieces is filled once.
+    const filled = new Set<GroupGfx>();
     for (const p of ctxPieces) {
+      const g = this.gfx(p);
+      if (g.group && filled.has(g.group)) continue;
+      if (g.group) filled.add(g.group);
+      const path = g.group?.path ?? g.path;
       ctx.fillStyle = CTX_COLORS[p.ctx ?? "green"];
-      ctx.fill(this.gfx(p).path, "evenodd");
-      if (p.rival) this.fillStripes(p, this.gfx(p).path, px); // REN-012
+      ctx.fill(path, "evenodd");
+      if (p.rival) this.fillStripes(p, path, px); // REN-012
     }
 
     // Overlay context (IMP-003) sits under the landuse it belongs to.
@@ -382,7 +412,17 @@ export class Renderer {
 
     // REN-003: north to south, so southern slabs cover the sides of northern ones.
     slabs.sort((a, b) => a.bbox.maxY - b.bbox.maxY);
-    for (const p of slabs) this.drawSlab(p, s, now, st.anims, p === st.hover);
+    // REN-004: a surface of several pieces gets its top with its southernmost piece, over all their sides.
+    const lastOf = new Map<GroupGfx, Piece>();
+    for (const p of slabs) {
+      const g = this.gfx(p).group;
+      if (g) lastOf.set(g, p);
+    }
+    for (const p of slabs) {
+      const g = this.gfx(p);
+      const top = !g.group ? g.path : lastOf.get(g.group) === p ? g.group.path : null;
+      this.drawSlab(p, top, s, now, st.anims, p === st.hover);
+    }
 
     const moving = !st.anims.reduced;
     let ambient = false;
@@ -642,7 +682,8 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawSlab(p: Piece, s: number, now: number, anims: Anims, hovered: boolean) {
+  /** Draws a piece's side face, then `top` as its top face (none while it is not its surface's turn, REN-004). */
+  private drawSlab(p: Piece, top: Path2D | null, s: number, now: number, anims: Anims, hovered: boolean) {
     const { ctx } = this;
     const g = this.gfx(p);
     const kd = KINDS[p.kind!];
@@ -659,6 +700,8 @@ export class Renderer {
     }
     // REN-002: the top face stays at its true position; the side face hangs below it by the lift.
     if (lift > 0.3) {
+      ctx.save();
+      if (g.group) ctx.clip(g.group.outside, "evenodd"); // REN-004: no side shows on its own surface
       ctx.fillStyle = darken(kd.color);
       const steps = Math.min(6, Math.ceil(lift));
       for (let i = steps; i >= 1; i--) {
@@ -667,16 +710,17 @@ export class Renderer {
         ctx.fill(g.path, "evenodd");
         ctx.restore();
       }
+      ctx.restore();
     }
-    if (p.kind === "RU") {
+    if (top && p.kind === "RU") {
       // KIND-004: a translucent, hatched placeholder.
       ctx.globalAlpha = alpha * 0.72;
       ctx.fillStyle = this.hatchPattern() ?? kd.color;
       this.hatch?.setTransform(new DOMMatrix().scale(px, px));
     } else ctx.fillStyle = kd.color;
-    ctx.fill(g.path, "evenodd");
+    if (top) ctx.fill(top, "evenodd");
     ctx.globalAlpha = alpha;
-    if (p.rival) this.fillStripes(p, g.path, px); // REN-012
+    if (top && p.rival) this.fillStripes(p, top, px); // REN-012
     // REN-007
     if (hovered) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.16)";

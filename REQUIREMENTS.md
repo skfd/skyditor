@@ -664,8 +664,8 @@ south.
   Trace: manual
 
 **REN-004** The editor shall draw a thin gap (TUNE-PIECE-GAP) between neighbouring pieces of different
-kinds within an atom.
-  Trace: manual
+kinds within an atom, and none inside land of one kind.
+  Why: the gap tells kinds apart. Inside land of one kind it reads as a crack, or a dot of unpainted land.
 
 ~~**REN-005** Where the building layer is on, the editor shall draw OSM building footprints as faint shapes
 over the landuse.~~ Retired: replaced by REN-009 and REN-010.
