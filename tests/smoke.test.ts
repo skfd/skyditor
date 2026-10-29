@@ -14,7 +14,8 @@ const demo = readFileSync(resolve(root, "public/fixtures/demo-tallinn.json"), "u
 /** An object on which every method is a no-op and every property can be set: enough for drawing calls. */
 const inert = (): object =>
   new Proxy(Object.create(null), {
-    get: (_, key) => (key === "then" ? undefined : () => undefined),
+    // getTransform answers with the identity, as a fresh context's would: the renderer reads the matrix back.
+    get: (_, key) => (key === "then" ? undefined : key === "getTransform" ? () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) : () => undefined),
     set: () => true,
   });
 
