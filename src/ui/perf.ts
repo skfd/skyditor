@@ -9,6 +9,7 @@ const REFRESH_MS = 250; // a DOM write four times a second, never per frame
 interface Sample {
   t: number;
   draw: number; // ms inside Renderer.draw: command submission only, the GPU may finish later
+  preview: number; // ms catching up the freeform preview while painting (SNAP-105)
   work: number; // ms inside the whole frame callback (preview catch-up, camera, draw)
   gap: number; // ms since the previous animation frame, unclamped
 }
@@ -31,8 +32,8 @@ export class PerfMeter {
   }
 
   /** One redraw. */
-  record(t: number, draw: number, work: number, gap: number) {
-    if (this.el) this.samples.push({ t, draw, work, gap });
+  record(t: number, draw: number, preview: number, work: number, gap: number) {
+    if (this.el) this.samples.push({ t, draw, preview, work, gap });
   }
 
   /** Every animation frame. */
@@ -49,6 +50,7 @@ export class PerfMeter {
     const ms = (v: number) => v.toFixed(1);
     this.el.textContent =
       `${s.length} fps · draw ${ms(avg((x) => x.draw))} ms (worst ${ms(max((x) => x.draw))})` +
+      (s.some((x) => x.preview > 0) ? ` · preview ${ms(avg((x) => x.preview))} ms` : "") +
       ` · frame ${ms(avg((x) => x.work))} ms · stall ${Math.round(max((x) => x.gap))} ms`;
   }
 }

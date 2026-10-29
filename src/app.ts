@@ -930,6 +930,7 @@ export class App {
 
   private frame(now: number) {
     const gap = now - this.lastFrame;
+    const start = this.perf.on ? performance.now() : 0; // HUD-013
     const dt = Math.min(50, gap);
     this.lastFrame = now;
     if (this.arrows.size) {
@@ -940,9 +941,11 @@ export class App {
     }
     const moving = this.camera.update(dt, now);
     // SNAP-105: the freeform preview catches up every frame, time-boxed so a long stroke never stalls one.
+    let preview = 0;
     if (this.stroke?.previewPending) {
       this.stroke.updatePreview(PREVIEW_BUDGET_MS);
       this.dirty = true;
+      if (this.perf.on) preview = performance.now() - start;
     }
     const animating = this.anims.active(now) || !!this.stroke?.preview.size;
     // REN-014: ripples and spikes alone get a slower frame rate.
@@ -973,7 +976,7 @@ export class App {
       this.dirty = false;
       if (this.perf.on) {
         const t1 = performance.now();
-        this.perf.record(now, t1 - t0, t1 - now, gap); // HUD-013
+        this.perf.record(now, t1 - t0, preview, t1 - start, gap); // HUD-013
       }
     }
     this.perf.tick(now);
