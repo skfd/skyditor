@@ -1,5 +1,5 @@
 // Canvas renderer (REN-001..REN-014, TYPE-004).
-import { type Shape, contains, offset, toI, toM } from "../geo/clip";
+import { type BBox, type Shape, contains, offset, toI, toM } from "../geo/clip";
 import { type Building, type BuildingGeom, statusOf } from "../model/buildings";
 import { type BuildingLook, CTX_COLORS, type Kind, KINDS, disagreesWithLand, lookColor } from "../model/kinds";
 import type { Atom, BuildingSet, Piece, Rival, World } from "../model/world";
@@ -66,9 +66,15 @@ interface SetGfx {
   items: Building[];
   faint: Path2D; // REN-010: typed buildings the palette has no kind for, and unsure buildings
   typed: [string, Path2D][]; // REN-009, by colour
-  guessed: [string, Path2D][]; // TYPE-004, by colour
+  guessed: [string, Path2D, BBox][]; // TYPE-004, by colour, with the bounds of its buildings
   marks: [number, number][]; // TYPE-004: centres of unsure buildings, metres
   looked: LookedBuilding[]; // REN-011 candidates
+}
+
+/** A tile of parallel hatch lines in device pixels, a whole number of line spacings wide (see hatchFill). */
+interface Hatch {
+  tile: HTMLCanvasElement;
+  period: number; // device px between lines
 }
 
 /** REN-012: the colour a rival kind would have. */
@@ -136,13 +142,11 @@ export class Renderer {
   private lots!: Path2D;
   private water!: Path2D;
   private readonly setGfx = new Map<number, SetGfx>(); // TYPE-004, per building set
-  private readonly guessHatch = new Map<string, CanvasPattern | null>(); // TYPE-004, by colour
   private minorMajor!: Path2D;
   private minorPaths!: Path2D;
   private overlay!: [string, Path2D][];
   private originals!: Path2D;
-  private hatch: CanvasPattern | null = null;
-  private readonly stripes = new Map<string, CanvasPattern | null>(); // REN-012, by rival colour
+  private readonly hatches = new Map<string, Hatch>(); // KIND-004, TYPE-004, REN-012
   private readonly disagreeing = new Map<number, { pieces: Piece[]; items: Building[]; list: LookedBuilding[] }>(); // REN-011
   private dpr = 1;
 
@@ -179,6 +183,7 @@ export class Renderer {
   }
 
   resize(w: number, h: number, dpr: number) {
+    if (dpr !== this.dpr) this.hatches.clear(); // drawn in device pixels
     this.dpr = dpr;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
@@ -198,51 +203,70 @@ export class Renderer {
     return g;
   }
 
-  private hatchPattern(): CanvasPattern | null {
-    if (this.hatch) return this.hatch;
+  /**
+   * Lines `spacing` CSS px apart and `width` wide, rising to the right (or falling, with `falling`), over a
+   * ground colour or none.
+   */
+  private hatchOf(key: string, spacing: number, width: number, color: string, ground: string | null, falling = false): Hatch {
+    let h = this.hatches.get(key);
+    if (h) return h;
+    const period = Math.max(2, Math.round(spacing * this.dpr));
+    const size = period * Math.ceil(256 / period);
     const c = document.createElement("canvas");
-    c.width = c.height = 10;
+    c.width = c.height = size;
     const g = c.getContext("2d")!;
-    g.fillStyle = KINDS.RU.color;
-    g.fillRect(0, 0, 10, 10);
-    g.strokeStyle = darken(KINDS.RU.color, 0.95);
-    g.lineWidth = 1.6;
+    if (ground) {
+      g.fillStyle = ground;
+      g.fillRect(0, 0, size, size);
+    }
+    g.strokeStyle = color;
+    g.lineWidth = width * this.dpr;
     g.beginPath();
-    for (const o of [-10, 0, 10]) {
-      g.moveTo(o, 10);
-      g.lineTo(o + 10, 0);
+    for (let o = -size; o <= size; o += period) {
+      g.moveTo(o, falling ? 0 : size);
+      g.lineTo(o + size, falling ? size : 0);
     }
     g.stroke();
-    this.hatch = this.ctx.createPattern(c, "repeat");
-    return this.hatch;
+    h = { tile: c, period };
+    this.hatches.set(key, h);
+    return h;
+  }
+
+  /**
+   * Fills a path with a hatch at a constant size on screen that moves with the map. `box` (integer units)
+   * bounds the path; without it the whole view is covered.
+   *
+   * Drawn as the tile clipped to the path and copied at whole device pixels, not as a pattern fill: where
+   * the canvas is drawn on the CPU a pattern fill resamples every pixel and cost tens of times a flat fill,
+   * most of a frame (REN-008). The tiles line up with where the world origin lands on the canvas, so the
+   * lines stay put on the land while panning.
+   */
+  private hatchFill(path: Path2D, rule: CanvasFillRule, h: Hatch, box: BBox | null) {
+    const { ctx, canvas } = this;
+    const m = ctx.getTransform(); // never rotated: x on canvas = a * x + e, y = d * y + f
+    let [x0, y0, x1, y1] = [0, 0, canvas.width, canvas.height];
+    if (box) {
+      x0 = Math.max(x0, Math.floor(m.a * toM(box.minX) + m.e));
+      x1 = Math.min(x1, Math.ceil(m.a * toM(box.maxX) + m.e));
+      y0 = Math.max(y0, Math.floor(m.d * toM(box.minY) + m.f));
+      y1 = Math.min(y1, Math.ceil(m.d * toM(box.maxY) + m.f));
+    }
+    if (x1 <= x0 || y1 <= y0) return;
+    const S = h.tile.width;
+    const ox = Math.round(m.e) % S, oy = Math.round(m.f) % S;
+    const sx = ox + Math.floor((x0 - ox) / S) * S, sy = oy + Math.floor((y0 - oy) / S) * S;
+    ctx.save();
+    ctx.clip(path, rule);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let y = sy; y < y1; y += S) for (let x = sx; x < x1; x += S) ctx.drawImage(h.tile, x, y);
+    ctx.restore();
   }
 
   /** REN-012: the rival's colour on half of each stripe, the piece's own colour showing through between. */
-  private stripePattern(color: string): CanvasPattern | null {
-    if (this.stripes.has(color)) return this.stripes.get(color)!;
+  private fillStripes(p: Piece, path: Path2D) {
+    const color = rivalColor(p.rival!);
     const n = TUNE.DISPUTE_STRIPE;
-    const c = document.createElement("canvas");
-    c.width = c.height = n;
-    const g = c.getContext("2d")!;
-    g.strokeStyle = color;
-    g.lineWidth = n / (2 * Math.SQRT2);
-    g.beginPath();
-    for (const o of [-n, 0, n]) {
-      g.moveTo(o, 0);
-      g.lineTo(o + n, n);
-    }
-    g.stroke();
-    const pat = this.ctx.createPattern(c, "repeat");
-    this.stripes.set(color, pat);
-    return pat;
-  }
-
-  private fillStripes(p: Piece, path: Path2D, px: number) {
-    const pat = this.stripePattern(rivalColor(p.rival!));
-    if (!pat) return;
-    pat.setTransform(new DOMMatrix().scale(px, px)); // stripes keep their size on screen
-    this.ctx.fillStyle = pat;
-    this.ctx.fill(path, "evenodd");
+    this.hatchFill(path, "evenodd", this.hatchOf(`stripe ${color}`, n, n / (2 * Math.SQRT2), color, null, true), p.bbox);
   }
 
   /** TYPE-001 / TYPE-004: the paths of a building set, by state, rebuilt when the set changes. */
@@ -251,7 +275,7 @@ export class Renderer {
     if (g && g.items === set.items) return g;
     const faint = new Path2D();
     const typed = new Map<string, Path2D>();
-    const guessed = new Map<string, Path2D>();
+    const guessed = new Map<string, [Path2D, BBox]>();
     const marks: [number, number][] = [];
     const looked: LookedBuilding[] = [];
     const add = (m: Map<string, Path2D>, c: string, p: Path2D) => {
@@ -263,7 +287,14 @@ export class Renderer {
       const guess = this.world.guessOf(b);
       if (guess) {
         // TYPE-004: a guess is hatched in its look's colour; an unsure building is faint with a mark.
-        if (guess.look) add(guessed, buildingColor(guess.look), path);
+        if (guess.look) {
+          const c = buildingColor(guess.look);
+          const e = guessed.get(c);
+          const g = b.geom;
+          if (!e) guessed.set(c, [new Path2D(), { minX: g.minX, minY: g.minY, maxX: g.maxX, maxY: g.maxY }]);
+          else e[1] = { minX: Math.min(e[1].minX, g.minX), minY: Math.min(e[1].minY, g.minY), maxX: Math.max(e[1].maxX, g.maxX), maxY: Math.max(e[1].maxY, g.maxY) };
+          guessed.get(c)![0].addPath(path);
+        }
         else {
           faint.addPath(path);
           marks.push([toM(b.geom.cx), toM(b.geom.cy)]);
@@ -279,28 +310,9 @@ export class Renderer {
       const r = Math.max(0.5, toM(geo.maxX - geo.minX) / 2, toM(geo.maxY - geo.minY) / 2);
       looked.push({ path, look: b.look, color: darken(lookColor(b.look), 0.6), x: geo.cx, y: geo.cy, r });
     }
-    g = { items: set.items, faint, typed: [...typed], guessed: [...guessed], marks, looked };
+    g = { items: set.items, faint, typed: [...typed], guessed: [...guessed].map(([c, [p, box]]) => [c, p, box]), marks, looked };
     this.setGfx.set(set.atom, g);
     return g;
-  }
-
-  /** TYPE-004: the hatch over a guessed building, a darker shade of its colour on a transparent ground. */
-  private guessHatchPattern(color: string): CanvasPattern | null {
-    if (this.guessHatch.has(color)) return this.guessHatch.get(color)!;
-    const c = document.createElement("canvas");
-    c.width = c.height = 8;
-    const g = c.getContext("2d")!;
-    g.strokeStyle = darken(color, 0.7);
-    g.lineWidth = 1.4;
-    g.beginPath();
-    for (const o of [-8, 0, 8]) {
-      g.moveTo(o, 8);
-      g.lineTo(o + 8, 0);
-    }
-    g.stroke();
-    const pat = this.ctx.createPattern(c, "repeat");
-    this.guessHatch.set(color, pat);
-    return pat;
   }
 
   /** BLD-007 / REN-011: the typed buildings in an atom that disagree with the land under them. TYPE-014: guesses never do. */
@@ -369,7 +381,7 @@ export class Renderer {
     for (const p of ctxPieces) {
       ctx.fillStyle = CTX_COLORS[p.ctx ?? "green"];
       ctx.fill(this.gfx(p).path, "evenodd");
-      if (p.rival) this.fillStripes(p, this.gfx(p).path, px); // REN-012
+      if (p.rival) this.fillStripes(p, this.gfx(p).path); // REN-012
     }
 
     // Overlay context (IMP-003) sits under the landuse it belongs to.
@@ -405,17 +417,13 @@ export class Renderer {
         }
       // TYPE-004: guesses, fainter and hatched.
       for (const g of gfx)
-        for (const [color, path] of g.guessed) {
+        for (const [color, path, box] of g.guessed) {
           ctx.globalAlpha = TUNE.GUESS_ALPHA;
           ctx.fillStyle = color;
           ctx.fill(path, "nonzero");
-          const pat = this.guessHatchPattern(color);
-          if (pat) {
-            pat.setTransform(new DOMMatrix().scale(px, px));
-            ctx.globalAlpha = 0.8;
-            ctx.fillStyle = pat;
-            ctx.fill(path, "nonzero");
-          }
+          // The hatch: a darker shade of its colour on a transparent ground.
+          ctx.globalAlpha = 0.8;
+          this.hatchFill(path, "nonzero", this.hatchOf(`guess ${color}`, 8, 1.4, darken(color, 0.7), null), box);
         }
       ctx.globalAlpha = 1;
       for (const g of gfx) marks.push(...g.marks);
@@ -671,12 +679,13 @@ export class Renderer {
     if (p.kind === "RU") {
       // KIND-004: a translucent, hatched placeholder.
       ctx.globalAlpha = alpha * 0.72;
-      ctx.fillStyle = this.hatchPattern() ?? kd.color;
-      this.hatch?.setTransform(new DOMMatrix().scale(px, px));
-    } else ctx.fillStyle = kd.color;
-    ctx.fill(g.path, "evenodd");
+      this.hatchFill(g.path, "evenodd", this.hatchOf("RU", 10, 1.6, darken(kd.color, 0.95), kd.color), p.bbox);
+    } else {
+      ctx.fillStyle = kd.color;
+      ctx.fill(g.path, "evenodd");
+    }
     ctx.globalAlpha = alpha;
-    if (p.rival) this.fillStripes(p, g.path, px); // REN-012
+    if (p.rival) this.fillStripes(p, g.path); // REN-012
     // REN-007
     if (hovered) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
