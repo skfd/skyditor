@@ -21,6 +21,7 @@ import { Sound } from "./ui/audio";
 import { Badges } from "./ui/badges";
 import { Hud, TOOLS } from "./ui/hud";
 import { ICONS } from "./ui/icons";
+import { PerfMeter } from "./ui/perf";
 
 const PREVIEW_BUDGET_MS = 9;
 
@@ -86,6 +87,7 @@ export class App {
   private lastFrame = performance.now();
   private loadingBusy = false;
   private readonly badges = new Badges(); // REN-016 / HUD-012
+  private readonly perf = new PerfMeter(); // HUD-013
 
   constructor() {
     this.hud = new Hud((id) => this.selectTool(id));
@@ -927,7 +929,8 @@ export class App {
   }
 
   private frame(now: number) {
-    const dt = Math.min(50, now - this.lastFrame);
+    const gap = now - this.lastFrame;
+    const dt = Math.min(50, gap);
     this.lastFrame = now;
     if (this.arrows.size) {
       const v = 0.9; // px per ms
@@ -947,6 +950,7 @@ export class App {
     // REN-008: draw only when something changed or moves.
     if (this.renderer && this.world && (this.dirty || moving || animating || ambientDue)) {
       this.lastDraw = now;
+      const t0 = this.perf.on ? performance.now() : 0;
       this.ambient = this.renderer.draw(
         {
           camera: this.camera,
@@ -967,7 +971,12 @@ export class App {
       );
       this.badges.place(this.camera);
       this.dirty = false;
+      if (this.perf.on) {
+        const t1 = performance.now();
+        this.perf.record(now, t1 - t0, t1 - now, gap); // HUD-013
+      }
     }
+    this.perf.tick(now);
     requestAnimationFrame((t) => this.frame(t));
   }
 }

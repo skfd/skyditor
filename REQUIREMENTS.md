@@ -831,6 +831,12 @@ Pressing anywhere else closes it.
   there.
   Trace: manual
 
+**HUD-013** Where the page URL contains `?perf`, the editor shall show in a corner how smoothly the map is
+redrawing: redraws per second, how long a redraw takes, and the longest stall between frames, saying it is
+idle while nothing is being redrawn. Without `?perf` it shows nothing.
+  Why: REN-008 is a promise about feel. This is how to check it, and it must not cost the map anything.
+  Trace: manual
+
 ---
 
 ## 15. Non-goals for M0

@@ -927,3 +927,18 @@ body.dropping #drop {
 #issue button:hover {
   text-decoration: underline;
 }
+
+/* HUD-013 */
+#perf {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 50;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(30, 24, 18, 0.72);
+  color: #fff;
+  font: 600 11px/1.3 ui-monospace, Consolas, monospace;
+  pointer-events: none;
+  white-space: nowrap;
+}
