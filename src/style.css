@@ -833,6 +833,38 @@ body.dropping #drop {
   opacity: 1;
 }
 
+/* ---------- names (NAME-008..NAME-010) ---------- */
+#labels {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: #4a3a2c;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-shadow: 0 0 2px #fbf8f2, 0 0 3px #fbf8f2, 0 0 5px rgba(251, 248, 242, 0.9);
+}
+.label.quest {
+  text-align: left;
+}
+.label[hidden] {
+  display: none;
+}
+
 /* ---------- missing landuse (REN-016, HUD-012) ---------- */
 #badges {
   position: fixed;

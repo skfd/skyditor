@@ -19,6 +19,7 @@ import { COLORS, Renderer, buildingPath, pathOf } from "./render/renderer";
 import { TUNE } from "./tuning";
 import { Sound } from "./ui/audio";
 import { Badges, osmLink } from "./ui/badges";
+import { Labels } from "./ui/labels";
 import { Hud, TOOLS } from "./ui/hud";
 import { ICONS } from "./ui/icons";
 import { PerfMeter } from "./ui/perf";
@@ -85,6 +86,7 @@ export class App {
   private lastFrame = performance.now();
   private loadingBusy = false;
   private readonly badges = new Badges(); // REN-016 / HUD-012
+  private readonly labels = new Labels(); // NAME-008
   private readonly perf = new PerfMeter(); // HUD-013
 
   constructor() {
@@ -915,7 +917,9 @@ export class App {
     if (!loaded && this.toDecide > 0 && d === 0) this.hud.toast("Every building is decided");
     this.toDecide = d;
     this.hud.setToDecide(d);
-    this.badges.setQuests(this.world.quests(), (q) => this.questCard(q)); // NAME-005
+    const labels = this.world.labels();
+    this.labels.set(labels); // NAME-008
+    this.badges.setQuests(labels.filter((l) => l.quest), (q) => this.questCard(q)); // NAME-005
   }
 
   // ---------- frame loop ----------
@@ -974,6 +978,7 @@ export class App {
         },
         now,
       );
+      this.labels.place(this.camera); // NAME-008 / NAME-009
       this.badges.place(this.camera);
       this.dirty = false;
       if (this.perf.on) {

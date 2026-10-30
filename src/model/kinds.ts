@@ -58,7 +58,7 @@ export const CTX_COLORS: Record<CtxClass, string> = {
 };
 
 export type AreaClass =
-  | { cls: "paintable"; kind: PaintKind | "RU"; named?: string } // named: NAME-001
+  | { cls: "paintable"; kind: PaintKind | "RU"; name?: string; whole?: true } // name: NAME-008; whole: NAME-001
   | { cls: "exclusive"; ctx: CtxClass; label: string; implied?: true } // implied: by an amenity (IMP-013)
   | { cls: "overlay"; ctx: CtxClass }
   | { cls: "water" };
@@ -67,14 +67,15 @@ export type AreaClass =
 export function classifyArea(tags: Tags): AreaClass | null {
   const lu = tags.landuse;
   if (isWaterArea(tags)) return { cls: "water" }; // LAT-008
+  const name = tags.name?.trim(); // NAME-008
+  const named = name ? { name } : {};
   if (lu === "residential") {
     const t = RESIDENTIAL_TIER[tags.residential ?? ""]; // KIND-005
-    const name = tags.name?.trim();
-    return { cls: "paintable", kind: t ?? "RU", ...(name ? { named: name } : {}) }; // KIND-004, NAME-001
+    return { cls: "paintable", kind: t ?? "RU", ...named, ...(name ? { whole: true as const } : {}) }; // KIND-004, NAME-001
   }
-  if (lu === "commercial") return { cls: "paintable", kind: "COM" };
-  if (lu === "retail") return { cls: "paintable", kind: "RET" };
-  if (lu === "industrial") return { cls: "paintable", kind: "IND" };
+  if (lu === "commercial") return { cls: "paintable", kind: "COM", ...named };
+  if (lu === "retail") return { cls: "paintable", kind: "RET", ...named };
+  if (lu === "industrial") return { cls: "paintable", kind: "IND", ...named };
   for (const key of ["landuse", "leisure", "natural"]) {
     // IMP-002
     const v = tags[key];

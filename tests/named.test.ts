@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { History } from "../src/model/history";
 import { classifyArea, disagreesWithLand } from "../src/model/kinds";
-import type { World } from "../src/model/world";
+import type { Label, World } from "../src/model/world";
+import { TUNE } from "../src/tuning";
+import { fit } from "../src/ui/labels";
 import { type Tool } from "../src/paint/snap";
 import { answerWhole } from "../src/paint/stroke";
 import { Sketch, at, paint } from "./helpers";
@@ -20,13 +22,13 @@ async function complex(tags: Record<string, string> = NAMED) {
 }
 
 const namedArea = (w: World) =>
-  w.atoms.flatMap((a) => a.pieces).filter((p) => p.named !== undefined).reduce((t, p) => t + p.area, 0);
+  w.atoms.flatMap((a) => a.pieces).filter((p) => p.whole).reduce((t, p) => t + p.area, 0);
 
 describe("named residential areas", () => {
   it("NAME-001: a named landuse=residential is one named area; a place=neighbourhood alone is not", () => {
-    expect(classifyArea(NAMED)).toEqual({ cls: "paintable", kind: "RU", named: "Pärnaõue" });
-    expect(classifyArea({ ...NAMED, residential: "apartments" })).toEqual({ cls: "paintable", kind: "R5", named: "Pärnaõue" });
-    expect(classifyArea({ ...NAMED, place: "neighbourhood" })).toEqual({ cls: "paintable", kind: "RU", named: "Pärnaõue" });
+    expect(classifyArea(NAMED)).toEqual({ cls: "paintable", kind: "RU", name: "Pärnaõue", whole: true });
+    expect(classifyArea({ ...NAMED, residential: "apartments" })).toEqual({ cls: "paintable", kind: "R5", name: "Pärnaõue", whole: true });
+    expect(classifyArea({ ...NAMED, place: "neighbourhood" })).toEqual({ cls: "paintable", kind: "RU", name: "Pärnaõue", whole: true });
     expect(classifyArea({ place: "neighbourhood", name: "Pärnaõue" })).toBeNull();
     expect(classifyArea({ landuse: "residential", name: " " })).toEqual({ cls: "paintable", kind: "RU" });
   });
@@ -36,12 +38,12 @@ describe("named residential areas", () => {
     s.rect(-95, -95, 0, 95, { ...NAMED, residential: "single_family" });
     s.rect(0, -95, 95, 95, { landuse: "residential", residential: "single_family" });
     const w = await s.world();
-    expect(at(w, -50, 0)?.named).toBe("Pärnaõue");
-    expect(at(w, 50, 0)?.named).toBeUndefined();
+    expect(at(w, -50, 0)?.name).toBe("Pärnaõue");
+    expect(at(w, 50, 0)?.name).toBeUndefined();
     expect(at(w, -50, 0)).not.toBe(at(w, 50, 0));
     const c = await complex();
-    expect(at(c, 0, 0)?.named).toBe("Pärnaõue");
-    expect(at(c, 200, 0)?.named).toBe("Pärnaõue");
+    expect(at(c, 0, 0)?.name).toBe("Pärnaõue");
+    expect(at(c, 200, 0)?.name).toBe("Pärnaõue");
   });
 
   it("NAME-002: a tap with a tier claims the whole named area, in every block, as one step", async () => {
@@ -49,7 +51,7 @@ describe("named residential areas", () => {
     const { step } = paint(w, R2, 10, [[0, 0]], true);
     expect(at(w, 0, 0)?.kind).toBe("R2");
     expect(at(w, 200, 0)?.kind).toBe("R2");
-    expect(at(w, 200, 0)?.named).toBe("Pärnaõue");
+    expect(at(w, 200, 0)?.name).toBe("Pärnaõue");
     expect(step?.atoms.length).toBe(2);
     const h = new History();
     h.push(step!);
@@ -115,7 +117,7 @@ describe("named residential areas", () => {
     const [q] = w.quests();
     expect(w.quests().length).toBe(1);
     expect(q.name).toBe("Pärnaõue");
-    expect(at(w, q.at[0], q.at[1])?.named).toBe("Pärnaõue");
+    expect(at(w, q.at[0], q.at[1])?.name).toBe("Pärnaõue");
     const h = new History();
     h.push(answerWhole(w, q.source, "RM").step!);
     expect(w.quests()).toEqual([]);
@@ -141,7 +143,7 @@ describe("named residential areas", () => {
   });
 
   it("NAME-007: no tag is read as mixed", () => {
-    expect(classifyArea({ ...NAMED, residential: "mixed" })).toEqual({ cls: "paintable", kind: "RU", named: "Pärnaõue" });
+    expect(classifyArea({ ...NAMED, residential: "mixed" })).toEqual({ cls: "paintable", kind: "RU", name: "Pärnaõue", whole: true });
   });
 
   it("DENS-004: density on mixed land rejects", async () => {
@@ -163,5 +165,58 @@ describe("named residential areas", () => {
     answerWhole(w, w.quests()[0].source, "RM");
     paint(w, R2, 10, [[200, 0]], true);
     expect(at(w, 0, 0)?.kind).toBe("R2");
+  });
+});
+
+describe("names", () => {
+  const box = (x: number, y: number, w = 60, h = 14) => ({ x, y, w, h });
+  const label = (name: string, area: number, quest = false) =>
+    ({ source: `way/${name}${area}`, name, area, part: area, quest, at: [0, 0], width: 0 }) as Label;
+
+  it("NAME-008: every named landuse area gets one label on its biggest part; unnamed land gets none", async () => {
+    const s = new Sketch(300).grid(200);
+    s.rect(-95, -95, 290, 95, NAMED);
+    s.rect(-295, -95, -105, 95, { landuse: "retail", name: "Kristiine keskus" });
+    s.rect(-95, 105, 95, 295, { landuse: "industrial" });
+    const w = await s.world();
+    const labels = w.labels();
+    expect(labels.map((l) => l.name).sort()).toEqual(["Kristiine keskus", "Pärnaõue", "Pärnaõue"]); // one per block
+    const mall = labels.find((l) => l.name === "Kristiine keskus")!;
+    expect(mall.quest).toBe(false);
+    expect(at(w, mall.at[0], mall.at[1])?.name).toBe("Kristiine keskus");
+    expect(labels.filter((l) => l.name === "Pärnaõue").map((l) => l.quest).sort()).toEqual([false, true]); // the badge goes once
+    expect(classifyArea({ landuse: "commercial", name: "Ülemiste City" })).toEqual({ cls: "paintable", kind: "COM", name: "Ülemiste City" });
+  });
+
+  it("NAME-008: the label stays with its area whatever its kind becomes", async () => {
+    const s = new Sketch(300).grid(200);
+    s.rect(-95, -95, 95, 95, { landuse: "retail", name: "Kristiine keskus" });
+    const w = await s.world();
+    paint(w, R2, 10, [[0, 0]], true);
+    expect(at(w, 0, 0)?.kind).toBe("R2");
+    expect(w.labels().map((l) => l.name)).toEqual(["Kristiine keskus"]);
+    const c = await complex();
+    answerWhole(c, c.quests()[0].source, "R5");
+    expect(c.labels().map((l) => [l.name, l.quest])).toEqual([["Pärnaõue", false], ["Pärnaõue", false]]);
+  });
+
+  it("NAME-009: a label shows only where it fits inside its area", () => {
+    expect(fit([{ label: label("A", 100), box: box(0, 0, 60), room: 80 }])).toEqual([true]);
+    expect(fit([{ label: label("A", 100), box: box(0, 0, 60), room: 40 }])).toEqual([false]);
+  });
+
+  it("NAME-009: of two overlapping labels, the bigger area's shows", () => {
+    const small = { label: label("Small", 100), box: box(0, 0), room: 500 };
+    const big = { label: label("Big", 900), box: box(30, 5), room: 500 };
+    expect(fit([small, big])).toEqual([false, true]);
+    expect(fit([small, { ...big, box: box(200, 0) }])).toEqual([true, true]);
+  });
+
+  it("NAME-009: one name repeated close by shows once; far apart, twice", () => {
+    const a = { label: label("Pärnaõue", 900), box: box(0, 0), room: 500 };
+    const near = { label: label("Pärnaõue", 100), box: box(TUNE.LABEL_SAME / 2, 0), room: 500 };
+    const far = { label: label("Pärnaõue", 100), box: box(TUNE.LABEL_SAME * 2, 0), room: 500 };
+    expect(fit([a, near])).toEqual([true, false]);
+    expect(fit([a, far])).toEqual([true, true]);
   });
 });

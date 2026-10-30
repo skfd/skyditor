@@ -123,7 +123,7 @@ export class Stroke {
       this.dirty.add(atom);
       for (const p of atom.pieces) {
         if (!isUnit(p, this.limit) || !changes(this.tool, p)) continue;
-        if (p.named !== undefined && this.wholesDone.has(p.source!)) continue; // NAME-002: already claimed whole
+        if (p.whole && this.wholesDone.has(p.source!)) continue; // NAME-002: already claimed whole
         if (p.bbox.maxX < box.minX || p.bbox.minX > box.maxX || p.bbox.maxY < box.minY || p.bbox.minY > box.maxY) continue;
         const s = samplesOf(p);
         let cov = this.coverage.get(p);
@@ -151,7 +151,7 @@ export class Stroke {
 
   /** NAME-002: the pieces of the named area `p` belongs to, and their sample count; null for any other piece. */
   private whole(p: Piece) {
-    if (p.named === undefined || !p.source) return null;
+    if (!p.whole || !p.source) return null;
     let w = this.wholes.get(p.source);
     if (!w) {
       const pieces = this.world.wholeOf(p.source).map((x) => x.piece);
@@ -191,7 +191,7 @@ export class Stroke {
   }
 
   private claim(atom: Atom, p: Piece): StrokeEvent[] {
-    if (p.named !== undefined && p.source) return this.claimNamed(p);
+    if (p.whole && p.source) return this.claimNamed(p);
     this.snapshot(atom);
     const kind = toolKind(this.tool);
     atom.pieces = claimWhole(atom, p, kind);
@@ -259,7 +259,7 @@ export class Stroke {
         continue;
       }
       const next = tier + dir;
-      const whole = p.named !== undefined && p.source ? this.world.wholeOf(p.source).map((w) => w.piece) : null;
+      const whole = p.whole && p.source ? this.world.wholeOf(p.source).map((w) => w.piece) : null;
       if (whole) for (const q of whole) this.densityDone.add(q); // NAME-004: one step for the whole area
       if (next < 1 || next > 6) { // DENS-003: the ladder ends bump instead of wrapping
         events.push({ type: "bump", piece: p, at: [x, y] });
@@ -451,10 +451,10 @@ function commitWhole(changed: Map<Atom, Piece[]>, kind: Kind) {
     const before = atom.pieces;
     atom.pieces = pieces;
     const gone = before
-      .filter((q) => q.named !== undefined && !pieces.includes(q))
+      .filter((q) => q.whole && !pieces.includes(q))
       .map((q): [Piece, Piece | null] => [
         q,
-        pieces.find((n) => n.kind === kind && n.source === q.source && n.named !== undefined && overlaps(n, q.shape)) ?? null,
+        pieces.find((n) => n.kind === kind && n.source === q.source && n.whole && overlaps(n, q.shape)) ?? null,
       ]);
     out.push({ atom, before, gone });
   }

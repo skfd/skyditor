@@ -439,8 +439,8 @@ shall move all of it one tier.
 
 **NAME-005** The editor shall mark each named residential area that is unspecified residential (KIND-004)
 with a question-mark badge in the amber of REN-016, at a point well inside its biggest part, kept at a
-constant screen size, and with no other mark. The badge goes once the area has a tier or is mixed, and
-comes back with undo.
+constant screen size, and with no other mark than its name (NAME-008). The badge goes once the area has a
+tier or is mixed, and comes back with undo.
   Why: a named area without a type is a question one click can answer, not an error in the map.
 
 **NAME-006** When the user presses that badge, the editor shall show next to it the area's name, a choice
@@ -454,6 +454,26 @@ else closes it.
 hatch of KIND-004, and offer mixed only through NAME-006: never as a palette tile or a paint tool, and never
 read from a tag on import (Q-011).
   Why: mixed is settled, so it is not hatched; it is not a step on the ladder, so it has no height.
+
+### Names
+
+**NAME-008** The editor shall show the `name=*` of each named residential, commercial, retail or industrial
+area as a label at a constant screen size, centred on a point well inside each block it covers, or starting
+just after its question-mark badge while it has one (NAME-005). The label stays with the area whatever its
+kind becomes, and lets every click and stroke through to the map.
+  Why: a complex, a mall or an industrial estate is a place people know by name. The name says what the user
+  is about to paint, and it must never get in the way of painting it.
+
+**NAME-009** If a label is wider on screen than its part of the area, overlaps a label shown for a bigger
+area or a bigger part, or repeats a shown label's name within TUNE-LABEL-SAME of it, then the editor shall
+hide that label until the zoom makes room. A question-mark badge stays.
+  Why: zoomed out, a city has more names than room, and a name spilling over its neighbours points at the
+  wrong land. One complex is one place, named once, also where it spans blocks or is mapped as several areas
+  with one name. Zoomed in on one of its blocks, the name is still there.
+
+**NAME-010** The editor shall wrap a long name onto at most two lines, each at most TUNE-LABEL-WIDTH wide,
+and cut what does not fit with an ellipsis.
+  Trace: manual
 
 ---
 

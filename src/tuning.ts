@@ -74,6 +74,8 @@ export const TUNE = {
   GUESS_NEIGHBOUR_SHARE: 0.75, // TUNE-GUESS-NEIGHBOUR-SHARE: share of them with one look for that look to count
   GUESS_ALPHA: 0.55, // TUNE-GUESS-ALPHA: opacity of a guessed building, before its hatch
   UNSURE_MARK: 7, // TUNE-UNSURE-MARK: radius of an unsure building's mark, and of the circle a tap on it lands in, px
+  LABEL_WIDTH: 150, // TUNE-LABEL-WIDTH: widest line of a name label (NAME-010), px
+  LABEL_SAME: 240, // TUNE-LABEL-SAME: a label repeating a shown label's name this close to it hides (NAME-009), px
 
   // Peeks (PEEK-*)
   PEEK_ALPHA: 0.78, // TUNE-PEEK-ALPHA: opacity of the imagery peek over the map
