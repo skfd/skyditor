@@ -243,6 +243,12 @@ shall load the rest of a partly loaded area the capture tool points at before ot
   Why: a capture joins two areas whole (CAP-005). Joining the loaded parts would leave the rest arriving
   later as an area of its own.
 
+**LOAD-022** If picking a place would start a new map (LOAD-018) while the user has changed the current one,
+then the editor shall ask before dropping those changes, and keep the current map if the user says no.
+  Why: changes live only in this session (NG-001). Searching is how the user moves around, so a search must
+  not quietly throw away an afternoon's painting.
+  Trace: manual
+
 ---
 
 ## 4. Lattice (atoms)
