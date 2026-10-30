@@ -279,7 +279,7 @@ export class Stroke {
       const atom = this.world.atoms[p.atom];
       this.snapshot(atom);
       // DISP-001: a density step answers the dispute, so the stepped piece has no rival.
-      const stepped = makePiece(atom, tierKind(next), p.shape, { source: p.source, modified: !!p.source, drawn: p.drawn });
+      const stepped = makePiece(atom, tierKind(next), p.shape, { source: p.source, feature: p.feature, modified: !!p.source, drawn: p.drawn });
       atom.pieces = normalize(atom, [...atom.pieces.filter((q) => q !== p), stepped]);
       const result = pieceCovering(atom, p, stepped.kind!);
       if (result) {

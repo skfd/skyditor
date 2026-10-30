@@ -69,6 +69,7 @@ const remake = (atom: Atom, p: Piece, change: { modified?: boolean; rival?: unde
   makePiece(atom, p.kind, p.shape, {
     ctx: p.ctx,
     source: p.source,
+    feature: p.feature,
     modified: change.modified ?? p.modified,
     rival: "rival" in change ? change.rival : p.rival,
     drawn: p.drawn,
@@ -171,7 +172,10 @@ export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, 
 export function claimWhole(atom: Atom, piece: Piece, kind: Kind | null): Piece[] {
   const rest = atom.pieces.filter((p) => p !== piece);
   if (kind === null) return normalize(atom, rest);
-  const claimed = makePiece(atom, kind, piece.shape, { source: piece.source, modified: !!piece.source, name: piece.name, whole: piece.whole });
+  // OVL-005: a claimed piece stays in its area; claimed void is fresh paint, which joins one (OVL-006).
+  const claimed = makePiece(atom, kind, piece.shape, {
+    source: piece.source, feature: piece.feature, modified: !!piece.source, name: piece.name, whole: piece.whole,
+  });
   return normalize(atom, [...rest, claimed]);
 }
 
@@ -204,7 +208,9 @@ export function applyRegion(atom: Atom, ff: Freeform, kind: Kind | null): { piec
       if (Math.abs(area(rest) - p.area) < 0.01) return [p];
       // DISP-001: what the region leaves of a disputed piece stays disputed. CORR-002: its outline is drawn now.
       return components(rest).map((c) =>
-        makePiece(atom, p.kind, c, { ctx: p.ctx, source: p.source, modified: !!p.source, rival: p.rival, drawn: true, name: p.name, whole: p.whole }),
+        makePiece(atom, p.kind, c, {
+          ctx: p.ctx, source: p.source, feature: p.feature, modified: !!p.source, rival: p.rival, drawn: true, name: p.name, whole: p.whole,
+        }),
       );
     });
   const build = (take: Shape) => {

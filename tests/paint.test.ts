@@ -292,7 +292,7 @@ describe("overlap", () => {
     expect(a.pieces.filter((p) => p.kind === "RU").every((p) => p.modified && p.source)).toBe(true);
   });
 
-  it("OVL-003: touching pieces of the same kind merge", async () => {
+  it("OVL-006: paint up to an area of its kind extends that area", async () => {
     const s = grid();
     s.rect(-95, -95, 0, 95, { landuse: "commercial" });
     const w = await s.world();
@@ -301,6 +301,46 @@ describe("overlap", () => {
     const a = atomAt(w, 0, 0);
     expect(a.pieces.length).toBe(1);
     expect(a.pieces[0].kind).toBe("R2");
+    expect(a.pieces[0].source).toBe(at(w, -50, 0)?.source);
+    expect(a.pieces[0].modified).toBe(true); // OVL-004
+  });
+
+  it("OVL-005 / OVL-006: paint in the gap between two areas joins the one it shares more edge with", async () => {
+    const s = grid();
+    s.rect(-95, -95, -40, 95, { landuse: "residential", residential: "detached" });
+    s.rect(-20, -95, 95, 0, { landuse: "residential", residential: "detached" }); // meets the gap along half of it
+    const w = await s.world();
+    const west = at(w, -60, 0)!.source;
+    const east = at(w, 50, -50)!.source;
+    expect(west).not.toBe(east);
+    paint(w, R2, 12, [[-30, -90], [-30, 90]]);
+    expect(at(w, -30, -50)?.kind).toBe("R2");
+    expect(at(w, -30, -50)?.source).toBe(west);
+    expect(at(w, 50, -50)?.source).toBe(east);
+    expect(at(w, -30, -50)).not.toBe(at(w, 50, -50));
+  });
+
+  it("OVL-005: two painted areas stay two when the gap between them is painted", async () => {
+    const w = await grid().world();
+    paint(w, R2, 10, [[-80, -60], [-80, 60]]);
+    paint(w, R2, 10, [[80, -60], [80, 60]]);
+    const a = atomAt(w, 0, 0);
+    const areas = () => new Set(a.pieces.filter((p) => p.kind === "R2").map((p) => p.feature));
+    expect(areas().size).toBe(2);
+    paint(w, R2, 30, [[-60, 0], [60, 0]]);
+    expect(at(w, 0, 0)?.kind).toBe("R2");
+    expect(areas().size).toBe(2);
+  });
+
+  it("OVL-005: giving an area the kind of its neighbour does not merge them", async () => {
+    const s = grid();
+    s.rect(-95, -95, 0, 95, { landuse: "commercial" });
+    s.rect(0, -95, 95, 95, { landuse: "residential", residential: "detached" });
+    const w = await s.world();
+    paint(w, R2, 30, [[-50, 0]], true);
+    expect(at(w, -50, 0)?.kind).toBe("R2");
+    expect(at(w, -50, 0)).not.toBe(at(w, 50, 0));
+    expect(at(w, -50, 0)?.source).not.toBe(at(w, 50, 0)?.source);
   });
 
   it("PAINT-004: exclusive context is never painted over", async () => {

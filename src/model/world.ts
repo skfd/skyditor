@@ -1,8 +1,8 @@
 // The editable model: atoms (the snapping lattice) fully divided into pieces (OVL-001).
 import RBush from "rbush";
 import {
-  type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, expandBBox, interiorPoint, shapeCentroid, toI,
-  toM, touches, union,
+  type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, expandBBox, interiorPoint, intersect,
+  offset, shapeCentroid, toI, toM, touches, union,
 } from "../geo/clip";
 import type { AreaFeature, Features } from "../osm/features";
 import { type Building, type BuildingGeom, makeBuilding } from "./buildings";
@@ -19,6 +19,9 @@ export interface Piece {
   readonly area: number; // m²
   readonly bbox: BBox;
   readonly source?: string; // IMP-008: originating OSM element
+  // OVL-005: the landuse area the piece belongs to: its OSM element, or `new/N` for one the user painted. Unset on
+  // void, and on fresh paint until normalize() gives it an area (OVL-006).
+  readonly feature?: string;
   readonly modified: boolean; // IMP-008 / OVL-004
   readonly drawn: boolean; // CORR-002: freeform paint drew part of its outline, so it is never a unit piece
   readonly rival?: Rival; // IMP-012: set while the piece is disputed
@@ -86,7 +89,9 @@ export function makePiece(
   atom: Atom | number,
   kind: Kind | null,
   shape: Shape,
-  extra: { ctx?: CtxClass; source?: string; modified?: boolean; rival?: Rival; drawn?: boolean; name?: string; whole?: boolean } = {},
+  extra: {
+    ctx?: CtxClass; source?: string; feature?: string; modified?: boolean; rival?: Rival; drawn?: boolean; name?: string; whole?: boolean;
+  } = {},
 ): Piece {
   return {
     id: nextPieceId++,
@@ -97,6 +102,7 @@ export function makePiece(
     area: area(shape),
     bbox: bbox(shape),
     source: extra.source,
+    feature: extra.feature ?? extra.source,
     modified: extra.modified ?? false,
     rival: extra.rival,
     drawn: extra.drawn ?? false,
@@ -120,7 +126,7 @@ const floatRing = (pts: Float32Array): Ring => {
 };
 
 /**
- * OVL-001 / OVL-003: merges touching same-kind pieces and re-derives void pieces.
+ * OVL-001 / OVL-005: merges touching same-kind pieces of one area and re-derives void pieces.
  * `merge=false` keeps same-kind neighbours separate (used on import, where they stem from different features).
  */
 export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
@@ -134,33 +140,7 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
       if (g) g.push(p);
       else groups.set(groupKey(p), [p]);
     }
-    for (const g of groups.values()) {
-      if (g.length === 1) {
-        out.push(g[0]);
-        continue;
-      }
-      for (const cluster of touchClusters(g)) {
-        if (cluster.length === 1) {
-          out.push(cluster[0]);
-          continue;
-        }
-        const biggest = cluster.reduce((a, b) => (b.area > a.area ? b : a));
-        const sameSource = cluster.every((p) => p.source === biggest.source);
-        for (const comp of components(union(...cluster.map((p) => p.shape)))) {
-          out.push(
-            makePiece(atom, biggest.kind, comp, {
-              ctx: biggest.ctx,
-              source: biggest.source,
-              modified: cluster.some((p) => p.modified) || !sameSource,
-              rival: biggest.rival,
-              drawn: cluster.some((p) => p.drawn), // CORR-002
-              name: biggest.name,
-              whole: biggest.whole,
-            }),
-          );
-        }
-      }
-    }
+    for (const g of groups.values()) out.push(...mergeAreas(atom, g));
   }
   const prevVoids = atom.pieces.filter((p) => p.kind === null);
   // CORR-002: a changed void is drawn where it meets a drawn piece, or covers where one was.
@@ -180,12 +160,66 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
   return out;
 }
 
-export function touchClusters(ps: Piece[]): Piece[][] {
+let nextFeatureId = 1;
+const EDGE_PROBE = 0.5; // m; how far past a shape to look when measuring the edge it shares with another
+
+/**
+ * OVL-005 / OVL-006: merges the pieces of one kind in an atom (one groupKey). Pieces of one area that touch
+ * become one piece; two areas never merge. Fresh paint (no area yet) joins the touching area it shares the
+ * longest edge with, measured as the strip of that area within EDGE_PROBE of it, or else becomes a new area.
+ */
+function mergeAreas(atom: Atom, group: Piece[]): Piece[] {
+  if (group.length === 1 && group[0].feature) return group;
+  const clusters = touchClusters(group, (a, b) => a.feature === b.feature);
+  const areas = clusters.filter((c) => c[0].feature);
+  const shapes = areas.map((c) => union(...c.map((p) => p.shape)));
+  for (const fresh of clusters.filter((c) => !c[0].feature)) {
+    const shape = union(...fresh.map((p) => p.shape));
+    const probe = offset(shape, EDGE_PROBE);
+    let best = -1;
+    let bestEdge = 0;
+    shapes.forEach((s, i) => {
+      if (!touches(shape, s)) return;
+      const edge = area(intersect(probe, s));
+      if (edge > bestEdge) [best, bestEdge] = [i, edge];
+    });
+    if (best >= 0) areas[best].push(...fresh);
+    else areas.push(fresh);
+  }
+  const out: Piece[] = [];
+  for (const c of areas) {
+    if (c.length === 1 && c[0].feature) {
+      out.push(c[0]);
+      continue;
+    }
+    const own = c.filter((p) => p.feature);
+    const base = (own.length ? own : c).reduce((a, b) => (b.area > a.area ? b : a));
+    const feature = base.feature ?? `new/${nextFeatureId++}`;
+    for (const comp of components(union(...c.map((p) => p.shape)))) {
+      out.push(
+        makePiece(atom, base.kind, comp, {
+          ctx: base.ctx,
+          source: base.source,
+          feature,
+          modified: c.some((p) => p.modified || p.source !== base.source), // OVL-004: paint added to an imported area
+          rival: base.rival,
+          drawn: c.some((p) => p.drawn), // CORR-002
+          name: base.name,
+          whole: base.whole,
+        }),
+      );
+    }
+  }
+  return out;
+}
+
+/** Groups of pieces that touch, through pieces that touch; `joins` limits which touching pairs count. */
+export function touchClusters(ps: Piece[], joins: (a: Piece, b: Piece) => boolean = () => true): Piece[][] {
   const parent = ps.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   for (let i = 0; i < ps.length; i++)
     for (let j = i + 1; j < ps.length; j++)
-      if (find(i) !== find(j) && touches(ps[i].shape, ps[j].shape)) parent[find(i)] = find(j);
+      if (find(i) !== find(j) && joins(ps[i], ps[j]) && touches(ps[i].shape, ps[j].shape)) parent[find(i)] = find(j);
   const m = new Map<number, Piece[]>();
   ps.forEach((p, i) => {
     const r = find(i);

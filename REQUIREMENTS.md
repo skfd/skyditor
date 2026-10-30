@@ -625,11 +625,24 @@ void filling whatever no landuse covers.
 the covered part to the new kind and shrink the old piece.
   Why: new paint wins. Overlaps get resolved at the moment they are made, never kept around.
 
-**OVL-003** When a change leaves two pieces of the same kind touching inside one atom, the editor shall
-merge them into one piece.
+~~**OVL-003** When a change leaves two pieces of the same kind touching inside one atom, the editor shall
+merge them into one piece.~~ Retired: it joined two mapped areas whenever paint filled the gap between them.
+OVL-005 and OVL-006 replace it.
 
 **OVL-004** The editor shall treat an imported piece whose geometry or kind the user changes as modified
 (IMP-008); every fragment that came from the same OSM element stays linked to it.
+
+**OVL-005** The editor shall keep each landuse area, imported or painted, its own area, and never merge two
+of them as a side effect of painting, erasing or a density step: not when paint fills the gap between
+them, and not when one gets the kind of the other. Land of one area that a change leaves touching inside
+one block becomes one piece.
+  Why: two areas side by side are two places someone drew. Painting between them says what the land is, not
+  that they are one place. Joining areas is a decision of its own, made on purpose (Q-012).
+
+**OVL-006** When new paint touches land of its own kind inside one block, the editor shall add the paint to
+the area it shares the longest edge with; paint that touches none becomes a new area.
+  Why: painting up to an area extends it. Paint in a gap between two areas belongs to one of them, not to
+  both, and not to a third area squeezed in between.
 
 ---
 
@@ -1194,3 +1207,7 @@ Measure on the demo area first.
 `residential=mixed` has 50 uses against 10.8 million `landuse=residential` (taginfo, October 2026), and
 semicolon lists such as `single_family;terrace` a few dozen together. Leaving `residential=*` off says
 "not yet known", not "mixed". Until this is decided, no tag is read as mixed (NAME-007).
+
+**Q-012** How does the user join two landuse areas into one (OVL-005)? Painting never does. Candidates: a
+gesture that drags from one area into its neighbour, or a choice on the area's card. Until output exists (§15)
+it changes little the user can see: touching areas of one kind are drawn as one surface (REN-004).
