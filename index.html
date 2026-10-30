@@ -35,6 +35,9 @@
         <button id="btn-buildings" class="icon toggle" title="Buildings (B)" aria-label="Buildings" aria-pressed="true"></button>
         <button id="btn-outlines" class="icon toggle" title="Original outlines (O)" aria-label="Original outlines" aria-pressed="false"></button>
         <button id="btn-sound" class="icon" title="Sound (M)"></button>
+        <!-- JOSM-001 / JOSM-003 -->
+        <button id="btn-josm" class="ghost out" title="Open the changes in JOSM (K)" disabled>JOSM</button>
+        <button id="btn-save" class="ghost out" title="Save the changes as an .osm file" disabled>Save</button>
         <button id="btn-help" class="icon" title="Keys (H)">?</button>
       </div>
     </header>
@@ -105,8 +108,10 @@
         <dt>Amber count, top right · <kbd>J</kbd></dt><dd>Next building still to decide</dd>
         <dt>Click an amber <b class="badge-sample">!</b></dt><dd>See the missing tag, with a link to fix it on OpenStreetMap</dd>
         <dt>Click an amber <b class="badge-sample">?</b> on land</dt><dd>Say what kind of housing a named complex is, or that it's mixed</dd>
+        <dt>JOSM, top right · <kbd>K</kbd></dt><dd>Open your changes in JOSM, to check and upload them there (JOSM needs Remote Control on)</dd>
+        <dt>Save, top right</dt><dd>Save your changes as an <code>.osm</code> file JOSM opens</dd>
       </dl>
-      <p class="muted">Nothing is saved or uploaded — this is a toy.</p>
+      <p class="muted" id="help-note">Nothing goes to OpenStreetMap from here: your changes leave through JOSM, where you check them first.</p>
     </aside>
 
     <section id="start">

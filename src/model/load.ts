@@ -1,7 +1,8 @@
 // From OSM text to a ready World (LOAD-*, LAT-*, IMP-*). Stages are reported for LOAD-007.
+import { rect } from "../geo/clip";
 import { buildLattice } from "../lattice/build";
 import { extractFeatures, type Features } from "../osm/features";
-import { parseOsm } from "../osm/parse";
+import { type OsmData, parseOsm } from "../osm/parse";
 import type { LonLatBounds, Projection } from "../geo/project";
 import { importLanduse } from "./import";
 import { World } from "./world";
@@ -26,18 +27,22 @@ export async function worldFromText(
   const t0 = performance.now();
   onStage("reading");
   await tick();
-  const features = extractFeatures(parseOsm(text), bounds, proj);
+  const osm = parseOsm(text);
+  const features = extractFeatures(osm, bounds, proj);
   onStage("blocks");
   await tick();
-  return finish(features, onStage, t0);
+  return finish(osm, features, onStage, t0);
 }
 
-async function finish(features: Features, onStage: (s: Stage) => void, t0: number) {
+async function finish(osm: OsmData, features: Features, onStage: (s: Stage) => void, t0: number) {
   const lattice = buildLattice(features);
   const world = new World(features, lattice.streets, lattice.water, lattice.atoms);
+  world.source.add(osm); // OUT-001
+  world.loaded = rect(features.frame);
   onStage("landuse");
   await tick();
   const imp = importLanduse(world, features.areas);
+  world.source.snapshot(world.atoms); // OUT-002
   return {
     world,
     report: {

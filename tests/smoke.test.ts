@@ -96,6 +96,16 @@ describe("the app mounts", () => {
   it("HUD-005: the OSM attribution is on the page", () => {
     expect($("#attribution")!.textContent).toContain("OpenStreetMap contributors");
   });
+
+  it("JOSM-001 / JOSM-003 / HUD-008: the JOSM and save buttons are there, disabled while there is nothing to send, and in the help", () => {
+    const josm = $<HTMLButtonElement>("#btn-josm")!, save = $<HTMLButtonElement>("#btn-save")!;
+    expect(josm.disabled).toBe(true);
+    expect(save.disabled).toBe(true);
+    expect(josm.title).toContain("(K)");
+    expect($("#help")!.textContent).toContain("JOSM");
+    expect($("#help")!.textContent).not.toContain("toy");
+    expect($("#btn-upload")).toBeNull(); // NG-007: no upload anywhere
+  });
 });
 
 describe("the demo loads", () => {

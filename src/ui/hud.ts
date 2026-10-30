@@ -80,6 +80,12 @@ export class Hud {
     $<HTMLButtonElement>("#btn-redo").disabled = !canRedo;
   }
 
+  /** JOSM-001 / JOSM-003: the ways out are open only while there are changes to send. */
+  setChanges(any: boolean) {
+    $<HTMLButtonElement>("#btn-josm").disabled = !any;
+    $<HTMLButtonElement>("#btn-save").disabled = !any;
+  }
+
   /** HUD-006: the dot grows with the brush. */
   setBrush(px: number) {
     const t = (px - TUNE.BRUSH_MIN) / (TUNE.BRUSH_MAX - TUNE.BRUSH_MIN);

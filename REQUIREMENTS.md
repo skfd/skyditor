@@ -7,8 +7,9 @@ Skyditor is a narrow OpenStreetMap editor for **landuse only**, mainly in cities
 the map and it snaps into place by itself. It should feel like a well-made video game: responsive, tactile,
 legible. Animation is there to explain what happened, never just to decorate.
 
-Current milestone: **M0 — "Toy"**. It reads OSM data, paints, snaps, and undoes. It does **not** write
-anything back (see §15).
+Current milestone: **M1 — "Sandbox"**. It reads OSM data, paints, snaps, and undoes (M0, the toy), and it
+writes the user's changes out: to JOSM, and to a file JOSM opens (§18, §19). It does **not** upload anywhere
+itself (see §15).
 
 ---
 
@@ -41,7 +42,7 @@ and not only what is *formally compliant*.
 ### 0.3 Corrections (CORR)
 
 Sometimes code satisfies a requirement to the letter but is still *not right*. When that happens, we
-don't silently re-interpret the original. We add a **correction** to §18:
+don't silently re-interpret the original. We add a **correction** to §20:
 
 ```
 **CORR-NNN** (corrects SNAP-004) <EARS statement that pins down the intended behaviour>
@@ -197,7 +198,8 @@ known on it, and while land around the view is loading, say so quietly, off the 
 **LOAD-013** The editor shall keep every block it has loaded for the rest of the session, as it was, with
 the user's changes and undo history, however much more land loads.
   Why: loading happens while the user works, so it must never move paint, take a change back or reach into
-  undo. There is no output in M0 (NG-001), so dropping land would drop the user's work.
+  undo. Changes leave the session only when the user sends them out (§18), so dropping land would drop the
+  user's work.
 
 **LOAD-014** If a block is still not whole once its loaded part reaches TUNE-BLOCK-WAIT across, then the
 editor shall show it, cut along the edge of the land loaded so far; the rest of it becomes a block of its
@@ -249,8 +251,8 @@ shall load the rest of a partly loaded area the capture tool points at before ot
 
 **LOAD-022** If picking a place would start a new map (LOAD-018) while the user has changed the current one,
 then the editor shall ask before dropping those changes, and keep the current map if the user says no.
-  Why: changes live only in this session (NG-001). Searching is how the user moves around, so a search must
-  not quietly throw away an afternoon's painting.
+  Why: changes live in this session until the user sends them out (§18). Searching is how the user moves
+  around, so a search must not quietly throw away an afternoon's painting.
   Trace: manual
 
 ---
@@ -335,8 +337,8 @@ pattern, translucent enough that overlay context beneath it stays visible.
   Why: most residential landuse in OSM has no subtag. It should look like it is waiting to be refined.
 
 **KIND-005** The editor shall read each `residential=*` value that names a kind of housing as its tier
-(KIND-001), synonyms included: `detached` and `single_family` are both R2, `apartments`, `urban` and
-`block` all R5. The mapping is in `src/osm/classes.ts`.
+(KIND-001), synonyms included: `detached` and `single_family` are both R2, `duplex` and the spellings of
+semi-detached are R3, `apartments`, `urban` and `block` all R5. The mapping is in `src/osm/classes.ts`.
 
 **KIND-006** The editor shall give commercial, retail and industrial colours clearly distinct from the
 residential ramp, and a single shared slab height TUNE-LIFT-NONRES.
@@ -383,7 +385,7 @@ void are part of that void, not narrow parts.
 
 **IMP-008** The editor shall remember, for each imported piece, the OSM element it came from and whether
 the user has changed it.
-  Why: when output exists (§15), untouched features must be written back untouched.
+  Why: untouched features are written back untouched (OUT-002).
 
 **IMP-009** Where the "original outlines" view is on (key `O`), the editor shall draw the unmodified OSM
 outlines of paintable features on top of the map.
@@ -1054,8 +1056,8 @@ longer disagrees anywhere.
 **HUD-012** When the user presses a badge (REN-016), the editor shall show next to it what the area is
 tagged as, the landuse tag it lacks, and a link that opens the area on openstreetmap.org in a new tab.
 Pressing anywhere else closes it.
-  Why: the editor writes no tags (NG-001), so the fix happens in OSM. The link takes the user straight
-  there.
+  Why: the editor writes no tags but landuse kinds and building types (NG-004), so the fix happens in OSM.
+  The link takes the user straight there.
   Trace: manual
 
 **HUD-013** Where the page URL contains `?perf`, the editor shall show in a corner how smoothly the map is
@@ -1065,9 +1067,15 @@ idle while nothing is being redrawn. Without `?perf` it shows nothing.
 
 ---
 
-## 15. Non-goals for M0
+## 15. Non-goals
 
-**NG-001** The editor shall not upload, export, or otherwise write OSM data in M0.
+~~**NG-001** The editor shall not upload, export, or otherwise write OSM data in M0.~~ Retired: M1 writes to
+JOSM and to a file (§18, §19). NG-007 replaces it.
+
+**NG-007** The editor shall not upload to any OSM server in M1: its changes leave through JOSM, or as a file.
+  Why: the diff it writes is new and the lattice reshapes outlines. Edits reach OSM only through JOSM
+  (JOSM-001), where a mapper reviews them with the validator and logs in with their own account, or not at
+  all. The editor needs no login of its own.
   Trace: policy
 
 ~~**NG-002** The editor shall not edit any feature other than the landuse kinds in §5.~~ Retired: building
@@ -1210,7 +1218,7 @@ and the imagery's attribution shown, and shall take it away on release.
 
 **PEEK-002** The editor shall take imagery and street photos only from sources whose terms allow their use
 for OpenStreetMap editing, and never from Google Maps or Street View.
-  Why: what the user decides here ends up in OSM (§15). A source OSM may not be derived from would poison
+  Why: what the user decides here ends up in OSM (§18). A source OSM may not be derived from would poison
   every edit.
   Trace: policy
 
@@ -1236,7 +1244,82 @@ background, the map stays live, and a slow or failed request shows as such besid
 
 ---
 
-## 18. Corrections
+## 18. Output
+
+What the user painted leaves the browser as OSM elements: ways, nodes and relations with the ids OSM knows them
+by. The lattice reshapes every imported outline for its own use (IMP-005 to IMP-012), so what is written is the
+user's change, applied to the outline OSM has, and nothing else.
+
+**OUT-001** The editor shall keep, for every area and building it loads, the OSM element it came from with its
+nodes and tags, for as long as the map is shown.
+  Why: an outline can only be written back as the nodes it is made of (OUT-003). Fetching them again at output
+  time would write someone else's later edit as the user's.
+
+**OUT-002** The editor shall write an area the user never changed back untouched (IMP-008), and write a changed
+area with its original outline wherever the user did not change it and the painted land wherever they did. A
+difference narrower than 2 × TUNE-IMPORT-SNAP between an area's land and its outline is the lattice's, not the
+user's, and is not written.
+  Why: street space, dropped slivers and closed gaps (IMP-005 to IMP-007) are how the editor reads the map, not
+  what the user said. Writing them would turn every touched area into a wholesale redraw.
+
+**OUT-003** The editor shall write an outline with the nodes it already had wherever the outline still passes
+through them, give two areas that meet along one edge the same nodes, and never share a node with a street.
+  Why: a moved node is a small edit; a replaced node is a deleted one and a new one, and breaks the neighbour it
+  was shared with. Landuse does not share nodes with roads (Q-003).
+
+**OUT-004** The editor shall write painted land that belongs to no OSM element as a new area: one closed way
+for each connected part, a multipolygon relation where a part has holes. An area whose land is all gone shall
+be deleted, together with the nodes no other element uses.
+
+**OUT-005** The editor shall write a changed area's kind as the tags KIND-001 names for it, replacing only
+`landuse=*` and `residential=*` and keeping every other tag; R6 writes `residential=apartments` (Q-002) and
+mixed writes `landuse=residential` alone (Q-011). A changed building shall be written with the `building=*`
+value TYPE-008 names, its other tags kept.
+  Why: tags the editor does not understand are someone's work. The user changed the kind, not the name or the
+  note.
+
+**OUT-006** The editor shall write a captured area (CAP-005) as deleted, its land now part of the source's
+outline.
+
+**OUT-007** The editor shall write a rival feature whose dispute the user settled (DISP-004) with the disputed
+part taken out of its outline.
+  Why: settling says the context was right; the landuse outline was the error, and it shrinks.
+
+**OUT-008** Before sending changes anywhere, the editor shall compare each element it would change or delete
+with OpenStreetMap's current copy, leave out the changes to an element that has changed since it loaded, and
+say which areas were left out.
+  Why: a session can be long. Writing over a later edit by someone else is the one thing an editor must not
+  do, and JOSM would only show it as a conflict to untangle by hand.
+  Trace: manual
+
+**OUT-009** When the editor shows the user what it is about to write, it shall show counts of areas changed,
+new and removed, and of buildings typed, never elements, nodes or versions (GEN-002).
+
+---
+
+## 19. JOSM
+
+The user's changes go out through JOSM, which checks them with its validator and uploads them with the
+mapper's own account, or as a file JOSM opens.
+
+**JOSM-001** When the user presses *Open in JOSM* (top bar, key `K`) while there are changes, the editor shall
+send them to JOSM through its remote control on this computer, as a new layer named after the place, with the
+changed elements marked as changed and the new ones as new, so that JOSM shows them ready to upload.
+  Why: JOSM is where a mapper reviews an edit before it reaches OSM (NG-007). Its validator sees what this
+  editor cannot.
+  Trace: manual
+
+**JOSM-002** If JOSM does not answer, then the editor shall say so once, with how to turn remote control on,
+and offer the file instead (JOSM-003).
+  Trace: manual
+
+**JOSM-003** While there are changes, the editor shall offer *Save as .osm*: the same changes as a file JOSM
+opens.
+  Trace: manual
+
+---
+
+## 20. Corrections
 
 **CORR-001** (corrects IMP-004) The editor shall give an overlap to the smaller feature by size alone only
 where the two are *nested*: at least TUNE-NEST-INSIDE of the smaller feature's land lies inside the larger
@@ -1290,14 +1373,18 @@ place of the brush cursor; while the brush acts on land and the cursor rests on 
 
 ---
 
-## 19. Open questions
+## 21. Open questions
 
-**Q-001** Which `residential=*` values should R2 (detached vs. single_family) and R5 (apartments vs. urban)
-write when output arrives? Decide before output exists.
+~~**Q-001** Which `residential=*` values should R2 (detached vs. single_family) and R5 (apartments vs. urban)
+write when output arrives? Decide before output exists.~~ Answered: the most used documented value of each,
+by taginfo (October 2026): R2 `single_family` (217k against 7k `detached`, whose wiki page says it is not a
+synonym), R3 `duplex` (3.9k, the wiki's own word; `semidetached_house` is the building value and has 2 uses on
+landuse), R5 `apartments` (266k against 77k `urban`). OUT-005.
 
 **Q-002** OSM has no established tag for high-rise residential areas. Options: `residential=apartments`
 plus a `building:levels` hint, `residential=urban`, or a proposal. Until this is decided, R6 is
-"R5 with more height" and does not round-trip through import.
+"R5 with more height" and does not round-trip through import. Decided for M1: R6 writes `apartments` and
+the loss is accepted (OUT-005); nothing invented goes to OSM.
   In use (44-city run, `research/landuse-edges/`): `residential=*` is on 12% of residential polygons, most
   often `apartments` (1,345), `urban` (793), `rural` (237), `detached` (204) and `single_family` (136).
 
@@ -1348,12 +1435,18 @@ Measure on the demo area first.
 **Q-011** What should mixed land (NAME-006) write when output arrives? OSM has no established value:
 `residential=mixed` has 50 uses against 10.8 million `landuse=residential` (taginfo, October 2026), and
 semicolon lists such as `single_family;terrace` a few dozen together. Leaving `residential=*` off says
-"not yet known", not "mixed". Until this is decided, no tag is read as mixed (NAME-007).
+"not yet known", not "mixed". Until this is decided, no tag is read as mixed (NAME-007). Decided for M1:
+mixed writes `landuse=residential` alone (OUT-005), so a mixed area asks again in a later session.
 
 ~~**Q-012** How does the user join two landuse areas into one (OVL-005)? Painting never does. Candidates: a
 gesture that drags from one area into its neighbour, or a choice on the area's card. Until output exists (§15)
 it changes little the user can see: touching areas of one kind are drawn as one surface (REN-004).~~
 Answered: the capture tool (CAP-001 to CAP-009).
+
+**Q-014** A multipolygon ring made of several ways, of which the user changed part: M1 keeps the member ways
+the new outline still runs along whole, and writes each changed stretch as one new way. Should it instead
+edit the way the stretch replaces, keeping its id and tags? Rings shared with a riverbank or a boundary are
+where it matters.
 
 **Q-013** Should a block cut by LOAD-014 be joined up once the rest of it loads, with the user's changes and
 undo history carried across? It shows in rural and edge-of-town areas. Count how often blocks in the replay
