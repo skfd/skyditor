@@ -138,6 +138,17 @@ button.ghost:hover {
   background: rgba(0, 0, 0, 0.05);
   color: var(--ink);
 }
+/* JOSM-001 / JOSM-003 / UPL-001: the ways out, open only while there are changes */
+button.ghost.out {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+button.ghost.out:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
 button.icon {
   width: 32px;
   height: 32px;

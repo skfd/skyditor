@@ -11,6 +11,11 @@ import { type Grown, LiveMap } from "./model/live";
 import { type LoadReport, type Stage, worldFromText } from "./model/load";
 import type { Piece, Quest, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
+import { SERVER } from "./osm/server";
+import { isEmptyChanges } from "./output/changes";
+import { JosmError, sendToJosm } from "./output/josm";
+import { toJosmXml } from "./output/osmxml";
+import { type Prepared, prepare } from "./output/verify";
 import { IMAGERY, TileCache } from "./osm/imagery";
 import { type Photo, bestPhoto, photoLinks, searchPanoramax } from "./osm/photos";
 import { PhotoPanel } from "./ui/photos";
@@ -102,6 +107,8 @@ export class App {
   private startScale: number | null = null; // LOAD-018 / LOAD-019: the zoom a new live map opens at
   private wantedAt = 0;
   private landLoading = false; // LOAD-012
+  private preparing = false; // OUT-008: one check at a time
+  private place = ""; // the place shown, for the JOSM layer and the file name
   private hashAt = 0;
   private readonly badges = new Badges(); // REN-016 / HUD-012
   private readonly labels = new Labels(); // NAME-008
@@ -188,6 +195,7 @@ export class App {
     if (live && this.world && live.grid.reaches(lat, lon)) {
       const p = live.grid.proj;
       this.camera.flyTo(p.x(lon), p.y(lat), scale, this.anims.dur(900), performance.now());
+      this.place = name;
       this.hud.setPlace(name);
       this.dirty = true;
       return;
@@ -345,6 +353,7 @@ export class App {
       this.camera.fit(box, this.anims.dur(900), now);
     }
     this.reveal(now);
+    this.place = place;
     this.hud.setPlace(place);
     this.badges.set(world.issues);
     this.lastDispute = null;
@@ -428,6 +437,8 @@ export class App {
     on("btn-imagery", () => this.setImagery(!this.imageryOn, this.imageryHeld)); // PEEK-001
     on("btn-photos", () => this.togglePhotos()); // PEEK-003
     on("btn-guesses", () => this.nextToDecide()); // TYPE-012
+    on("btn-josm", () => void this.openInJosm()); // JOSM-001
+    on("btn-save", () => void this.saveFile()); // JOSM-003
   }
 
   // ---------- tools ----------
@@ -1030,6 +1041,9 @@ export class App {
       case "p":
       case "P":
         return this.togglePhotos(); // PEEK-003
+      case "k":
+      case "K":
+        return void this.openInJosm(); // JOSM-001
       case "Escape":
         if (this.capture) return this.cancelCapture(); // CAP-006
         this.hud.toggleHelp(false);
@@ -1054,6 +1068,73 @@ export class App {
   }
   private syncHistory() {
     this.hud.setHistory(this.history.canUndo, this.history.canRedo); // HUD-006
+    this.hud.setChanges(this.history.canUndo); // JOSM-001 / JOSM-003 / UPL-001
+  }
+
+  // ---------- output (§18, §19) ----------
+
+  /**
+   * OUT-008 / OUT-009: the changes, checked against the server and with their versions, or null with the reason
+   * told. Says which areas were left out.
+   */
+  private async prepareChanges(): Promise<Prepared | null> {
+    if (!this.world || !this.history.canUndo || this.preparing) return null;
+    this.preparing = true;
+    try {
+      const prepared = await prepare(this.world, SERVER.api);
+      if (prepared.leftOut.length) {
+        const list = prepared.leftOut.slice(0, 3).join(", ") + (prepared.leftOut.length > 3 ? ` and ${prepared.leftOut.length - 3} more` : "");
+        this.hud.toast(`Changed on ${SERVER.name} since it loaded, so left out: ${list}`, "error");
+      }
+      if (isEmptyChanges(prepared.changes)) {
+        if (!prepared.leftOut.length) this.hud.toast("Nothing to send: the map is as it was");
+        return null;
+      }
+      return prepared;
+    } catch (e) {
+      this.hud.toast(`Couldn't check the changes against ${SERVER.name}: ${(e as Error).message}`, "error");
+      return null;
+    } finally {
+      this.preparing = false;
+    }
+  }
+
+  /** JOSM-001 / JOSM-002 */
+  private async openInJosm() {
+    const prepared = await this.prepareChanges();
+    if (!prepared) return;
+    try {
+      await sendToJosm(toJosmXml(prepared.changes), `Skyditor · ${this.place}`);
+      this.hud.toast(`${this.describe(prepared)} opened in JOSM`);
+    } catch (e) {
+      this.hud.toast(e instanceof JosmError ? e.message : (e as Error).message, "error"); // JOSM-002
+    }
+  }
+
+  /** JOSM-003 */
+  private async saveFile() {
+    const prepared = await this.prepareChanges();
+    if (!prepared) return;
+    const name = `skyditor-${this.place.replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "changes"}.osm`;
+    const url = URL.createObjectURL(new Blob([toJosmXml(prepared.changes)], { type: "application/x-osm+xml" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    this.hud.toast(`${this.describe(prepared)} saved as ${name}`);
+  }
+
+  /** OUT-009: the changes in the user's words. */
+  private describe(p: Prepared): string {
+    const c = p.changes.counts;
+    const parts: string[] = [];
+    const n = (k: number, one: string, many = `${one}s`) => (k ? parts.push(`${k} ${k === 1 ? one : many}`) : 0);
+    n(c.changed, "area changed", "areas changed");
+    n(c.added, "new area");
+    n(c.removed, "area removed", "areas removed");
+    n(c.buildings, "building typed");
+    return parts.join(", ") || "nothing";
   }
 
   /** UNDO-004 / FEEL-006 */
