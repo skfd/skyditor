@@ -1295,6 +1295,11 @@ say which areas were left out.
 **OUT-009** When the editor shows the user what it is about to write, it shall show counts of areas changed,
 new and removed, and of buildings typed, never elements, nodes or versions (GEN-002).
 
+**OUT-010** The editor shall write every outline as closed rings that never cross or touch themselves, with
+no hole, strip or spike too narrow to be anything a mapper drew.
+  Why: integer boolean ops leave seams, spikes and hairline holes behind. JOSM's validator reports each one
+  as a self-intersection or a crumb, and a mapper has to clean up by hand what they never drew.
+
 ---
 
 ## 19. JOSM

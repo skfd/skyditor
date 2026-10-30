@@ -23,6 +23,8 @@ npm test            # vitest; includes tests/tuning.test.ts: every TUNE-* the sp
 npm run typecheck   # tsc
 npm run trace       # fails on IDs cited in code/tests that REQUIREMENTS.md doesn't define, and on
                     # requirements cited nowhere in code (unless marked `Trace: policy`, see §0.4)
+npm run outcheck    # §18 on real data: edits a square, writes the changes, checks them like JOSM's validator,
+                    # reads the file back (bench/output). Run it after touching src/output.
 ```
 
 Requirements checked by hand rather than by a unit test carry `Trace: manual`; `trace` lists the ones

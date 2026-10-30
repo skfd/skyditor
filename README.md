@@ -14,6 +14,7 @@ npm install
 npm run dev        # http://localhost:5173  (add #demo to jump straight into the demo area)
 npm test           # unit tests, named after the requirements they verify
 npm run trace      # requirement ↔ code ↔ test traceability (-v for file names)
+npm run outcheck   # loads real data, edits it, writes the changes and checks them as JOSM's validator would
 ```
 
 Load an area by:
@@ -33,6 +34,11 @@ changed meanwhile is left out and named.
   (Preferences → Remote Control, on by default) as a new layer with the changed, new and deleted elements marked,
   ready for the validator and the upload dialog. Firefox and Chrome allow this from an https page; Safari blocks it.
 - **Save** downloads the same thing as an `.osm` file that JOSM opens.
+
+`npm run outcheck` is the check that the written file is sound: it loads real data (the demo district and a
+replay square by default, or any `.osm` files you give it), makes a mapper's edits, writes the changes, checks
+every element the way JOSM's validator would, and reads the file back to compare the land with what was painted.
+[`docs/josm-check.md`](docs/josm-check.md) is the checklist for the part only JOSM itself can confirm.
 
 ## How it works, in one paragraph
 

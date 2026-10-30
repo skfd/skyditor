@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "trace": "node scripts/trace.mjs",
     "fixture": "node scripts/make-fixture.mjs",
-    "replay": "node scripts/replay.mjs"
+    "replay": "node scripts/replay.mjs",
+    "outcheck": "node scripts/outcheck.mjs"
   },
   "dependencies": {
     "clipper-lib": "^6.4.2",

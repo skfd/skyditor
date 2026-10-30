@@ -3,7 +3,7 @@
 // (Source.importedLand): the difference between that and the land now is the user's change, and only that is
 // applied to the outline OSM has (OUT-002).
 import {
-  type Pt, type Ring, type Shape, area, bufferLines, components, difference, intersect, isEmpty, narrowParts, offset, toI, toM, touches,
+  type Pt, type Ring, type Shape, area, bufferLines, components, difference, intersect, isEmpty, narrowParts, offset, opening, toI, toM, touches,
   union,
 } from "../geo/clip";
 import type { Projection } from "../geo/project";
@@ -70,10 +70,12 @@ export const isEmptyChanges = (c: Changes) =>
   c.counts.changed + c.counts.added + c.counts.removed + c.counts.buildings === 0;
 
 const CRUMB = 1; // m²; land smaller than this between two states is round-off, not a change
-const ON_EDGE = 1; // integer units; how far from an outline an original node may sit and still be on it
+const TIDY = 0.02; // m; vertices this close to a line or to each other are round-off: spikes, seams, doubled points
+const ON_EDGE = toI(TIDY); // integer units; how far from an outline an original node may sit and still be on it
 const REACH = 20; // m; how far past the block's edge an outline is followed into street space (the widest street)
-const STEP = 0.2; // m; how far each side grows per round when the street space between them is divided
-const SLIVER = 0.15; // m; half the width under which a strip left in an outline by the division is round-off
+const DIVIDE_STEP = 1; // m; how far each side grows per round when the street space between them is divided
+const BASE = 2; // m; the stretch of a cut line that aims its extension, so a 1 cm end step does not
+const SLIVER = 0.15; // m; half the width under which a strip or a hole left in an outline by the division is round-off
 
 interface Land {
   shape: Shape;
@@ -226,10 +228,24 @@ const sameTags = (a: Tags, b: Tags) => {
 /** Land big enough to be a change rather than integer round-off. */
 const material = (s: Shape): Shape => components(s).filter((c) => area(c) >= CRUMB).flat();
 
-/** An outline without the strips narrower than 2 × SLIVER that dividing street space leaves along a cut. */
+/**
+ * OUT-010: an outline as OSM should get it: without the strips and holes narrower than 2 × SLIVER that dividing
+ * street space leaves along a cut, and without the seams, spikes and doubled points within TIDY that integer
+ * boolean ops leave behind. Rings that only touch at a point are parted. Original nodes dropped as nearly
+ * collinear come back in `withOriginals`.
+ */
 const clean = (s: Shape): Shape => {
+  if (isEmpty(s)) return s;
   const slivers = narrowParts(s, SLIVER);
-  return material(slivers.length ? difference(s, union(...slivers)) : s);
+  let out = slivers.length ? difference(s, union(...slivers)) : s;
+  const kept: Shape = [];
+  for (const [outer, ...holes] of components(out)) {
+    if (area([outer]) < CRUMB) continue;
+    kept.push(outer);
+    for (const h of holes) if (area([h]) >= CRUMB && !isEmpty(opening(union([h]), SLIVER, "miter"))) kept.push(h);
+  }
+  out = ClipperLib.Clipper.CleanPolygons(ClipperLib.Clipper.SimplifyPolygons(kept, ClipperLib.PolyFillType.pftNonZero), toI(TIDY)).filter((r) => r.length >= 3);
+  return material(union(out));
 };
 
 /**
@@ -237,7 +253,7 @@ const clean = (s: Shape): Shape => {
  * edge (the band), as far as the land the area `keeps` does not: where the cut between them meets the block's
  * edge, it carries straight on through the band; the whole overhang of a block that is gone goes with it; and
  * street space between a block that is gone and one that stays, with no cut between them, is divided down the
- * middle, in rounds of STEP as IMP-010 divides a drift strip.
+ * middle (divide).
  */
 function reachOut(taken: Shape, keeps: Shape, outline: Shape, land: Shape, within?: Shape): Shape {
   if (isEmpty(taken)) return taken;
@@ -245,7 +261,7 @@ function reachOut(taken: Shape, keeps: Shape, outline: Shape, land: Shape, withi
   if (within) band = intersect(band, within);
   if (isEmpty(band)) return taken;
   if (isEmpty(keeps)) return union(taken, band);
-  const slits = bufferLines(cutLines(taken, keeps).map(extend), SLIT);
+  const slits = bufferLines(cutLines(taken, keeps).map((l) => extend(l, REACH)), SLIT);
   const nearA = offset(taken, 0.1, "miter"), nearB = offset(keeps, 0.1, "miter");
   const mine: Shape[] = [];
   for (const part of components(slits.length ? difference(band, slits) : band)) {
@@ -260,18 +276,77 @@ function reachOut(taken: Shape, keeps: Shape, outline: Shape, land: Shape, withi
 
 const SLIT = 0.01; // m; half the width of the slit cut through the band along an extended cut line
 
-/** The band `part` both sides reach, divided between them by growth in rounds. */
+/**
+ * The band `part` both sides reach, divided down the middle: what lies nearer to `taken` than to `keeps` is
+ * taken. Both sides grow in rounds of DIVIDE_STEP, which finds the frontier within half a round; the frontier
+ * is then straightened to that tolerance and cut through the part like a cut line, so the two sides meet along
+ * one clean line rather than the comb the rounds leave.
+ */
 function divide(part: Shape, taken: Shape, keeps: Shape): Shape {
-  const near = offset(part, 2 * STEP, "miter");
+  const near = offset(part, DIVIDE_STEP, "miter");
   const seedA = intersect(taken, near), seedB = intersect(keeps, near);
-  let mine: Shape = [], rest = part;
-  for (let d = STEP; d <= REACH && !isEmpty(rest); d += STEP) {
-    const gA = intersect(rest, offset(seedA, d, "miter"));
-    const gB = difference(intersect(rest, offset(seedB, d, "miter")), gA);
-    mine = union(mine, gA);
-    rest = difference(rest, union(gA, gB));
+  if (isEmpty(seedA)) return [];
+  if (isEmpty(seedB)) return part;
+  let his: Shape = []; // nearer to keeps
+  for (let d = DIVIDE_STEP; d <= REACH + DIVIDE_STEP; d += DIVIDE_STEP) {
+    const a = offset(seedA, d), b = offset(seedB, d);
+    his = union(his, intersect(part, difference(b, a)));
+    if (isEmpty(difference(part, union(a, b)))) break;
   }
-  return mine;
+  if (isEmpty(his)) return part;
+  const frontier = frontierLines(his, part).map((l) => extend(straighten(l, toI(DIVIDE_STEP / 2)), DIVIDE_STEP));
+  if (frontier.length === 0) return difference(part, his);
+  const nearA = offset(seedA, 0.1, "miter");
+  const mine = components(difference(part, bufferLines(frontier, SLIT))).filter((p) => area(intersect(p, nearA)) > 0.01);
+  return mine.length ? union(...mine) : [];
+}
+
+/** The boundary of `his` where it runs through `part` rather than along its edge, as open polylines. */
+function frontierLines(his: Shape, part: Shape): Ring[] {
+  const edges: [Pt, Pt][] = [];
+  for (const r of part) for (let i = 0; i < r.length; i++) edges.push([r[i], r[(i + 1) % r.length]]);
+  const onEdge = (p: Pt) => edges.some(([a, b]) => distToSegment(p, a, b) <= 2);
+  const out: Ring[] = [];
+  for (const ring of his) {
+    const n = ring.length;
+    const inner = ring.map((a, i) => {
+      const b = ring[(i + 1) % n];
+      return !onEdge({ X: Math.round((a.X + b.X) / 2), Y: Math.round((a.Y + b.Y) / 2) });
+    });
+    if (inner.every(Boolean)) {
+      out.push([...ring, ring[0]]);
+      continue;
+    }
+    const start = inner.findIndex((c) => !c);
+    for (let k = 0; k < n; k++) {
+      const i = (start + 1 + k) % n;
+      if (!inner[i]) continue;
+      const chain: Ring = [ring[i]];
+      while (inner[(i + (chain.length - 1)) % n] && chain.length <= n) chain.push(ring[(i + chain.length) % n]);
+      out.push(chain);
+      k += chain.length - 1;
+    }
+  }
+  return out;
+}
+
+function distToSegment(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.X - a.X, dy = b.Y - a.Y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / len2));
+  return Math.hypot(p.X - (a.X + t * dx), p.Y - (a.Y + t * dy));
+}
+
+/** Douglas–Peucker: the polyline with the vertices that stray less than `tol` units from it left out. */
+function straighten(line: Ring, tol: number): Ring {
+  if (line.length <= 2) return line;
+  let worst = 0, at = 0;
+  for (let i = 1; i < line.length - 1; i++) {
+    const d = distToSegment(line[i], line[0], line[line.length - 1]);
+    if (d > worst) [worst, at] = [d, i];
+  }
+  if (worst <= tol) return [line[0], line[line.length - 1]];
+  return [...straighten(line.slice(0, at + 1), tol).slice(0, -1), ...straighten(line.slice(at), tol)];
 }
 
 /** The runs of edges of `taken` that lie along `keeps`: the cuts between them, as open polylines. */
@@ -302,15 +377,28 @@ function cutLines(taken: Shape, keeps: Shape): Ring[] {
   return out;
 }
 
-/** A polyline carried on past both ends by REACH, in the direction of its end segments. */
-function extend(line: Ring): Ring {
+/** A polyline carried on past both ends by `byM` metres, in the direction of its last BASE metres at each end. */
+function extend(line: Ring, byM: number): Ring {
   if (line.length < 2) return line;
   const push = (from: Pt, to: Pt): Pt => {
     const d = Math.hypot(to.X - from.X, to.Y - from.Y) || 1;
-    const k = toI(REACH) / d;
+    const k = toI(byM) / d;
     return { X: Math.round(to.X + (to.X - from.X) * k), Y: Math.round(to.Y + (to.Y - from.Y) * k) };
   };
-  return [push(line[1], line[0]), ...line, push(line[line.length - 2], line[line.length - 1])];
+  // The point BASE metres back along the line from its end at index `end`, stepping by `dir`.
+  const back = (end: number, dir: 1 | -1): Pt => {
+    let left = toI(BASE), i = end;
+    while (i + dir >= 0 && i + dir < line.length) {
+      const a = line[i], b = line[i + dir];
+      const d = Math.hypot(b.X - a.X, b.Y - a.Y);
+      if (d >= left) return { X: Math.round(a.X + ((b.X - a.X) * left) / d), Y: Math.round(a.Y + ((b.Y - a.Y) * left) / d) };
+      left -= d;
+      i += dir;
+    }
+    return line[i];
+  };
+  const last = line.length - 1;
+  return [push(back(0, 1), line[0]), ...line, push(back(last, -1), line[last])];
 }
 
 function containsPt(s: Shape, p: Pt): boolean {
