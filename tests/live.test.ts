@@ -96,6 +96,22 @@ describe("live map", () => {
     expect(m.add({ i: 0, j: 0 }, s.json()).atoms).toEqual([]);
   });
 
+  it("LOAD-015: an area across the edge of the loaded land is not loaded whole until its rest loads", () => {
+    const s = new Sketch(1000).grid(200);
+    s.rect(10, 10, 390, 190, { landuse: "residential", name: "Kalamaja" });
+    s.rect(-190, 10, -10, 190, { landuse: "residential", name: "Pelgulinn" });
+    const m = live();
+    const w = m.add({ i: 0, j: 0 }, s.json()).world;
+    const kalamaja = at(w, 100, 100)!.source!;
+    expect(w.loading.has(kalamaja)).toBe(true);
+    expect(w.loading.has(at(w, -100, 100)!.source!)).toBe(false);
+    expect(m.namedLoading()).toEqual([kalamaja]);
+    expect(m.tilesFor(kalamaja)).toEqual([{ i: 1, j: 0 }]);
+    m.add({ i: 1, j: 0 }, s.json());
+    expect(w.loading.has(kalamaja)).toBe(false);
+    expect(m.namedLoading()).toEqual([]);
+  });
+
   it("LOAD-011: a building shows with its block", () => {
     const s = new Sketch(1000).grid(200);
     s.rect(280, 80, 320, 120, { building: "house" });

@@ -5,7 +5,9 @@
 // a later tile closes them; the parts of one block from different tiles overlap, so their union is the block.
 // Blocks already in the world are never rebuilt or touched (LOAD-013): a new block is only ever what is left of
 // a candidate after the loaded land is taken out of it.
-import { type Shape, area, bbox, bboxOverlap, components, contains, containsDisc, difference, isEmpty, offset, rect, toM, union } from "../geo/clip";
+import {
+  type Shape, area, bbox, bboxOverlap, components, contains, containsDisc, difference, intersect, isEmpty, offset, rect, toM, union,
+} from "../geo/clip";
 import { type Tile, TileGrid, tileKey } from "../geo/tiles";
 import { buildLattice } from "../lattice/build";
 import { type BuildingFeature, type Features, extractFeatures, mergeFeatures } from "../osm/features";
@@ -20,6 +22,10 @@ import { type Atom, type BuildingSet, World } from "./world";
 const TRUST = 40;
 // How far past a waiting block to look for the edge of the loaded land, m.
 const EDGE_PROBE = 1;
+// Land of an area outside the loaded land that still counts as round-off, m².
+const SOME_LAND = 1;
+// The most tiles fetched ahead of the view to complete one area (LOAD-015): a bigger area loads as the user moves.
+const MAX_AREA_TILES = 12;
 
 export interface Grown {
   world: World;
@@ -114,6 +120,35 @@ export class LiveMap {
       this.shown.add(source);
     }
     const joined = world.addBuildings(ready);
+
+    // LOAD-015 / LOAD-021: which landuse areas near the new land are still not loaded whole.
+    const near = [rect(f.frame), ...atoms.map((a) => a.shape)].map(bbox);
+    for (const a of this.store.areas) {
+      if (a.klass.cls !== "paintable") continue;
+      const box = bbox(a.shape);
+      if (!near.some((n) => bboxOverlap(n, box))) continue;
+      const out = area(difference(a.shape, this.trusted)) +
+        this.waiting.reduce((s, w) => s + (bboxOverlap(bbox(w), box) ? area(intersect(w, a.shape)) : 0), 0);
+      if (out > SOME_LAND) world.loading.add(a.id);
+      else world.loading.delete(a.id);
+    }
+    world.waiting = this.waiting;
     return { world, atoms, joined };
+  }
+
+  /** LOAD-015 / LOAD-021: the tiles still to load for an area to be whole, nearest its middle first. */
+  tilesFor(id: string): Tile[] {
+    const a = this.store?.areas.find((x) => x.id === id);
+    if (!a) return [];
+    const b = bbox(a.shape);
+    const view = { minX: toM(b.minX), minY: toM(b.minY), maxX: toM(b.maxX), maxY: toM(b.maxY) };
+    return this.grid.around(view, 0).filter((t) => !this.tiles.has(tileKey(t))).slice(0, MAX_AREA_TILES);
+  }
+
+  /** LOAD-015: every named residential area that is not loaded whole; their rest loads before other land. */
+  namedLoading(): string[] {
+    const w = this.world;
+    if (!w || !this.store) return [];
+    return this.store.areas.filter((a) => w.loading.has(a.id) && a.klass.cls === "paintable" && a.klass.whole).map((a) => a.id);
   }
 }

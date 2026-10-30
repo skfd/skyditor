@@ -253,6 +253,9 @@ export class World {
   private readonly softIndex = new RBush<BBox & { line: Ring; fence: boolean }>();
   private readonly cellCache = new Map<number, Shape[]>();
   private readonly fenceCache = new Map<number, Shape>();
+  // LOAD-015 / LOAD-021: OSM landuse areas (`way/1`, `relation/2`) only partly loaded so far, on a live map.
+  readonly loading = new Set<string>();
+  waiting: Shape[] = []; // LOAD-012: land of blocks not loaded whole yet, render only
   overlay: AreaFeature[] = []; // IMP-003, render only
   issues: TagIssue[] = []; // IMP-014, render only
   readonly originals: AreaFeature[] = []; // IMP-009, render only
