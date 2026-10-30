@@ -81,11 +81,10 @@ export class Hud {
   }
 
   /** JOSM-001 / JOSM-003 / UPL-001: the ways out are open only while there are changes to send. */
-  setChanges(any: boolean) {
-    for (const id of ["btn-josm", "btn-save", "btn-upload"]) {
-      const b = document.getElementById(id) as HTMLButtonElement | null;
-      if (b) b.disabled = !any;
-    }
+  setChanges(any: boolean, upload: boolean) {
+    $<HTMLButtonElement>("#btn-josm").disabled = !any;
+    $<HTMLButtonElement>("#btn-save").disabled = !any;
+    $<HTMLButtonElement>("#btn-upload").disabled = !upload;
   }
 
   /** HUD-006: the dot grows with the brush. */

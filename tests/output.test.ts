@@ -53,7 +53,15 @@ describe("what is written", () => {
     expect(c.create.nodes).toEqual([]);
   });
 
-  it("OUT-004: painted land with no element becomes one new closed way with the kind's tags", async () => {
+  it("OUT-001: the map keeps the elements it was loaded from, nodes and tags included", async () => {
+    const { s, way } = centre();
+    const w = await s.world();
+    expect(w.source.ways.get(way)?.tags).toEqual(R2);
+    for (const n of w.source.ways.get(way)!.nodes) expect(w.source.nodes.has(n)).toBe(true);
+    expect(w.source.importedKind.get(`way/${way}`)).toBe("R2");
+  });
+
+  it("OUT-004 / OUT-009: painted land with no element becomes one new closed way with the kind's tags, counted as a new area", async () => {
     const w = await new Sketch(300).grid(200).world();
     fill(w, "R2", -100, -100, 100, 100);
     const c = computeChanges(w);

@@ -1,5 +1,6 @@
 // Badges on land tagged without its landuse and on named areas without a type, and the card a badge or an
 // unsure building's mark opens (REN-016, HUD-012, NAME-005, NAME-006, TYPE-015).
+import { SERVER } from "../osm/server";
 import type { Quest, TagIssue } from "../model/world";
 import type { Camera } from "../render/camera";
 import { TUNE } from "../tuning";
@@ -17,10 +18,10 @@ const code = (text: string) => {
 export function osmLink(source: string): HTMLAnchorElement | null {
   if (!OSM_ELEMENT.test(source)) return null;
   const a = document.createElement("a");
-  a.href = `https://www.openstreetmap.org/${source}`;
+  a.href = `${SERVER.web}/${source}`; // DEV-001: the server this page edits
   a.target = "_blank";
   a.rel = "noopener";
-  a.textContent = "Open on OpenStreetMap ↗";
+  a.textContent = `Open on ${SERVER.id === "main" ? "OpenStreetMap" : "the test server"} ↗`;
   return a;
 }
 

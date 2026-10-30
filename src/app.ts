@@ -11,10 +11,14 @@ import { type Grown, LiveMap } from "./model/live";
 import { type LoadReport, type Stage, worldFromText } from "./model/load";
 import type { Piece, Quest, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
+import { type Login, finishLogin, forgetToken, savedToken, startLogin, whoAmI } from "./osm/auth";
 import { SERVER } from "./osm/server";
 import { isEmptyChanges } from "./output/changes";
 import { JosmError, sendToJosm } from "./output/josm";
 import { toJosmXml } from "./output/osmxml";
+import { rebase } from "./output/rebase";
+import { hasLand, seed } from "./output/seed";
+import { upload } from "./output/upload";
 import { type Prepared, prepare } from "./output/verify";
 import { IMAGERY, TileCache } from "./osm/imagery";
 import { type Photo, bestPhoto, photoLinks, searchPanoramax } from "./osm/photos";
@@ -109,6 +113,10 @@ export class App {
   private landLoading = false; // LOAD-012
   private preparing = false; // OUT-008: one check at a time
   private place = ""; // the place shown, for the JOSM layer and the file name
+  private login: Login | null = null; // AUTH-001: the test-server page's login
+  private pendingUpload: Prepared | null = null; // UPL-001: what the open upload card shows
+  private seeding = false; // SEED-001
+  private seedOffer: { b: { minLon: number; minLat: number; maxLon: number; maxLat: number }; name: string } | null = null;
   private hashAt = 0;
   private readonly badges = new Badges(); // REN-016 / HUD-012
   private readonly labels = new Labels(); // NAME-008
@@ -127,6 +135,12 @@ export class App {
     window.addEventListener("resize", () => this.resize());
     this.resize();
     requestAnimationFrame((t) => this.frame(t));
+    void this.start();
+  }
+
+  /** DEV-001: the test-server page sets itself up (and may be returning from a login) before the route is read. */
+  private async start() {
+    if (SERVER.id === "dev") await this.setupTestServer();
     this.routeFromHash();
   }
 
@@ -210,8 +224,17 @@ export class App {
       const text = await fetchArea(next.fetchBounds(first)); // LOAD-003
       stage("blocks");
       await new Promise((r) => setTimeout(r, 0));
-      return { world: next.add(first, text).world };
-    }, name, mapHash(osmZoom(scale, lat), lat, lon), next);
+      const world = next.add(first, text).world;
+      // SEED-001: nothing here on the test server yet: offer the copy, once the start screen is back.
+      if (SERVER.id === "dev" && world.atoms.length === 0 && this.login && this.seedOffer === null)
+        this.seedOffer = { b: next.fetchBounds(first), name };
+      return { world };
+    }, name, mapHash(osmZoom(scale, lat), lat, lon), next).then(() => {
+      const offer = this.seedOffer;
+      this.seedOffer = null;
+      if (offer && window.confirm(`${SERVER.name} has no map at ${offer.name} yet. Copy it from OpenStreetMap?`))
+        void this.seedBounds(offer.b, offer.name);
+    });
   }
 
   /**
@@ -1068,7 +1091,167 @@ export class App {
   }
   private syncHistory() {
     this.hud.setHistory(this.history.canUndo, this.history.canRedo); // HUD-006
-    this.hud.setChanges(this.history.canUndo); // JOSM-001 / JOSM-003 / UPL-001
+    this.hud.setChanges(this.history.canUndo, this.history.canUndo && !!this.login); // JOSM-001 / JOSM-003 / UPL-001
+  }
+
+  // ---------- the test server (§19) ----------
+
+  /** DEV-001 / AUTH-001 / AUTH-002: says which server this is, shows its buttons, and picks up a kept or returning login. */
+  private async setupTestServer() {
+    document.title = "Skyditor · test server";
+    for (const id of ["server-tag", "server-note", "btn-login", "btn-seed", "btn-upload"]) document.getElementById(id)!.hidden = false;
+    document.getElementById("help-note")!.textContent =
+      "This page writes to the OSM test server only, never to OpenStreetMap itself.";
+    const on = (id: string, f: () => void) => document.getElementById(id)!.addEventListener("click", f);
+    on("btn-login", () => void this.toggleLogin());
+    on("btn-upload", () => void this.startUpload());
+    on("btn-seed", () => void this.seedView());
+    const card = document.getElementById("upload")!;
+    card.querySelector(".close")!.addEventListener("click", () => this.closeUpload());
+    card.querySelector(".cancel")!.addEventListener("click", () => this.closeUpload());
+    card.querySelector(".go")!.addEventListener("click", () => void this.confirmUpload());
+    try {
+      if (await finishLogin(SERVER)) this.hud.toast("Logged in");
+    } catch (e) {
+      this.hud.toast((e as Error).message, "error");
+    }
+    const token = savedToken(SERVER);
+    if (token) {
+      this.login = { token };
+      try {
+        const name = await whoAmI(SERVER, token);
+        if (name === null) {
+          forgetToken(SERVER); // the token no longer works: logged out
+          this.login = null;
+        } else this.login.name = name;
+      } catch {
+        /* offline: the login stands until the server says otherwise */
+      }
+    }
+    this.syncLogin();
+  }
+
+  private syncLogin() {
+    const b = document.getElementById("btn-login") as HTMLButtonElement;
+    b.textContent = this.login ? `${this.login.name || "Logged in"} · Log out` : "Log in";
+    b.title = this.login ? `Log out of ${SERVER.name}` : `Log in to ${SERVER.name}`;
+    (document.getElementById("btn-seed") as HTMLButtonElement).disabled = !this.login;
+    this.syncHistory();
+  }
+
+  /** AUTH-001 / AUTH-003 */
+  private async toggleLogin() {
+    if (this.login) {
+      forgetToken(SERVER);
+      this.login = null;
+      this.syncLogin();
+      this.hud.toast("Logged out");
+      return;
+    }
+    if (this.world && this.history.canUndo && !window.confirm("Logging in reloads the page, and the changes you made here will be lost. Log in now?")) return;
+    const why = await startLogin(SERVER);
+    if (why) this.hud.toast(why, "error");
+  }
+
+  /** UPL-001: the card: what will be written, a comment, and the go button. */
+  private async startUpload() {
+    if (!this.login) return this.hud.toast(`Log in to ${SERVER.name} first`);
+    const prepared = await this.prepareChanges();
+    if (!prepared) return;
+    this.pendingUpload = prepared;
+    const card = document.getElementById("upload")!;
+    card.querySelector<HTMLElement>(".what")!.textContent = `${this.describe(prepared)} will be written to ${SERVER.name}.`;
+    const left = card.querySelector<HTMLElement>(".left")!;
+    left.hidden = prepared.leftOut.length === 0;
+    left.textContent = prepared.leftOut.length ? `Left out, changed on the server meanwhile: ${prepared.leftOut.join(", ")}.` : "";
+    const status = card.querySelector<HTMLElement>(".status")!;
+    status.hidden = true;
+    status.textContent = "";
+    card.querySelector<HTMLButtonElement>(".go")!.disabled = false;
+    card.querySelector<HTMLTextAreaElement>("textarea")!.value = "";
+    card.classList.add("show");
+    card.querySelector<HTMLTextAreaElement>("textarea")!.focus();
+  }
+
+  private closeUpload() {
+    document.getElementById("upload")!.classList.remove("show");
+    this.pendingUpload = null;
+  }
+
+  /** UPL-001 / UPL-002 / UPL-003 */
+  private async confirmUpload() {
+    const p = this.pendingUpload;
+    const world = this.world;
+    if (!p || !this.login || !world) return;
+    const card = document.getElementById("upload")!;
+    const status = card.querySelector<HTMLElement>(".status")!;
+    const go = card.querySelector<HTMLButtonElement>(".go")!;
+    const comment = card.querySelector<HTMLTextAreaElement>("textarea")!.value.trim() || `Landuse: ${this.describe(p)}`;
+    go.disabled = true;
+    status.hidden = false;
+    status.textContent = "Uploading…";
+    try {
+      const up = await upload(SERVER, this.login.token, p.changes, comment);
+      // UPL-003: the written elements are the map's now; undo starts afresh.
+      rebase(world, p.changes, up);
+      this.history = new History();
+      this.syncHistory();
+      this.areaCache = null;
+      this.renderer?.setWorld(world);
+      this.updateMix(true);
+      this.dirty = true;
+      status.innerHTML = "";
+      status.append("Uploaded as ");
+      const a = document.createElement("a");
+      a.href = up.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = `changeset ${up.changeset} ↗`;
+      status.append(a, ".");
+      this.pendingUpload = null;
+      card.querySelector<HTMLButtonElement>(".go")!.hidden = true;
+      setTimeout(() => {
+        card.querySelector<HTMLButtonElement>(".go")!.hidden = false;
+        this.closeUpload();
+      }, 4000);
+      this.hud.toast(`${this.describe(p)} uploaded`);
+    } catch (e) {
+      go.disabled = false;
+      status.textContent = `Couldn't upload, nothing was changed: ${(e as Error).message}`; // UPL-002
+    }
+  }
+
+  /** SEED-001 / SEED-002: copies the view (or, with no map yet, the place searched) from OpenStreetMap. */
+  private async seedView() {
+    if (!this.login) return this.hud.toast(`Log in to ${SERVER.name} first`);
+    if (!this.world || !this.live) return this.hud.toast("Search a place first: the view you then see is what gets copied");
+    const v = this.camera.view();
+    const p = this.live.grid.proj;
+    await this.seedBounds({ minLon: p.lon(v.minX), maxLon: p.lon(v.maxX), minLat: p.lat(v.maxY), maxLat: p.lat(v.minY) }, this.place);
+  }
+
+  private async seedBounds(b: { minLon: number; minLat: number; maxLon: number; maxLat: number }, name: string) {
+    if (!this.login || this.seeding) return;
+    const side = Math.max(b.maxLon - b.minLon, b.maxLat - b.minLat);
+    if (side > 0.05) return this.hud.toast("Zoom in: a copy covers at most a few kilometres", "error");
+    this.seeding = true;
+    let copied = false;
+    try {
+      this.hud.loading("fetching");
+      if (await hasLand(SERVER, b) && !window.confirm(`${SERVER.name} already has a map here. Copy OpenStreetMap's data on top of it anyway?`)) return; // SEED-002
+      const sets = await seed(SERVER, this.login.token, b, (s) => this.hud.loading(s === "uploading" ? "blocks" : "fetching"));
+      this.hud.toast(`Copied: ${sets.length} changeset${sets.length === 1 ? "" : "s"} on ${SERVER.name}`);
+      copied = true;
+    } catch (e) {
+      this.hud.toast(`Couldn't copy: ${(e as Error).message}`, "error");
+    } finally {
+      this.hud.loading(null);
+      this.seeding = false;
+    }
+    if (!copied) return;
+    // A fresh map there, with the copy in it.
+    this.live = null;
+    this.loadAround((b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2, name, null);
   }
 
   // ---------- output (§18, §19) ----------

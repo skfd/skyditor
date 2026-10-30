@@ -51,6 +51,7 @@ export interface AreaChange {
   feature: string; // `way/1`, `relation/2` or `new/3`
   kind: Kind;
   land: Shape; // its land now, integer units
+  outline: Shape; // the outline written for it, street space included (UPL-003 keeps it as the area's)
   elements: Ref[]; // every element written for it, nodes included
   what: "changed" | "added" | "removed";
 }
@@ -97,7 +98,6 @@ interface Reading {
  */
 export function computeChanges(world: World, skip: ReadonlySet<string> = new Set()): Changes {
   const src = world.source;
-  const w = new Writer(src, world.features.proj);
   const areas: AreaChange[] = [];
 
   // The land of every area now, by feature and kind. One area may hold two kinds after a density step on one of
@@ -118,6 +118,7 @@ export function computeChanges(world: World, skip: ReadonlySet<string> = new Set
   };
   const originals = new Map(world.features.areas.map((a) => [a.id, a]));
   const land = union(...world.atoms.filter((a) => a.pieces.length).map((a) => a.shape)); // every block, bridges included
+  const w = new Writer(src, world.features.proj, land);
 
   // Imported areas: what each one keeps and gives up (OUT-002, OUT-006, OUT-007).
   const readings: Reading[] = [];
@@ -341,7 +342,7 @@ class Writer {
   private readonly removedWays = new Set<number>();
   private readonly removedRelations = new Set<number>();
 
-  constructor(readonly src: Source, readonly proj: Projection) {
+  constructor(readonly src: Source, readonly proj: Projection, readonly land: Shape) {
     for (const [id, [lon, lat]] of src.nodes) {
       const p = { X: toI(proj.x(lon)), Y: toI(proj.y(lat)) };
       this.points.set(id, p);
@@ -404,7 +405,7 @@ class Writer {
         elements.push({ type: "relation", id: rel.id });
       }
     }
-    return { feature, kind, land, elements: this.withNodes(elements), what: "added" };
+    return { feature, kind, land: intersect(land, this.land), outline: land, elements: this.withNodes(elements), what: "added" };
   }
 
   private newWay(nodes: number[], tags: Tags, elements: Ref[]): OutWay {
@@ -440,7 +441,7 @@ class Writer {
       this.modifyRelation(ref.id, comps, tags, elements, retagged);
     }
     if (elements.length === 0) return null; // nothing to write: mixed on unspecified land says the same (Q-011)
-    return { feature, kind, land: out, elements: this.withNodes(elements), what: "changed" };
+    return { feature, kind, land: intersect(out, this.land), outline: out, elements: this.withNodes(elements), what: "changed" };
   }
 
   /** A way with new nodes, or with new tags only; left alone when neither changed. */
@@ -550,7 +551,7 @@ class Writer {
         if (w) this.dropWay(w, elements);
       }
     }
-    return { feature, kind, land: [], elements: this.withNodes(elements), what: "removed" };
+    return { feature, kind, land: [], outline: [], elements: this.withNodes(elements), what: "removed" };
   }
 
   /** A way no area needs: deleted when it carries nothing of its own and no other element uses it. */
