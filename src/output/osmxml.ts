@@ -1,5 +1,5 @@
-// The changes as OSM XML: a JOSM file with its `action` marks (JOSM-001, JOSM-003), and osmChange for the API
-// (UPL-001).
+// The changes as OSM XML: the file JOSM reads as a layer with unsaved changes, with its `action` marks
+// (JOSM-001, JOSM-003).
 import type { Changes, OutNode, OutRelation, OutWay } from "./changes";
 
 const VERSION = "0.6";
@@ -39,22 +39,4 @@ export function toJosmXml(c: Changes): string {
   for (const r of c.delete.relations) out.push(relation(r, del));
   out.push(`</osm>`);
   return out.join("\n");
-}
-
-/** UPL-001: the diff the API 0.6 upload call takes. Deletes are `if-unused`: a node someone else's way still needs is left (OUT-004). */
-export function toOsmChange(c: Changes, changeset: number): string {
-  const cs = ` changeset="${changeset}"`;
-  const block = (name: string, nodes: OutNode[], ways: OutWay[], relations: OutRelation[], reverse = false) => {
-    const lines = [...nodes.map((n) => node(n, cs)), ...ways.map((w) => way(w, cs)), ...relations.map((r) => relation(r, cs))];
-    if (reverse) lines.reverse(); // relations before the ways they use, ways before their nodes
-    return lines.length ? `<${name}>\n${lines.join("\n")}\n</${name.split(" ")[0]}>` : "";
-  };
-  return [
-    `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<osmChange version="${VERSION}" generator="${GENERATOR}">`,
-    block("create", c.create.nodes, c.create.ways, c.create.relations),
-    block("modify", c.modify.nodes, c.modify.ways, c.modify.relations),
-    block(`delete if-unused="true"`, c.delete.nodes, c.delete.ways, c.delete.relations, true),
-    `</osmChange>`,
-  ].filter(Boolean).join("\n");
 }

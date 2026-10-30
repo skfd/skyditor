@@ -11,7 +11,7 @@ import { type Grown, LiveMap } from "./model/live";
 import { type LoadReport, type Stage, worldFromText } from "./model/load";
 import type { Piece, Quest, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
-import { SERVER } from "./osm/server";
+import { OSM } from "./osm/server";
 import { isEmptyChanges } from "./output/changes";
 import { JosmError, sendToJosm } from "./output/josm";
 import { toJosmXml } from "./output/osmxml";
@@ -1068,7 +1068,7 @@ export class App {
   }
   private syncHistory() {
     this.hud.setHistory(this.history.canUndo, this.history.canRedo); // HUD-006
-    this.hud.setChanges(this.history.canUndo); // JOSM-001 / JOSM-003 / UPL-001
+    this.hud.setChanges(this.history.canUndo); // JOSM-001 / JOSM-003
   }
 
   // ---------- output (§18, §19) ----------
@@ -1081,10 +1081,10 @@ export class App {
     if (!this.world || !this.history.canUndo || this.preparing) return null;
     this.preparing = true;
     try {
-      const prepared = await prepare(this.world, SERVER.api);
+      const prepared = await prepare(this.world, OSM.api);
       if (prepared.leftOut.length) {
         const list = prepared.leftOut.slice(0, 3).join(", ") + (prepared.leftOut.length > 3 ? ` and ${prepared.leftOut.length - 3} more` : "");
-        this.hud.toast(`Changed on ${SERVER.name} since it loaded, so left out: ${list}`, "error");
+        this.hud.toast(`Changed on ${OSM.name} since it loaded, so left out: ${list}`, "error");
       }
       if (isEmptyChanges(prepared.changes)) {
         if (!prepared.leftOut.length) this.hud.toast("Nothing to send: the map is as it was");
@@ -1092,7 +1092,7 @@ export class App {
       }
       return prepared;
     } catch (e) {
-      this.hud.toast(`Couldn't check the changes against ${SERVER.name}: ${(e as Error).message}`, "error");
+      this.hud.toast(`Couldn't check the changes against ${OSM.name}: ${(e as Error).message}`, "error");
       return null;
     } finally {
       this.preparing = false;

@@ -46,7 +46,7 @@ export interface Counts {
   buildings: number; // buildings typed
 }
 
-/** One area's part of the changes, for the counts, for UPL-003 and for OUT-008. */
+/** One area's part of the changes, for the counts and for OUT-008. */
 export interface AreaChange {
   feature: string; // `way/1`, `relation/2` or `new/3`
   kind: Kind;

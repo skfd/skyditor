@@ -104,8 +104,7 @@ describe("the app mounts", () => {
     expect(josm.title).toContain("(K)");
     expect($("#help")!.textContent).toContain("JOSM");
     expect($("#help")!.textContent).not.toContain("toy");
-    // NG-007: no upload button on the main page.
-    expect($("#btn-upload")).toBeNull();
+    expect($("#btn-upload")).toBeNull(); // NG-007: no upload anywhere
   });
 });
 

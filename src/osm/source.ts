@@ -41,13 +41,6 @@ export class Source {
       }
   }
 
-  /** UPL-003: after an upload the written land is the map's land. */
-  rebase(feature: string, land: Shape, kind: Kind) {
-    this.importedLand.set(feature, land);
-    this.importedKind.set(feature, kind);
-    this.disputed.delete(feature);
-  }
-
   /** The id and type of an element string such as `way/12`. */
   static ref(id: string): { type: "way" | "relation" | "node"; id: number } | null {
     const m = /^(node|way|relation)\/(\d+)$/.exec(id);

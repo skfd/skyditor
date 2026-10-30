@@ -3,8 +3,9 @@
 A focused, game-feel OpenStreetMap editor for **landuse only** — mainly cities. You paint residential,
 commercial, retail and industrial land, and it snaps into place by itself.
 
-This is milestone **M0, the toy**: it reads OSM data and lets you paint, snap and undo. It does not
-write anything back to OSM yet.
+This is milestone **M1, the sandbox**: it reads OSM data, lets you paint, snap and undo (M0, the toy), and
+writes your changes out as real OSM elements, into JOSM or into an `.osm` file JOSM opens. It never uploads
+anything itself: edits reach OSM through JOSM, where you check them and upload with your own account.
 
 ## Run it
 
@@ -20,6 +21,18 @@ Load an area by:
 - **Search** — Nominatim, then a square around the result from Overpass (fallback: OSM API).
 - **Drop a file** — `.osm` XML or Overpass JSON.
 - **URL** — `#map=<lat>/<lon>`.
+
+## Sending changes out
+
+Everything you change leaves as a diff of real OSM elements: an area you never touched is written back untouched,
+a changed one keeps its outline where you did not change it, nodes are kept and shared, new land becomes new
+ways (§18 of the requirements). Before anything goes out, every element is checked against OpenStreetMap; what
+changed meanwhile is left out and named.
+
+- **JOSM** (top right, or `K`) hands the changes to a running JOSM over its Remote Control
+  (Preferences → Remote Control, on by default) as a new layer with the changed, new and deleted elements marked,
+  ready for the validator and the upload dialog. Firefox and Chrome allow this from an https page; Safari blocks it.
+- **Save** downloads the same thing as an `.osm` file that JOSM opens.
 
 ## How it works, in one paragraph
 
@@ -53,10 +66,11 @@ See §0 of that file for the rules.
 REQUIREMENTS.md     source of truth (EARS)
 src/tuning.ts       mirror of the tuning table
 src/geo/            integer polygon ops (Clipper) and local projection
-src/osm/            parsing, feature extraction, network fetches
+src/osm/            parsing, feature extraction, network fetches, the loaded source
 src/lattice/        street space and atoms
 src/model/          kinds, world (atoms/pieces), import, history, loading
 src/paint/          strokes, unit coverage, freeform snapping
+src/output/         the diff as OSM elements, the JOSM file, remote control, the check against OSM
 src/render/         camera, animation, canvas renderer
 src/ui/             HUD, icons, sound
 tests/              vitest, synthetic map sketches (tests/helpers.ts)

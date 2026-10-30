@@ -8,8 +8,8 @@ the map and it snaps into place by itself. It should feel like a well-made video
 legible. Animation is there to explain what happened, never just to decorate.
 
 Current milestone: **M1 — "Sandbox"**. It reads OSM data, paints, snaps, and undoes (M0, the toy), and it
-writes the user's changes out: to JOSM, to a file, and to the OSM test server (§18, §19). It does **not**
-upload to the main OSM database (see §15).
+writes the user's changes out: to JOSM, and to a file JOSM opens (§18, §19). It does **not** upload anywhere
+itself (see §15).
 
 ---
 
@@ -1070,11 +1070,12 @@ idle while nothing is being redrawn. Without `?perf` it shows nothing.
 ## 15. Non-goals
 
 ~~**NG-001** The editor shall not upload, export, or otherwise write OSM data in M0.~~ Retired: M1 writes to
-JOSM, to a file and to the test server (§18, §19). NG-007 replaces it.
+JOSM and to a file (§18, §19). NG-007 replaces it.
 
-**NG-007** The editor shall not upload to the main OSM database in M1.
-  Why: the diff it writes is new and the lattice reshapes outlines. Edits reach the main database only through
-  JOSM (JOSM-001), where a mapper reviews them with the validator, or not at all.
+**NG-007** The editor shall not upload to any OSM server in M1: its changes leave through JOSM, or as a file.
+  Why: the diff it writes is new and the lattice reshapes outlines. Edits reach OSM only through JOSM
+  (JOSM-001), where a mapper reviews them with the validator and logs in with their own account, or not at
+  all. The editor needs no login of its own.
   Trace: policy
 
 ~~**NG-002** The editor shall not edit any feature other than the landuse kinds in §5.~~ Retired: building
@@ -1285,9 +1286,10 @@ part taken out of its outline.
   Why: settling says the context was right; the landuse outline was the error, and it shrinks.
 
 **OUT-008** Before sending changes anywhere, the editor shall compare each element it would change or delete
-with the server's current copy, leave out the changes to an element that has changed since it loaded, and say
-which areas were left out.
-  Why: a session can be long. Writing over a later edit by someone else is the one thing an uploader must not do.
+with OpenStreetMap's current copy, leave out the changes to an element that has changed since it loaded, and
+say which areas were left out.
+  Why: a session can be long. Writing over a later edit by someone else is the one thing an editor must not
+  do, and JOSM would only show it as a conflict to untangle by hand.
   Trace: manual
 
 **OUT-009** When the editor shows the user what it is about to write, it shall show counts of areas changed,
@@ -1295,16 +1297,16 @@ new and removed, and of buildings typed, never elements, nodes or versions (GEN-
 
 ---
 
-## 19. Test server and JOSM
+## 19. JOSM
 
-The user's changes go out through JOSM, as a file, or straight to the OSM test server
-(`master.apis.dev.openstreetmap.org`), which has its own accounts and its own, mostly empty, database.
+The user's changes go out through JOSM, which checks them with its validator and uploads them with the
+mapper's own account, or as a file JOSM opens.
 
 **JOSM-001** When the user presses *Open in JOSM* (top bar, key `K`) while there are changes, the editor shall
 send them to JOSM through its remote control on this computer, as a new layer named after the place, with the
 changed elements marked as changed and the new ones as new, so that JOSM shows them ready to upload.
-  Why: JOSM is where a mapper reviews an edit before it reaches the main database (NG-007). Its validator sees
-  what this editor cannot.
+  Why: JOSM is where a mapper reviews an edit before it reaches OSM (NG-007). Its validator sees what this
+  editor cannot.
   Trace: manual
 
 **JOSM-002** If JOSM does not answer, then the editor shall say so once, with how to turn remote control on,
@@ -1313,46 +1315,6 @@ and offer the file instead (JOSM-003).
 
 **JOSM-003** While there are changes, the editor shall offer *Save as .osm*: the same changes as a file JOSM
 opens.
-  Trace: manual
-
-**DEV-001** The editor shall be built as two pages: the main page, which reads the main OSM database and never
-writes to it (NG-007), and the test-server page, which says it is the test server in its title and start
-screen, links elements on the test server, and loads land through the test server's own API, since the
-services around OSM do not index it.
-  Trace: manual
-
-**AUTH-001** The test-server page shall let the user log in with a test-server account and log out, without
-any server component of its own (GEN-001).
-  Trace: manual
-
-**AUTH-002** The test-server page shall remember the login on this browser until the user logs out.
-  Trace: manual
-
-**AUTH-003** If the page has no application registration for the test server, then it shall say so plainly
-when the user tries to log in.
-  Trace: manual
-
-**UPL-001** When a logged-in user presses *Upload* on the test-server page while there are changes, the editor
-shall show what it is about to write (OUT-009) and a comment field, and on confirmation upload the changes as
-one changeset and show a link to it.
-  Trace: manual
-
-**UPL-002** If an upload fails, then the editor shall keep every change and say briefly why.
-  Trace: manual
-
-**UPL-003** When an upload succeeds, the editor shall make the written elements the map's elements, so that
-nothing is left to write, and undo shall start afresh.
-  Why: what is uploaded cannot be undone with a key; it is undone with another edit. A clean map says the work
-  is safe.
-
-**SEED-001** When the user presses *Copy this view from OpenStreetMap* on the test-server page, the editor
-shall fetch the main database's data for the land in view and upload it to the test server as new elements,
-in a changeset that says it is a copy for testing, then load the map there.
-  Why: the test database is nearly empty. Testing needs real streets.
-  Trace: manual
-
-**SEED-002** If the test server already has land in that view, then the editor shall ask before copying.
-  Why: a second copy is a second set of every street.
   Trace: manual
 
 ---

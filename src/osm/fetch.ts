@@ -1,8 +1,9 @@
 // Network access to public OSM services (LOAD-003, LOAD-018).
 import type { LonLatBounds } from "../geo/project";
+import { OSM } from "./server";
 
 const OVERPASS = "https://overpass-api.de/api/interpreter";
-const OSM_API = "https://api.openstreetmap.org/api/0.6/map";
+const OSM_API = `${OSM.api}/api/0.6/map`;
 
 export function overpassQuery(b: LonLatBounds): string {
   const bb = `${b.minLat},${b.minLon},${b.maxLat},${b.maxLon}`;

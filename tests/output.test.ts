@@ -3,7 +3,7 @@ import { rect, toI, union } from "../src/geo/clip";
 import { applyCapture, planCapture } from "../src/model/capture";
 import { isProtected } from "../src/model/world";
 import { type Changes, computeChanges, isEmptyChanges, retag } from "../src/output/changes";
-import { toJosmXml, toOsmChange } from "../src/output/osmxml";
+import { toJosmXml } from "../src/output/osmxml";
 import { type Tool, applyRegion } from "../src/paint/snap";
 import { answerWhole } from "../src/paint/stroke";
 import { Sketch, at, atomAt, paint } from "./helpers";
@@ -275,21 +275,5 @@ describe("the files", () => {
     for (const x of [...d.delete.ways, ...d.delete.nodes]) x.version = 2;
     expect(toJosmXml(d)).toMatch(/<node id="\d+" version="2" action="delete" visible="false"/);
     expect(toJosmXml(d)).toMatch(/<way id="\d+" version="2" action="delete" visible="false"/);
-  });
-
-  it("UPL-001: osmChange puts every element in its changeset, deletes if unused, children last", async () => {
-    const { s, way } = centre();
-    const w = await s.world();
-    fill(w, null, -100, -100, 100, 100);
-    fill(w, "R2", -295, -100, -105, 100);
-    const c = computeChanges(w);
-    for (const x of [...c.delete.ways, ...c.delete.nodes]) x.version = 1;
-    const osc = toOsmChange(c, 42);
-    expect(osc).toContain(`<osmChange version="0.6" generator="Skyditor">`);
-    expect(osc).toMatch(/<create>\n<node id="-1" changeset="42" lat=/);
-    expect(osc).toContain(`<delete if-unused="true">`);
-    const del = osc.slice(osc.indexOf("<delete"));
-    expect(del.indexOf(`<way id="${way}"`)).toBeLessThan(del.indexOf("<node"));
-    expect(osc).not.toContain("<modify>");
   });
 });
