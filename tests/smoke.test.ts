@@ -53,13 +53,13 @@ describe("the app mounts", () => {
     expect($("#start")!.classList.contains("show")).toBe(true);
   });
 
-  it("HUD-001 / KIND-001 / DENS-001 / TYPE-007 / KIND-007 / NAME-007: the palette has the ladder, the business kinds, density, agree and the eraser, and no mixed", () => {
+  it("HUD-001 / KIND-001 / DENS-001 / TYPE-007 / KIND-007 / CAP-001 / NAME-007: the palette has the ladder, the business kinds, density, agree, the eraser and capture, and no mixed", () => {
     const tiles = $$("#palette button.tile");
     expect(tiles.map((t) => t.dataset.tool)).toEqual([
-      "R1", "R2", "R3", "R4", "R5", "R6", "COM", "RET", "IND", "UP", "DOWN", "AGREE", "ERASE",
+      "R1", "R2", "R3", "R4", "R5", "R6", "COM", "RET", "IND", "UP", "DOWN", "AGREE", "ERASE", "CAPTURE",
     ]);
     expect(tiles.map((t) => t.querySelector(".key")?.textContent)).toEqual([
-      "1", "2", "3", "4", "5", "6", "Q", "W", "E", "A", "Z", "G", "X",
+      "1", "2", "3", "4", "5", "6", "Q", "W", "E", "A", "Z", "G", "X", "C",
     ]);
     // KIND-002: the six tiers sit together as one ladder.
     expect($$("#palette .ladder button.tile")).toHaveLength(6);
@@ -112,4 +112,23 @@ describe("the demo loads", () => {
     expect(todo.hidden).toBe(false);
     expect(Number(todo.dataset.n)).toBeGreaterThan(0);
   }, 60_000);
+
+  it("CAP-001 / CAP-006: `C` picks the capture tool; an arrow called off with the other button or Escape changes nothing", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c" }));
+    expect($('#palette button.tile[data-tool="CAPTURE"]')!.classList.contains("on")).toBe(true);
+    const map = $<HTMLCanvasElement>("#map")!;
+    const pointer = (type: string, x: number, y: number, button = 0) =>
+      map.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, button, pointerId: 1, pointerType: "mouse", bubbles: true }));
+    const [cx, cy] = [window.innerWidth / 2, window.innerHeight / 2];
+    pointer("pointerdown", cx, cy);
+    pointer("pointermove", cx + 80, cy);
+    pointer("pointerdown", cx + 80, cy, 2);
+    pointer("pointerup", cx + 80, cy, 2);
+    pointer("pointerdown", cx, cy);
+    pointer("pointermove", cx, cy + 80);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    pointer("pointerup", cx, cy + 80);
+    expect($<HTMLButtonElement>("#btn-undo")!.disabled).toBe(true);
+    expect(errors).toEqual([]);
+  });
 });

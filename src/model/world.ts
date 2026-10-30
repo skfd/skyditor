@@ -77,6 +77,11 @@ export interface Atom {
   readonly area: number;
   readonly bbox: BBox;
   pieces: Piece[];
+  /**
+   * CAP-008: street land a capture took, joining the two atoms named here. It holds land of one area, in pieces
+   * that cover it whole, or no pieces at all while it is street again (undone, or given back).
+   */
+  readonly bridge?: readonly [number, number];
 }
 
 interface AtomBox extends BBox {
@@ -238,6 +243,7 @@ export interface BuildingSet {
 
 export class World {
   readonly atoms: Atom[];
+  readonly bridges: Atom[] = []; // CAP-008, also in `atoms`
   readonly totalLand: number;
   private readonly index = new RBush<AtomBox>();
   private readonly geoms: BuildingGeom[] = [];
@@ -404,9 +410,28 @@ export class World {
     return this.index.search(b).map((x) => x.atom);
   }
 
+  /** The atom under a point. A bridge that is street again is not land (CAP-008). */
   atomAt(x: number, y: number): Atom | null {
-    for (const a of this.atomsIn({ minX: x, minY: y, maxX: x, maxY: y })) if (contains(a.shape, x, y)) return a;
+    for (const a of this.atomsIn({ minX: x, minY: y, maxX: x, maxY: y }))
+      if (a.pieces.length && contains(a.shape, x, y)) return a;
     return null;
+  }
+
+  /** CAP-008: a new bridge, street until a step gives it pieces. It stays in the world for undo and redo. */
+  addBridge(shape: Shape, joins: readonly [number, number]): Atom {
+    const atom: Atom = { id: this.atoms.length, shape, area: area(shape), bbox: bbox(shape), pieces: [], bridge: joins };
+    this.atoms.push(atom);
+    this.bridges.push(atom);
+    this.index.insert({ ...atom.bbox, atom });
+    return atom;
+  }
+
+  /** CAP-002: every piece of the area `p` belongs to, in every block. */
+  areaOf(p: Piece): Piece[] {
+    if (!p.feature) return [p];
+    const out: Piece[] = [];
+    for (const atom of this.atoms) for (const q of atom.pieces) if (q.feature === p.feature) out.push(q);
+    return out;
   }
 
   pieceAt(x: number, y: number): Piece | null {

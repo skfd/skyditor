@@ -23,6 +23,7 @@ export interface Barrier {
   line: Ring;
   cls: string; // LAT-001
   width: number | null; // tagged `width=*`, m
+  name?: string; // CAP-009: which street it is, so two ways of one street count once
 }
 export interface BuildingFeature {
   source: string; // "way/123" (TYPE-011)
@@ -143,7 +144,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Fe
     }
     if (bc) {
       const pts = partialCoords(w);
-      if (pts.length >= 2) f.barriers.push({ id: `way/${w.id}`, line: toRing(pts), cls: bc, width: tagWidth(t) });
+      if (pts.length >= 2) f.barriers.push({ id: `way/${w.id}`, line: toRing(pts), cls: bc, width: tagWidth(t), ...(t.name ? { name: t.name } : {}) });
       continue;
     }
     // LAT-004: highway areas of a barrier class join street space.

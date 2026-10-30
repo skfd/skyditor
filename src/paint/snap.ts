@@ -12,7 +12,8 @@ export type Tool =
   | { type: "paint"; kind: PaintKind }
   | { type: "erase" }
   | { type: "density"; dir: 1 | -1 }
-  | { type: "agree" }; // TYPE-007: accepts the editor's guesses about buildings
+  | { type: "agree" } // TYPE-007: accepts the editor's guesses about buildings
+  | { type: "capture" }; // CAP-001: one area takes another over; it draws an arrow, never a stroke
 
 /** TYPE-006: what the brush acts on. */
 export type Target = "land" | "buildings";

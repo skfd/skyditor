@@ -3,6 +3,7 @@ import { area, toI, toM } from "./geo/clip";
 import { squareAround } from "./geo/project";
 import { type Building, paintable, statusOf } from "./model/buildings";
 import { describeGuess } from "./model/guess";
+import { type CapturePlan, applyCapture, planCapture } from "./model/capture";
 import { History, type Step } from "./model/history";
 import { KINDS, type Kind, TIERS } from "./model/kinds";
 import { type Stage, worldFromText } from "./model/load";
@@ -15,7 +16,7 @@ import { type Target, type Tool, onBuildings } from "./paint/snap";
 import { Stroke, type StrokeEvent, answerWhole, changesBuilding } from "./paint/stroke";
 import { Anims } from "./render/anim";
 import { Camera } from "./render/camera";
-import { COLORS, Renderer, buildingPath, pathOf } from "./render/renderer";
+import { COLORS, Renderer, arrowPath, buildingPath, pathOf } from "./render/renderer";
 import { TUNE } from "./tuning";
 import { Sound } from "./ui/audio";
 import { Badges, osmLink } from "./ui/badges";
@@ -61,6 +62,11 @@ export class App {
   private strokeStart = { sx: 0, sy: 0, t: 0, moved: 0 };
   private cursor: [number, number] | null = null;
   private hover: Piece | Building | null = null; // REN-007 / CORR-004: what a tap here would change
+  private areaCache: { of: Piece; set: ReadonlySet<Piece> } | null = null; // CAP-002
+  /** CAP-003: the arrow being drawn, from the area it started on, and what is under its head. */
+  private capture: {
+    from: Piece; path: [number, number][]; target: Piece | null; area: readonly Piece[] | null; plan: CapturePlan | null;
+  } | null = null;
   private showBuildings = store.get("buildings") !== "off";
   private showOriginals = false;
   private pan: { id: number; x: number; y: number; t: number; vx: number; vy: number } | null = null;
@@ -408,6 +414,12 @@ export class App {
   /** REN-007 / CORR-004: lights up what a tap at this point would change: a piece on land, or a building. */
   private pointAt(wx: number, wy: number) {
     if (!this.world) return;
+    if (this.tool.type === "capture") {
+      // CAP-002: only landuse areas can capture or be captured.
+      const p = this.world.pieceAt(toI(wx), toI(wy));
+      this.hover = p && p.kind !== null && p.kind !== "CTX" ? p : null;
+      return;
+    }
     if (!onBuildings(this.tool, this.target)) {
       // TYPE-015: on land, an unsure building's mark opens its card, so it lights up too.
       this.hover = this.world.markAt(toI(wx), toI(wy), toI(this.markRadius())) ?? this.world.pieceAt(toI(wx), toI(wy));
@@ -606,6 +618,11 @@ export class App {
     const [sx, sy] = this.local(e);
     this.cursor = [sx, sy];
     this.dirty = true;
+    if (this.capture) {
+      // CAP-006: any other button while dragging calls the capture off.
+      if (e.button !== 0) this.cancelCapture();
+      return;
+    }
     if (e.button === 1 || e.button === 2 || (e.button === 0 && this.space)) {
       // CAM-002
       this.pan = { id: e.pointerId, x: sx, y: sy, t: performance.now(), vx: 0, vy: 0 };
@@ -627,6 +644,7 @@ export class App {
       if (p && p.kind && p.kind in KINDS && TOOLS.some((t) => t.id === p.kind)) this.selectTool(p.kind);
       return;
     }
+    if (this.tool.type === "capture") return this.startCapture(e, wx, wy);
     if (!onBuildings(this.tool, this.target)) {
       // TYPE-015: a tap on an unsure building's mark asks what it is; it paints no land.
       const m = this.world.markAt(toI(wx), toI(wy), toI(this.markRadius()));
@@ -664,6 +682,7 @@ export class App {
       return;
     }
     if (!this.world) return;
+    if (this.capture) return this.steerCapture(...this.camera.toWorld(sx, sy));
     if (this.stroke) {
       this.strokeStart.moved = Math.max(this.strokeStart.moved, Math.hypot(sx - this.strokeStart.sx, sy - this.strokeStart.sy));
       const points = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [e];
@@ -688,6 +707,7 @@ export class App {
       document.body.classList.remove("panning");
       return;
     }
+    if (this.capture) return this.endCapture();
     if (!this.stroke) return;
     const s = this.stroke;
     this.stroke = null;
@@ -698,6 +718,61 @@ export class App {
     if (step) this.history.push(step); // PAINT-005 / PAINT-006
     this.syncHistory();
     this.dirty = true;
+  }
+
+  // ---------- capture ----------
+
+  /** CAP-003: a drag from a landuse area starts an arrow; from anywhere else it does nothing. */
+  private startCapture(e: PointerEvent, wx: number, wy: number) {
+    const p = this.world!.pieceAt(toI(wx), toI(wy));
+    if (!p || p.kind === null || p.kind === "CTX") return;
+    this.canvas.setPointerCapture(e.pointerId);
+    this.hover = null;
+    this.capture = { from: p, path: [[wx, wy]], target: null, area: null, plan: null };
+  }
+
+  /** CAP-003 / CAP-004: the arrow follows the pointer; the area under its head says whether it can be taken. */
+  private steerCapture(wx: number, wy: number) {
+    const c = this.capture!;
+    c.path.push([wx, wy]);
+    const p = this.world!.pieceAt(toI(wx), toI(wy));
+    // Over nothing, empty land, or the source's own area there is no target (CAP-006).
+    const target = p && p.kind !== null && p.feature !== c.from.feature ? p : null;
+    if (target === c.target) return;
+    const sameArea = !!target?.feature && target.feature === c.target?.feature;
+    c.target = target;
+    if (!sameArea) c.area = target ? this.world!.areaOf(target) : null;
+    c.plan = target ? planCapture(this.world!, c.from, target) : null;
+  }
+
+  /** CAP-005 / CAP-006 */
+  private endCapture() {
+    const c = this.capture!;
+    this.capture = null;
+    const head = c.path[c.path.length - 1];
+    if (c.target && c.plan) {
+      const { events, step } = applyCapture(this.world!, c.plan);
+      // CAP-005: the arrow pours into the target as it pops.
+      const arrow = arrowPath(c.path, 1 / this.camera.scale);
+      if (arrow) this.anims.flash({ path: arrow, color: KINDS[c.from.kind!].color, cx: head[0], cy: head[1], mode: "ghost" }, performance.now(), 0, TUNE.POP_DURATION);
+      this.handle(events, head);
+      this.history.push(step);
+      this.syncHistory();
+    } else if (c.target) this.handle([{ type: "reject", at: head }], head);
+    this.dirty = true;
+  }
+
+  /** CAP-006 */
+  private cancelCapture() {
+    this.capture = null;
+    this.dirty = true;
+  }
+
+  /** CAP-002: the whole area under the cursor while the capture tool is selected. */
+  private hoverArea(): ReadonlySet<Piece> | null {
+    if (this.tool.type !== "capture" || this.capture || !this.hover || "geom" in this.hover) return null;
+    if (this.areaCache?.of !== this.hover) this.areaCache = { of: this.hover, set: new Set(this.world!.areaOf(this.hover)) };
+    return this.areaCache.set;
   }
 
   private onWheel(e: WheelEvent) {
@@ -794,6 +869,7 @@ export class App {
       case "P":
         return this.togglePhotos(); // PEEK-003
       case "Escape":
+        if (this.capture) return this.cancelCapture(); // CAP-006
         this.hud.toggleHelp(false);
         if (this.photosOn) this.togglePhotos(false);
         return;
@@ -803,13 +879,13 @@ export class App {
   // ---------- undo ----------
 
   private undo() {
-    if (this.stroke) return;
+    if (this.stroke || this.capture) return;
     const s = this.history.undo(); // UNDO-001
     if (s) this.settle(s, "before");
     this.syncHistory();
   }
   private redo() {
-    if (this.stroke) return;
+    if (this.stroke || this.capture) return;
     const s = this.history.redo(); // UNDO-002
     if (s) this.settle(s, "after");
     this.syncHistory();
@@ -821,6 +897,7 @@ export class App {
   /** UNDO-004 / FEEL-006 */
   private settle(step: Step, side: "before" | "after") {
     const now = performance.now();
+    this.areaCache = null;
     const r = this.renderer!;
     for (const a of step.atoms) {
       const shown = side === "before" ? a.before : a.after;
@@ -846,6 +923,7 @@ export class App {
 
   private handle(events: StrokeEvent[], cursor: [number, number]) {
     if (!events.length) return;
+    this.areaCache = null;
     const now = performance.now();
     const r = this.renderer!;
     const s = this.camera.scale;
@@ -906,7 +984,8 @@ export class App {
 
   private updateMix(loaded = false) {
     if (!this.world) return;
-    this.hud.updateMix(this.world.mix(), this.world.totalLand);
+    const mix = this.world.mix();
+    this.hud.updateMix(mix, Object.values(mix).reduce((a, b) => a + b, 0)); // CAP-008: street a capture took counts too
     // HUD-009 / HUD-011
     const n = this.world.disputed().length;
     if (!loaded && this.disputes > 0 && n === 0) this.hud.toast("The map no longer disagrees with itself anywhere");
@@ -969,6 +1048,13 @@ export class App {
           brushPx: this.brushPx,
           cursor: this.cursorLook() === "brush" ? this.cursor : null, // CORR-006: the system cursor shows instead
           hover: this.hover,
+          area: this.hoverArea(),
+          capture: this.capture && {
+            path: this.capture.path,
+            color: KINDS[this.capture.from.kind!].color,
+            target: this.capture.area,
+            ok: !!this.capture.plan,
+          },
           showBuildings: this.showBuildings,
           showOriginals: this.showOriginals,
           imagery: this.imageryOn || this.imageryHeld ? this.tiles : null, // PEEK-001

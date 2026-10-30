@@ -11,6 +11,13 @@ export const BARRIER_HIGHWAY = new Set([
 export const BARRIER_RAILWAY = new Set(["rail", "light_rail", "narrow_gauge"]);
 export const BARRIER_WATERWAY = new Set(["river", "canal"]);
 
+/**
+ * CAP-009: the streets an area of each kind may capture across. Residential spans local streets; business and
+ * industrial land spans city streets up to arterials. Motorways, trunks, ramps (`link`), railways and water never.
+ */
+export const CAPTURE_LOCAL = new Set(["residential", "unclassified", "living_street", "pedestrian", "road"]);
+export const CAPTURE_CITY = new Set([...CAPTURE_LOCAL, "tertiary", "secondary", "primary"]);
+
 /** LAT-001: street classes that stop being barriers when private. */
 export const PRIVATE_LOCAL = new Set(["residential", "living_street"]);
 

@@ -192,7 +192,7 @@ barrier.
 typical width for its class (TUNE-HALFWIDTH-PROPERTY), widened where its tagged `width` plus a verge
 (TUNE-WIDTH-VERGE) reaches farther. Where a separately mapped sidewalk runs along a street, the street space
 reaches TUNE-SIDEWALK-MARGIN past it. Past the kerb (LAT-009), street space never takes in a building. This
-street space is never paintable.
+street space is never paintable, except where a capture takes it (CAP-008).
   Why: careful mappers in most countries stop landuse at the property line, a metre or two past the sidewalk
   (Q-003, `research/landuse-edges/`). A tagged `width` is the carriageway: half of it lands at the kerb.
   Only a mapped sidewalk pins the property line down; the class width is a typical guess. A building front
@@ -637,12 +637,66 @@ of them as a side effect of painting, erasing or a density step: not when paint 
 them, and not when one gets the kind of the other. Land of one area that a change leaves touching inside
 one block becomes one piece.
   Why: two areas side by side are two places someone drew. Painting between them says what the land is, not
-  that they are one place. Joining areas is a decision of its own, made on purpose (Q-012).
+  that they are one place. Joining areas is a decision of its own, made on purpose with the capture tool
+  (CAP-001).
 
 **OVL-006** When new paint touches land of its own kind inside one block, the editor shall add the paint to
 the area it shares the longest edge with; paint that touches none becomes a new area.
   Why: painting up to an area extends it. Paint in a gap between two areas belongs to one of them, not to
   both, and not to a third area squeezed in between.
+
+### Capture
+
+One area takes another over, like an army taking a town: the user draws an arrow from the area that stays to
+the area it takes. It is the only way two areas become one (OVL-005).
+
+**CAP-001** The editor shall offer a *capture* tool (key `C`), with a palette tile after the eraser.
+
+**CAP-002** While the capture tool is selected, when the user points at a landuse area, the editor shall
+highlight all of that area, in every block it covers.
+
+**CAP-003** While the user drags from a landuse area with the capture tool, the editor shall draw a thick
+arrow in that area's colour from where the drag started, along the smoothed path of the pointer, with its
+head at the pointer.
+  Why: a capture is an order, not paint. It reads like moving troops on a war map.
+  Trace: manual
+
+**CAP-004** While a capture arrow is drawn, the editor shall show over the area under its head whether the
+source can capture it (CAP-007): lit up if it can, red if it cannot.
+
+**CAP-005** When the user releases a capture arrow over an area the source can capture, the editor shall
+make that area part of the source as one undo step: the source keeps its name and its link to OSM, the
+target's outline is gone, and the land between them (CAP-008) becomes the source's too. The arrow pours into
+the target, which pops (FEEL-001).
+  Why: the source survives, as an army does that takes a town. There is no split: undo takes a capture back.
+
+**CAP-006** If a capture arrow is released over an area the source cannot capture, then the editor shall
+play the reject feedback (FEEL-004) and change nothing. Released over nothing or over the source, or
+cancelled with the secondary button or `Escape` while dragging, it shall go without a sound or a change.
+
+**CAP-007** The editor shall let an area capture another only when they have the same kind (two tiers are
+two kinds), neither is disputed, the target has no name the source does not share, and they meet inside one
+block or across one street the kind may cross (CAP-009), with nothing between them but that street and gaps
+of empty land narrower than TUNE-CAPTURE-GAP.
+  Why: empty land between two areas is the user's to paint first. A capture joins areas; it does not invent
+  land, and it never silently drops a housing type or a name. A target with a name is captured the other way
+  round, from the named area.
+
+**CAP-008** The editor shall give the source the gaps between the two areas and the stretch of street
+between them, as one outline drawn round both would take them in, and no more of the street than lies
+between the two. Land taken from a street shall go back to being street when the land beside it on either
+side is no longer the source's, or when paint or the eraser reaches it.
+  Why: one area is one outline, so a capture across a street takes the street in, as mappers draw a housing
+  complex over its own lanes or a shopping street over the street it lines. Street land is not something to
+  paint on its own.
+
+**CAP-009** The editor shall let residential areas capture across local streets (residential, unclassified,
+living and pedestrian streets), and commercial, retail and industrial areas across city streets of any size
+as well, up to arterials such as Spadina Avenue in Toronto. Nothing captures across motorways, expressways,
+their ramps, railways, rivers or canals, or across more than one street. The classes are in
+`src/osm/classes.ts`.
+  Why: a housing complex spans its lanes, and a main street's shops face each other across it. A highway
+  divides whatever lies on either side.
 
 ---
 
@@ -704,7 +758,7 @@ while holding Shift, the editor shall shrink or grow the brush within its limits
 TUNE-BRUSH-MAX), one step (TUNE-BRUSH-STEP) per press.
   Trace: manual
 
-**INP-002** When the user presses a tool key (KIND-001, KIND-007, DENS-001), the editor shall select that
+**INP-002** When the user presses a tool key (KIND-001, KIND-007, DENS-001, CAP-001), the editor shall select that
 tool.
   Trace: manual
 
@@ -865,8 +919,8 @@ animation, and the model is updated before the animation starts.
 ### 14.3 HUD
 
 **HUD-001** The editor shall show a palette with the residential ladder as one connected strip of six tiles
-(R1→R6) whose icons grow in height, followed by commercial, retail, industrial, density up/down and the
-eraser.
+(R1→R6) whose icons grow in height, followed by commercial, retail, industrial, density up/down, the
+eraser and the capture tool (CAP-001).
 
 **HUD-002** When the user points at a palette tile, the editor shall show the tile's name, its key, and the
 OSM tags it stands for.
@@ -1208,6 +1262,7 @@ Measure on the demo area first.
 semicolon lists such as `single_family;terrace` a few dozen together. Leaving `residential=*` off says
 "not yet known", not "mixed". Until this is decided, no tag is read as mixed (NAME-007).
 
-**Q-012** How does the user join two landuse areas into one (OVL-005)? Painting never does. Candidates: a
+~~**Q-012** How does the user join two landuse areas into one (OVL-005)? Painting never does. Candidates: a
 gesture that drags from one area into its neighbour, or a choice on the area's card. Until output exists (§15)
-it changes little the user can see: touching areas of one kind are drawn as one surface (REN-004).
+it changes little the user can see: touching areas of one kind are drawn as one surface (REN-004).~~
+Answered: the capture tool (CAP-001 to CAP-009).

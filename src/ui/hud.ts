@@ -31,6 +31,8 @@ export const TOOLS: ToolDef[] = [
   // TYPE-007
   { id: "AGREE", tool: { type: "agree" }, label: "Agree", key: "G", icon: ICONS.AGREE, color: "#4f9d69", tags: "accepts what the editor guessed a building is" },
   { id: "ERASE", tool: { type: "erase" }, label: "Eraser", key: "X", icon: ICONS.ERASE, color: "#9a8f80", tags: "removes painted landuse" },
+  // CAP-001
+  { id: "CAPTURE", tool: { type: "capture" }, label: "Capture", key: "C", icon: ICONS.CAPTURE, color: "#b5523b", tags: "drag from an area onto a neighbour of its kind to take it over" },
 ];
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;

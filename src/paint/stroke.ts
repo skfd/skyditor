@@ -2,6 +2,7 @@
 import { type BBox, type Ring, type Shape, area, bbox, contains, expandBBox, intersect, isEmpty, shapeCentroid, toI, toM } from "../geo/clip";
 import { type Building, statusOf, typeAs, untype } from "../model/buildings";
 import { type BuildingLook, type Kind, KINDS, tierKind } from "../model/kinds";
+import { settleBridges } from "../model/capture";
 import type { Step } from "../model/history";
 import { type Atom, type BuildingSet, type Piece, World, makePiece, normalize } from "../model/world";
 import { TUNE } from "../tuning";
@@ -120,6 +121,7 @@ export class Stroke {
       toI(r),
     );
     for (const atom of this.world.atomsIn(box)) {
+      if (atom.bridge) continue; // CAP-008: street land is never painted; end() gives it back instead
       this.dirty.add(atom);
       for (const p of atom.pieces) {
         if (!isUnit(p, this.limit) || !changes(this.tool, p)) continue;
@@ -249,7 +251,8 @@ export class Stroke {
     for (let i = 0; i <= n; i++) {
       const x = ax + ((bx - ax) * i) / n, y = ay + ((by - ay) * i) / n;
       const p = this.world.pieceAt(toI(x), toI(y));
-      if (!p || p.kind === null || this.densityDone.has(p)) continue;
+      // CAP-008: street land a capture took follows the land beside it (settleBridges).
+      if (!p || p.kind === null || this.densityDone.has(p) || this.world.atoms[p.atom].bridge) continue;
       this.densityDone.add(p);
       const tier = KINDS[p.kind].tier;
       // DENS-004 / DISP-005: disputed context is rejected like any other non-residential land.
@@ -394,8 +397,9 @@ export class Stroke {
         events.push(this.settle(p));
         this.preview.clear();
       } else {
-        // SNAP-004: a tap claims the whole unit piece under it.
-        if (isTap && p && isUnit(p, this.limit) && changes(this.tool, p)) events.push(...this.claim(this.world.atoms[p.atom], p));
+        // SNAP-004: a tap claims the whole unit piece under it. CAP-008: never street land a capture took.
+        if (isTap && p && !this.world.atoms[p.atom].bridge && isUnit(p, this.limit) && changes(this.tool, p))
+          events.push(...this.claim(this.world.atoms[p.atom], p));
         // DISP-005: a press held on disputed context without moving is no tap, and changes nothing there.
         if (!isTap && !this.rejected && settles(this.tool, p)) {
           this.rejected = true;
@@ -416,10 +420,28 @@ export class Stroke {
       }
       this.preview.clear();
     }
+    if (!this.onBuildings) events.push(...this.settleBridges());
     this.coverage.clear(); // SNAP-006
     const atoms = [...this.before].filter(([a, b]) => a.pieces !== b).map(([atom, before]) => ({ atom, before, after: atom.pieces }));
     const buildings = this.buildingSteps();
     return { events, step: atoms.length || buildings.length ? { atoms, buildings } : null };
+  }
+
+  /** CAP-008: street land goes back to being street where paint or the eraser reached it, or its sides left. */
+  private settleBridges(): StrokeEvent[] {
+    const events: StrokeEvent[] = [];
+    const reached = (b: Atom, p: Piece) =>
+      (this.tool.type === "paint" || this.tool.type === "erase") && changes(this.tool, p) &&
+      !isEmpty(intersect(this.strokeShapeNear(b.bbox), b.shape));
+    for (const [atom, pieces] of settleBridges(this.world, reached)) {
+      this.snapshot(atom);
+      const old = atom.pieces;
+      atom.pieces = pieces;
+      if (pieces.length) continue;
+      const [cx, cy] = shapeCentroid(atom.shape);
+      events.push({ type: "claim", piece: null, region: atom.shape, prevKind: old[0].kind, at: [toM(cx), toM(cy)], whole: true });
+    }
+    return events;
   }
 
   /** TYPE-011 */

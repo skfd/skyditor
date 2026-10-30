@@ -28,7 +28,18 @@ export const COLORS = {
   unsureHover: "#c27a06", // CORR-004: the mark under the cursor, as a badge darkens on hover
   agree: "#4f9d69", // TYPE-007
   camera: "#2b7de9", // PEEK-003: where a photo was taken
+  capture: "#b5523b", // CAP-001
+  captureOk: "#fffbe8", // CAP-004: an area the arrow can take
+  captureNo: "#d6363c", // CAP-004: an area it cannot
 };
+
+/** CAP-003 / CAP-004: a capture arrow being drawn. */
+export interface CaptureView {
+  path: [number, number][]; // m, from where the drag started to the pointer
+  color: string; // the source's colour
+  target: readonly Piece[] | null; // the whole area under its head, if any
+  ok: boolean; // whether the source can capture it
+}
 
 export interface RenderState {
   camera: Camera;
@@ -38,6 +49,8 @@ export interface RenderState {
   brushPx: number;
   cursor: [number, number] | null; // screen px
   hover: Piece | Building | null; // REN-007 / CORR-004: a piece, or a building while the brush acts on buildings
+  area: ReadonlySet<Piece> | null; // CAP-002: every piece of the area under the cursor, lit up like the hover
+  capture: CaptureView | null; // CAP-003
   showBuildings: boolean;
   showOriginals: boolean;
   imagery: TileCache | null; // PEEK-001: set while the imagery peek is on
@@ -109,6 +122,8 @@ interface Base {
   // What it was drawn from. Pieces and buildings are replaced, never changed, so identity is enough.
   world: World;
   hover: Piece | null; // REN-007
+  area: ReadonlySet<Piece> | null; // CAP-002
+  atomCount: number; // CAP-008: a capture across a street adds an atom
   buildings: boolean;
   pieces: (readonly Piece[])[]; // of land.atoms
   items: (Building[] | undefined)[]; // of the set outside every atom, then of each of land.atoms
@@ -127,6 +142,7 @@ export function toolColor(t: Tool): string {
   if (t.type === "paint") return KINDS[t.kind].color;
   if (t.type === "erase") return "#9a8f80";
   if (t.type === "agree") return COLORS.agree;
+  if (t.type === "capture") return COLORS.capture;
   return t.dir > 0 ? "#e2683c" : "#6f9bd1";
 }
 
@@ -185,7 +201,6 @@ export class Renderer {
   private baseCtx: CanvasRenderingContext2D | null = null;
   private readonly pieceGfx = new WeakMap<Piece, PieceGfx>();
   private readonly atomPaths = new Map<number, Path2D>();
-  private readonly atomById = new Map<number, Atom>();
   private lots!: Path2D;
   private water!: Path2D;
   private readonly setGfx = new Map<number, SetGfx>(); // TYPE-004, per building set
@@ -206,8 +221,6 @@ export class Renderer {
     this.world = world;
     this.base = null;
     this.atomPaths.clear();
-    this.atomById.clear();
-    for (const a of world.atoms) this.atomById.set(a.id, a);
     const lots = new Path2D();
     for (const a of world.atoms) {
       const p = pathOf(a.shape);
@@ -243,7 +256,7 @@ export class Renderer {
   }
 
   gfx(p: Piece): PieceGfx {
-    const pieces = this.atomById.get(p.atom)?.pieces;
+    const pieces = this.world.atoms[p.atom]?.pieces; // CAP-008: bridges join the atoms after load
     const known = this.pieceGfx.get(p);
     const current = !!pieces?.includes(p);
     if (known && (known.of === pieces || !current)) return known;
@@ -546,13 +559,15 @@ export class Renderer {
       ctx.restore();
     }
 
-    const painting = st.tool.type !== "density" && !onBuildings(st.tool, st.target); // TYPE-006: no lattice hints on buildings
+    // TYPE-006: no lattice hints on buildings. CAP-001: a capture takes whole areas, so it needs none either.
+    const painting = st.tool.type !== "density" && st.tool.type !== "capture" && !onBuildings(st.tool, st.target);
     // REN-006: lattice hints around the cursor.
     if (st.cursor && painting && !st.panning) {
       const [wx, wy] = cam.toWorld(st.cursor[0], st.cursor[1]);
       const R = TUNE.HINT_RADIUS * st.brushPx * px;
       ctx.lineWidth = 1.25 * px;
       for (const a of this.world.atomsIn({ minX: toI(wx - R), minY: toI(wy - R), maxX: toI(wx + R), maxY: toI(wy + R) })) {
+        if (a.bridge) continue; // CAP-008: street land, not a block
         const dx = Math.max(toM(a.bbox.minX) - wx, 0, wx - toM(a.bbox.maxX));
         const dy = Math.max(toM(a.bbox.minY) - wy, 0, wy - toM(a.bbox.maxY));
         const d = Math.hypot(dx, dy);
@@ -566,6 +581,7 @@ export class Renderer {
     }
 
     if (st.stroke) this.drawStroke(st.stroke, st.tool, s, now);
+    if (st.capture) this.drawCapture(st.capture, px);
 
     // Flashes.
     for (const f of st.anims.flashes) {
@@ -698,7 +714,7 @@ export class Renderer {
     for (const p of slabs) {
       const g = this.gfx(p);
       const top = !g.group ? g.path : lastOf.get(g.group) === p ? g.group.path : null;
-      this.drawSlab(p, top, s, now, st.anims, p === st.hover);
+      this.drawSlab(p, top, s, now, st.anims, p === st.hover || !!st.area?.has(p));
     }
 
     const marks: [number, number][] = [];
@@ -780,6 +796,8 @@ export class Renderer {
       canvas, scale: cam.scale, ox: ox + m, oy: oy + m, land,
       world: this.world,
       hover: hoveredPiece(st),
+      area: st.area,
+      atomCount: this.world.atoms.length,
       buildings: st.showBuildings,
       pieces: land.atoms.map((a) => a.pieces),
       items: [land.sets.get(-1)?.items, ...land.atoms.map((a) => land.sets.get(a.id)?.items)],
@@ -791,6 +809,7 @@ export class Renderer {
   private baseFits(b: Base, st: RenderState, ox: number, oy: number): boolean {
     const cam = st.camera;
     if (b.world !== this.world || b.hover !== hoveredPiece(st) || b.buildings !== st.showBuildings) return false;
+    if (b.area !== st.area || b.atomCount !== this.world.atoms.length) return false;
     // REN-017: stretched only while zooming, and only so far.
     const r = cam.scale / b.scale;
     if (r !== 1 && (!cam.settling || r > BASE_STRETCH || r < 1 / BASE_STRETCH)) return false;
@@ -934,6 +953,37 @@ export class Renderer {
     }
   }
 
+  /** CAP-004: the area under the arrow's head, lit or red; CAP-003: the arrow, over it. */
+  private drawCapture(c: CaptureView, px: number) {
+    const { ctx } = this;
+    if (c.target?.length) {
+      const path = new Path2D();
+      for (const p of c.target) path.addPath(pathOf(p.shape));
+      const color = c.ok ? COLORS.captureOk : COLORS.captureNo;
+      ctx.globalAlpha = c.ok ? 0.45 : 0.35;
+      ctx.fillStyle = color;
+      ctx.fill(path, "evenodd");
+      ctx.globalAlpha = 1;
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = c.ok ? "rgba(255, 252, 240, 0.95)" : COLORS.captureNo;
+      ctx.lineWidth = 2.5 * px;
+      ctx.stroke(path);
+    }
+    const arrow = arrowPath(c.path, px);
+    if (!arrow) return;
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(255, 252, 246, 0.95)";
+    ctx.lineWidth = 5 * px;
+    ctx.stroke(arrow);
+    ctx.fillStyle = c.color;
+    ctx.globalAlpha = 0.92;
+    ctx.fill(arrow, "nonzero");
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = darken(c.color, 0.55);
+    ctx.lineWidth = 1.5 * px;
+    ctx.stroke(arrow);
+  }
+
   private drawCursor(st: RenderState, now: number) {
     const { ctx } = this;
     const [sx0, sy] = st.cursor!;
@@ -941,6 +991,21 @@ export class Renderer {
     const color = toolColor(st.tool);
     const tint = st.anims.rejectTint(now);
     ctx.beginPath();
+    if (st.tool.type === "capture") {
+      // CAP-001: a capture starts from the area under the pointer, so the cursor is a small reticle.
+      ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.stroke();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = tint > 0 ? `rgba(214, 60, 60, ${0.5 + tint / 2})` : color;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+      return;
+    }
     if (st.tool.type === "density") {
       // Density tools act on what is under the pointer, so the cursor is a small reticle with an arrow.
       ctx.arc(sx, sy, 9, 0, Math.PI * 2);
@@ -975,4 +1040,64 @@ export class Renderer {
     ctx.fillStyle = ctx.strokeStyle;
     ctx.fill();
   }
+}
+
+/**
+ * CAP-003: the arrow along a drag, in metres, with sizes in screen pixels (`px` metres each): the path
+ * resampled and rounded off (Chaikin), a body that thickens from a narrow tail, and a broad head ending at the
+ * pointer. Null while the drag is too short to point anywhere.
+ */
+export function arrowPath(path: readonly [number, number][], px: number): Path2D | null {
+  const step = 6 * px;
+  let pts: [number, number][] = [];
+  for (const p of path) {
+    const last = pts[pts.length - 1];
+    if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) >= step) pts.push(p);
+  }
+  const end = path[path.length - 1];
+  if (pts.length && pts[pts.length - 1] !== end) pts.push(end);
+  if (pts.length < 2) return null;
+  for (let k = 0; k < 3; k++) {
+    const out: [number, number][] = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      out.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    out.push(pts[pts.length - 1]);
+    pts = out;
+  }
+  const along = [0];
+  for (let i = 1; i < pts.length; i++) along.push(along[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = along[along.length - 1];
+  if (total < 12 * px) return null;
+  const head = Math.min(26 * px, total * 0.45);
+  const neck = total - head;
+  const [tail, body, wing] = [3 * px, 8 * px, 16 * px]; // half-widths
+  const left: [number, number][] = [];
+  const right: [number, number][] = [];
+  let last = 0;
+  for (let i = 0; i < pts.length && along[i] <= neck; i++) {
+    const [a, b] = [pts[Math.max(0, i - 1)], pts[Math.min(pts.length - 1, i + 1)]];
+    const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+    const d = Math.hypot(dx, dy) || 1;
+    const w = tail + (body - tail) * Math.min(1, along[i] / Math.max(neck, 1e-9));
+    left.push([pts[i][0] - (dy / d) * w, pts[i][1] + (dx / d) * w]);
+    right.push([pts[i][0] + (dy / d) * w, pts[i][1] - (dx / d) * w]);
+    last = i;
+  }
+  // The head points from the neck to the pointer.
+  const [nx, ny] = pts[last];
+  const tip = pts[pts.length - 1];
+  const [hx, hy] = [tip[0] - nx, tip[1] - ny];
+  const hd = Math.hypot(hx, hy) || 1;
+  const [ux, uy] = [-hy / hd, hx / hd];
+  const p = new Path2D();
+  p.moveTo(left[0][0], left[0][1]);
+  for (const q of left) p.lineTo(q[0], q[1]);
+  p.lineTo(nx + ux * wing, ny + uy * wing);
+  p.lineTo(tip[0], tip[1]);
+  p.lineTo(nx - ux * wing, ny - uy * wing);
+  for (let i = right.length - 1; i >= 0; i--) p.lineTo(right[i][0], right[i][1]);
+  p.closePath();
+  return p;
 }

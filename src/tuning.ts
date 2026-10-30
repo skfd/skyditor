@@ -55,6 +55,8 @@ export const TUNE = {
   STRAIGHTEN: 0.5, // TUNE-STRAIGHTEN: largest stray from a straight line, × brush radius, of an outline stretch that follows nothing
   SIMPLIFY: 0.4, // TUNE-SIMPLIFY: simplification tolerance of committed freeform shapes, m
   SLIVER_AREA: 40, // TUNE-SLIVER-AREA: pieces smaller than this get merged after a change, m²
+  CAPTURE_GAP: 4, // TUNE-CAPTURE-GAP: widest gap of empty land a capture fills (CAP-007), m
+  CAPTURE_REACH: 60, // TUNE-CAPTURE-REACH: widest street a capture can take in (CAP-008), m
   PREVIEW_INTERVAL: 50, // TUNE-PREVIEW-INTERVAL: maximum freeform preview staleness, ms
 
   // Buildings

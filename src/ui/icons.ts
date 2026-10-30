@@ -19,6 +19,8 @@ export const ICONS: Record<string, string> = {
   // TYPE-007: a tick over a house — "yes, that's what it is".
   AGREE: svg(`${ground}<path d="M4 24v-8l6-5 6 5v8h-4v-4h-4v4z" opacity="0.55"/><path d="M14 13l4 4 7-8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
   ERASE: svg(`<path d="M15.5 5.5l7 7-10 10H8l-3.5-3.5z M8.6 13.4l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M14 22.5h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>`),
+  // CAP-001: an arrow sweeping from one area onto the next.
+  CAPTURE: svg(`<rect x="2.5" y="17" width="8" height="8" rx="1.2" opacity="0.45"/><path d="M6.5 16C7 10 11 6.5 17 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M15.5 1.8l8 4.7-8 4.7z"/>`),
   // Map controls (HUD-006) and layer toggles (HUD-007).
   UNDO: svg(`<path d="M10 6l-5 5 5 5M5.5 11h11a6 6 0 0 1 0 12H12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`),
   REDO: svg(`<path d="M18 6l5 5-5 5M22.5 11h-11a6 6 0 0 0 0 12H16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`),
