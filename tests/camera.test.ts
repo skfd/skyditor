@@ -11,7 +11,7 @@ const camera = () => {
 };
 
 describe("camera", () => {
-  it("CAM-005: zooming stays within its limits and the view centre stays within the area", () => {
+  it("CAM-009: zooming stays within its limits, and on the demo or a file the view centre stays within the area", () => {
     const c = camera();
     const settle = () => { for (let t = 0; t < 4000; t += 16) c.update(16, t); };
     c.zoomBy(1e6, 700, 100);
@@ -23,6 +23,14 @@ describe("camera", () => {
     c.panBy(-1e7, 1e7);
     expect(c.cx).toBe(1000);
     expect(c.cy).toBe(-1000);
+  });
+
+  it("CAM-009: on a live map the view centre goes anywhere", () => {
+    const c = camera();
+    c.bounds = null;
+    c.panBy(-1e6, 1e6);
+    expect(c.cx).toBeGreaterThan(1000);
+    expect(c.cy).toBeLessThan(-1000);
   });
 
   it("CAM-007: a zoom button step zooms towards the centre of the view", () => {

@@ -7,7 +7,8 @@ import { TUNE } from "../src/tuning";
 const key = (id: string) => id.slice("TUNE-".length).replace(/-/g, "_");
 
 describe("§16 tuning knobs", () => {
-  const text = readFileSync(new URL("../REQUIREMENTS.md", import.meta.url), "utf8");
+  // Retired requirements (struck through) may name knobs that are gone.
+  const text = readFileSync(new URL("../REQUIREMENTS.md", import.meta.url), "utf8").replace(/~~[\s\S]*?~~/g, "");
   // "TUNE-POP-*" names every knob with that prefix.
   const named = [...new Set(text.match(/TUNE-[A-Z0-9-]+\*?/g) ?? [])].sort();
   const keys = Object.keys(TUNE);

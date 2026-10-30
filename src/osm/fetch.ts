@@ -1,4 +1,4 @@
-// Network access to public OSM services (LOAD-002, LOAD-003).
+// Network access to public OSM services (LOAD-003, LOAD-018).
 import type { LonLatBounds } from "../geo/project";
 
 const OVERPASS = "https://overpass-api.de/api/interpreter";
@@ -69,7 +69,7 @@ export interface Place {
   lon: number;
 }
 
-/** LOAD-002: place search via Nominatim. */
+/** LOAD-018: place search via Nominatim. */
 export async function searchPlaces(q: string): Promise<Place[]> {
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`;
   const res = await withTimeout(url, { headers: { Accept: "application/json" } }, 15_000);

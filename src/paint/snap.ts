@@ -31,13 +31,21 @@ export const unitLimit = (radiusM: number) =>
 /** SNAP-001 / CORR-002: whether `p` is all-or-nothing for a brush with this unit limit. NAME-002: a named area always is. */
 export const isUnit = (p: Piece, limit: number) => !!p.whole || (!p.drawn && p.area <= limit);
 
-/** NAME-003: a tool that would split or wipe out a named residential area; only a tier may change one. */
-export const rejects = (tool: Tool, p: Piece | null) =>
-  !!p?.whole && (tool.type === "erase" || (tool.type === "paint" && tierOf(tool.kind) === undefined));
+/** LOAD-015: part of a named residential area not loaded whole yet (`loading`, World.loading), which nothing changes. */
+export const stillLoading = (p: Piece | null, loading?: ReadonlySet<string>) =>
+  !!p?.whole && !!p.source && !!loading?.has(p.source);
 
-/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002, NAME-003). */
-export function changes(tool: Tool, p: Piece): boolean {
-  if (isProtected(p) || rejects(tool, p)) return false;
+/**
+ * NAME-003: a tool that would split or wipe out a named residential area; only a tier may change one.
+ * LOAD-015: while the area is still loading, no paint tool may.
+ */
+export const rejects = (tool: Tool, p: Piece | null, loading?: ReadonlySet<string>) =>
+  !!p?.whole &&
+  (tool.type === "erase" || (tool.type === "paint" && (tierOf(tool.kind) === undefined || stillLoading(p, loading))));
+
+/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002, NAME-003, LOAD-015). */
+export function changes(tool: Tool, p: Piece, loading?: ReadonlySet<string>): boolean {
+  if (isProtected(p) || rejects(tool, p, loading)) return false;
   if (tool.type === "paint") return p.kind !== tool.kind || !!p.rival;
   if (tool.type === "erase") return p.kind !== null;
   return false;
@@ -97,7 +105,7 @@ export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, 
   const limit = unitLimit(radiusM);
   // SNAP-102: only open pieces the stroke touches, never context, never pieces already of the kind.
   const open = atom.pieces.filter(
-    (p) => !isUnit(p, limit) && changes(tool, p) && !isEmpty(intersect(stroke, p.shape)),
+    (p) => !isUnit(p, limit) && changes(tool, p, world.loading) && !isEmpty(intersect(stroke, p.shape)),
   );
   if (open.length === 0) return null;
   const eligible = union(...open.map((p) => p.shape));

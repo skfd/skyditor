@@ -255,7 +255,6 @@ export class World {
   private readonly fenceCache = new Map<number, Shape>();
   // LOAD-015 / LOAD-021: OSM landuse areas (`way/1`, `relation/2`) only partly loaded so far, on a live map.
   readonly loading = new Set<string>();
-  waiting: Shape[] = []; // LOAD-012: land of blocks not loaded whole yet, render only
   overlay: AreaFeature[] = []; // IMP-003, render only
   issues: TagIssue[] = []; // IMP-014, render only
   readonly originals: AreaFeature[] = []; // IMP-009, render only
@@ -496,7 +495,8 @@ export class World {
 
   /**
    * NAME-008: a label candidate on each part of a named area (its biggest piece in each block); NAME-009 shows
-   * one where they crowd. NAME-005: the biggest part of a named residential area still unspecified asks what it is.
+   * one where they crowd. NAME-005: the biggest part of a named residential area still unspecified asks what it is,
+   * once it is loaded whole (LOAD-015).
    */
   labels(): Label[] {
     const by = new Map<string, { parts: Piece[]; area: number }>();
@@ -523,7 +523,7 @@ export class World {
           width: toM(p.bbox.maxX - p.bbox.minX),
           area,
           part: p.area,
-          quest: p === biggest && !!p.whole && p.kind === "RU",
+          quest: p === biggest && !!p.whole && p.kind === "RU" && !this.loading.has(source), // LOAD-015
         });
     }
     return out;

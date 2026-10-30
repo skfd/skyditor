@@ -5,7 +5,6 @@
 export const TUNE = {
   // Geometry and loading
   GEOM_SCALE: 100, // TUNE-GEOM-SCALE: integer units per metre (1 cm resolution)
-  AREA_SIDE: 1200, // TUNE-AREA-SIDE: side of a searched area, m
   TILE_SIDE: 600, // TUNE-TILE-SIDE: side of one loaded tile of the live map, m (LOAD-010)
   LOAD_MARGIN: 200, // TUNE-LOAD-MARGIN: land fetched past a tile's edge so the blocks crossing it close, m (LOAD-011)
   LOAD_AHEAD: 300, // TUNE-LOAD-AHEAD: land loaded past the edge of the view, m

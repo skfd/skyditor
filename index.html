@@ -61,6 +61,7 @@
     <!-- TYPE-005 -->
     <div id="hint" role="status"></div>
     <div id="toast" role="status"></div>
+    <div id="busy" role="status" aria-live="polite">Loading the map…</div>
     <!-- HUD-005 -->
     <div id="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors<span id="imagery-credit" hidden></span></div>
     <!-- PEEK-003 -->
@@ -120,11 +121,6 @@
           <input type="search" placeholder="Search a place, or lat, lon" autocomplete="off" />
           <button type="submit">Go</button>
         </form>
-        <div id="sizes"><span>Area</span>
-          <button data-side="800" type="button">S · 0.8 km</button>
-          <button data-side="1200" type="button">M · 1.2 km</button>
-          <button data-side="2000" type="button">L · 2 km</button>
-        </div>
         <ul id="results"></ul>
         <div class="or">or drop an <code>.osm</code> / Overpass JSON file anywhere — <button id="btn-file" class="link" type="button">browse</button></div>
         <input id="file" type="file" accept=".osm,.xml,.json" hidden />

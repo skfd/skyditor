@@ -507,6 +507,25 @@ button.disputes.todo span {
 }
 
 /* ---------- toast ---------- */
+/* LOAD-012: land around the view is loading. */
+#busy {
+  position: fixed;
+  top: 64px;
+  left: 12px;
+  padding: 5px 11px;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  color: var(--ink-soft);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 400ms;
+}
+#busy.show {
+  opacity: 1;
+  transition-delay: 300ms; /* a quick tile never flickers it */
+}
 #toast {
   position: fixed;
   top: 64px;
@@ -695,32 +714,12 @@ button.primary:active {
   outline: none;
   border-color: var(--r3);
 }
-#search button,
-#sizes button {
+#search button {
   padding: 8px 14px;
   border: 1.5px solid var(--edge);
   border-radius: 12px;
   background: #fff;
   font-weight: 700;
-}
-#sizes {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  align-items: center;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-#sizes button {
-  padding: 3px 9px;
-  border-radius: 9px;
-  font-size: 12px;
-}
-#sizes button.on {
-  border-color: var(--r3);
-  background: #fff6e8;
-  color: var(--ink);
 }
 #results {
   list-style: none;

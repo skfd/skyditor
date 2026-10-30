@@ -242,6 +242,11 @@ export class Hud {
     $("#help").classList.toggle("show", force);
   }
 
+  /** LOAD-012: land around the view is loading. */
+  busy(on: boolean) {
+    $("#busy").classList.toggle("show", on);
+  }
+
   toast(msg: string, kind: "info" | "error" = "info") {
     const t = $("#toast");
     t.textContent = msg;

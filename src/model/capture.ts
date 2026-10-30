@@ -30,12 +30,15 @@ function anchor(world: World, p: Piece): Piece {
 
 /**
  * CAP-007: what `from` capturing the area of `to` would take, or null when it may not. Both must be land
- * (not context, not void) of different areas; the caller treats the source's own area as no target at all.
+ * (not context, not void) of different areas, each loaded whole (LOAD-021); the caller treats the source's own
+ * area as no target at all.
  */
 export function planCapture(world: World, from: Piece, to: Piece): CapturePlan | null {
   if (from.kind === null || from.kind === "CTX" || to.kind === null || to.kind === "CTX") return null;
   if (!from.feature || from.feature === to.feature) return null;
   if (from.kind !== to.kind) return null; // two tiers are two kinds
+  // LOAD-021: only areas loaded whole; painted ones (`new/N`) always are.
+  if (world.loading.has(from.feature) || (to.feature && world.loading.has(to.feature))) return null;
   if (to.name !== undefined && to.name !== from.name) return null; // the target's name would be lost
   const mine = world.areaOf(from);
   if (mine.some((p) => p.rival) || world.areaOf(to).some((p) => p.rival)) return null;

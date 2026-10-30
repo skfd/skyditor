@@ -1,7 +1,7 @@
 // Glue: input, the frame loop, and turning model events into feedback.
 import { area, toI, toM } from "./geo/clip";
-import { squareAround } from "./geo/project";
-import { type Tile, TileGrid } from "./geo/tiles";
+import { mapHash, osmZoom, parseMapHash, squareAround, zoomScale } from "./geo/project";
+import { type Tile, TileGrid, tileKey } from "./geo/tiles";
 import { type Building, paintable, statusOf } from "./model/buildings";
 import { describeGuess } from "./model/guess";
 import { type CapturePlan, applyCapture, planCapture } from "./model/capture";
@@ -14,7 +14,7 @@ import { fetchArea, searchPlaces } from "./osm/fetch";
 import { IMAGERY, TileCache } from "./osm/imagery";
 import { type Photo, bestPhoto, photoLinks, searchPanoramax } from "./osm/photos";
 import { PhotoPanel } from "./ui/photos";
-import { type Target, type Tool, onBuildings } from "./paint/snap";
+import { type Target, type Tool, onBuildings, stillLoading } from "./paint/snap";
 import { Stroke, type StrokeEvent, answerWhole, changesBuilding } from "./paint/stroke";
 import { Anims } from "./render/anim";
 import { Camera } from "./render/camera";
@@ -94,6 +94,15 @@ export class App {
   private lastFrame = performance.now();
   private loadingBusy = false;
   private live: LiveMap | null = null; // LOAD-010: the map grows as land loads; null for the demo or a file (LOAD-017)
+  private inFlight = new Map<string, LiveMap>(); // tiles being fetched, by tile key
+  private arrived: { t: Tile; text: string }[] = []; // fetched, waiting for a frame without a stroke
+  private failedAt = new Map<string, number>(); // LOAD-020
+  private failNoted = false;
+  private captureWant: string | null = null; // LOAD-021: a partly loaded area the capture tool points at
+  private startScale: number | null = null; // LOAD-018 / LOAD-019: the zoom a new live map opens at
+  private wantedAt = 0;
+  private landLoading = false; // LOAD-012
+  private hashAt = 0;
   private readonly badges = new Badges(); // REN-016 / HUD-012
   private readonly labels = new Labels(); // NAME-008
   private readonly perf = new PerfMeter(); // HUD-013
@@ -168,41 +177,101 @@ export class App {
     }, "Tallinn · Kristiine (demo)", "#demo");
   }
 
-  private loadAround(lat: number, lon: number, name: string) {
+  /**
+   * LOAD-018: a searched place, or a `#map=` link (LOAD-019). Near the live map shown, the camera flies there and
+   * the map loads around it; elsewhere a new map starts, once the user agrees to drop their changes (LOAD-022).
+   */
+  private loadAround(lat: number, lon: number, name: string, zoom: number | null = null) {
     this.hud.showStart(false);
+    const scale = zoom === null ? TUNE.START_ZOOM : zoomScale(zoom, lat);
+    const live = this.live;
+    if (live && this.world && live.grid.reaches(lat, lon)) {
+      const p = live.grid.proj;
+      this.camera.flyTo(p.x(lon), p.y(lat), scale, this.anims.dur(900), performance.now());
+      this.hud.setPlace(name);
+      this.dirty = true;
+      return;
+    }
+    if (this.world && this.history.canUndo && !window.confirm(`Start a new map at ${name}? The changes you made here will be lost.`)) return;
     // LOAD-013: one projection and tile grid for the whole map, fixed where it began.
-    const live = new LiveMap(TileGrid.at(lat, lon));
-    const half = (Number(store.get("side")) || TUNE.AREA_SIDE) / 2;
-    const [first, ...rest] = live.grid.around({ minX: -half, minY: -half, maxX: half, maxY: half }, 0); // LOAD-010
-    const hash = `#map=${lat.toFixed(5)}/${lon.toFixed(5)}`; // LOAD-009
+    const next = new LiveMap(TileGrid.at(lat, lon));
+    const first: Tile = { i: 0, j: 0 };
+    this.startScale = scale;
     void this.load(async (stage) => {
       stage("fetching");
-      const text = await fetchArea(live.fetchBounds(first)); // LOAD-003
+      const text = await fetchArea(next.fetchBounds(first)); // LOAD-003
       stage("blocks");
       await new Promise((r) => setTimeout(r, 0));
-      return { world: live.add(first, text).world };
-    }, name, hash, live).then((ok) => {
-      if (ok) void this.loadMore(live, rest);
-    });
+      return { world: next.add(first, text).world };
+    }, name, mapHash(osmZoom(scale, lat), lat, lon), next);
   }
 
-  /** LOAD-010: more land, TUNE-LOAD-PARALLEL tiles at a time, while this is still the map shown. */
-  private async loadMore(live: LiveMap, tiles: Tile[]) {
-    const queue = [...tiles];
-    let failed = false;
-    const worker = async () => {
-      for (let t = queue.shift(); t && this.live === live; t = queue.shift()) {
-        try {
-          const text = await fetchArea(live.fetchBounds(t)); // LOAD-003
-          if (this.live === live) this.grew(live.add(t, text));
-        } catch (e) {
+  /**
+   * LOAD-010: the tiles to fetch next, TUNE-LOAD-PARALLEL at a time: first the rest of named areas in view that are
+   * not loaded whole (LOAD-015) and of the area the capture tool points at (LOAD-021), then the land in view and
+   * TUNE-LOAD-AHEAD around it, nearest the centre first, while zoomed in closer than TUNE-LOAD-ZOOM.
+   */
+  private wantLand(now: number) {
+    const live = this.live;
+    if (!live || !this.world || this.loadingBusy || now - this.wantedAt < 200) return;
+    this.wantedAt = now;
+    const view = this.camera.view();
+    const wanted: Tile[] = [];
+    const near = { minX: toI(view.minX - TUNE.LOAD_AHEAD), minY: toI(view.minY - TUNE.LOAD_AHEAD), maxX: toI(view.maxX + TUNE.LOAD_AHEAD), maxY: toI(view.maxY + TUNE.LOAD_AHEAD) };
+    // Zoomed out, only an area the user points at loads: named areas at the edge of a wide view would each pull
+    // in the next, across the whole city.
+    const close = this.camera.scale >= TUNE.LOAD_ZOOM;
+    if (close) for (const id of live.namedLoading(near)) wanted.push(...live.tilesFor(id));
+    if (this.captureWant) wanted.push(...live.tilesFor(this.captureWant));
+    if (close) wanted.push(...live.grid.around(view, TUNE.LOAD_AHEAD));
+    for (const t of wanted) {
+      if (this.inFlight.size >= TUNE.LOAD_PARALLEL) break;
+      const key = tileKey(t);
+      if (live.tiles.has(key) || this.inFlight.has(key) || this.arrived.some((a) => tileKey(a.t) === key)) continue;
+      const failed = this.failedAt.get(key);
+      if (failed !== undefined && now - failed < TUNE.LOAD_RETRY) continue; // LOAD-020
+      this.fetchTile(live, t);
+    }
+  }
+
+  private fetchTile(live: LiveMap, t: Tile) {
+    const key = tileKey(t);
+    this.inFlight.set(key, live);
+    this.dirty = true;
+    fetchArea(live.fetchBounds(t)) // LOAD-003
+      .then(
+        (text) => {
+          if (this.live !== live) return;
+          this.arrived.push({ t, text });
+          this.failedAt.delete(key);
+          this.failNoted = false;
+        },
+        (e) => {
+          // LOAD-020: said once, until land loads again; the tile is asked for again later if still wanted.
           console.error(e);
-          if (!failed) this.hud.toast(`Couldn't load more of the map: ${(e as Error).message}`, "error");
-          failed = true;
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: TUNE.LOAD_PARALLEL }, worker));
+          if (this.live !== live) return;
+          this.failedAt.set(key, performance.now());
+          if (!this.failNoted) this.hud.toast(`Couldn't load more of the map: ${(e as Error).message}`, "error");
+          this.failNoted = true;
+        },
+      )
+      .finally(() => {
+        if (this.inFlight.get(key) === live) this.inFlight.delete(key);
+        this.dirty = true;
+      });
+  }
+
+  /** LOAD-010: one arrived tile joins the map per frame, and none while a stroke is on (FEEL-009). */
+  private takeLand() {
+    const live = this.live;
+    if (!live || this.stroke || !this.arrived.length) return;
+    const { t, text } = this.arrived.shift()!;
+    try {
+      this.grew(live.add(t, text));
+    } catch (e) {
+      console.error(e);
+      this.failedAt.set(tileKey(t), performance.now());
+    }
   }
 
   /** LOAD-013: new blocks joined the map. Nothing already loaded changes, undo included. */
@@ -210,8 +279,6 @@ export class App {
     const world = g.world;
     for (const j of g.joined) this.history.include(j.set, j.items);
     this.renderer?.setWorld(world);
-    const f = world.features.frame;
-    this.camera.bounds = { minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) };
     this.badges.set(world.issues);
     this.areaCache = null;
     // FEEL-007: the new blocks' landuse pops in.
@@ -222,17 +289,28 @@ export class App {
     this.dirty = true;
   }
 
+  /** LOAD-019: the link follows the view on a live map. */
+  private followHash(now: number) {
+    const live = this.live;
+    if (!live || this.loadingBusy || now - this.hashAt < 500) return;
+    this.hashAt = now;
+    const p = live.grid.proj;
+    const lat = p.lat(this.camera.cy), lon = p.lon(this.camera.cx);
+    const h = mapHash(osmZoom(this.camera.scale, lat), lat, lon);
+    if (h !== location.hash) history.replaceState(null, "", h);
+  }
+
   private loadFile(file: File) {
     this.hud.showStart(false);
     // LOAD-004
     void this.loadText(() => file.text(), file.name, "");
   }
 
-  /** LOAD-009 */
+  /** LOAD-019 */
   private routeFromHash() {
     const h = location.hash;
-    const m = /^#map=(-?[\d.]+)\/(-?[\d.]+)/.exec(h);
-    if (m) this.loadAround(Number(m[1]), Number(m[2]), `${Number(m[1]).toFixed(4)}, ${Number(m[2]).toFixed(4)}`);
+    const m = parseMapHash(h);
+    if (m) this.loadAround(m.lat, m.lon, `${m.lat.toFixed(4)}, ${m.lon.toFixed(4)}`, m.zoom);
     else if (h === "#demo") this.loadDemo();
     else this.hud.showStart(true);
   }
@@ -246,13 +324,26 @@ export class App {
     if (this.renderer) this.renderer.setWorld(world);
     else this.renderer = new Renderer(this.canvas, world);
     this.resize();
-    const f = world.features.frame;
-    const box = { minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) };
-    this.camera.bounds = box;
+    this.inFlight.clear();
+    this.arrived = [];
+    this.failedAt.clear();
+    this.failNoted = false;
+    this.captureWant = null;
     const now = performance.now();
-    // CAM-004: start a little zoomed in and settle out to fit the area.
-    this.camera.fit({ minX: box.minX * 0.6, minY: box.minY * 0.6, maxX: box.maxX * 0.6, maxY: box.maxY * 0.6 }, 0, now);
-    this.camera.fit(box, this.anims.dur(900), now);
+    if (this.live) {
+      // LOAD-018 / CAM-009: a live map opens at the place, a little zoomed in and settling out, and goes anywhere.
+      this.camera.bounds = null;
+      const s = this.startScale ?? TUNE.START_ZOOM;
+      this.camera.flyTo(0, 0, s * 1.6, 0, now);
+      this.camera.flyTo(0, 0, s, this.anims.dur(900), now);
+    } else {
+      const f = world.features.frame;
+      const box = { minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) };
+      this.camera.bounds = box; // CAM-009
+      // CAM-008: start a little zoomed in and settle out to fit the area.
+      this.camera.fit({ minX: box.minX * 0.6, minY: box.minY * 0.6, maxX: box.maxX * 0.6, maxY: box.maxY * 0.6 }, 0, now);
+      this.camera.fit(box, this.anims.dur(900), now);
+    }
     this.reveal(now);
     this.hud.setPlace(place);
     this.badges.set(world.issues);
@@ -311,15 +402,6 @@ export class App {
       } catch (err) {
         results.innerHTML = `<li class="muted">${(err as Error).message}</li>`;
       }
-    });
-    const sizes = document.querySelectorAll<HTMLButtonElement>("#sizes button");
-    const side = Number(store.get("side")) || TUNE.AREA_SIDE;
-    sizes.forEach((b) => {
-      b.classList.toggle("on", Number(b.dataset.side) === side);
-      b.addEventListener("click", () => {
-        store.set("side", b.dataset.side!);
-        sizes.forEach((x) => x.classList.toggle("on", x === b));
-      });
     });
     document.getElementById("btn-file")!.addEventListener("click", () => document.getElementById("file")!.click());
     document.getElementById("file")!.addEventListener("change", (e) => {
@@ -486,6 +568,8 @@ export class App {
       // CAP-002: only landuse areas can capture or be captured.
       const p = this.world.pieceAt(toI(wx), toI(wy));
       this.hover = p && p.kind !== null && p.kind !== "CTX" ? p : null;
+      // LOAD-021: the rest of a partly loaded area pointed at loads first.
+      this.captureWant = p?.feature && this.world.loading.has(p.feature) ? p.feature : null;
       return;
     }
     if (!onBuildings(this.tool, this.target)) {
@@ -583,7 +667,12 @@ export class App {
       const b = this.buildingHit(wx, wy);
       if (b) this.showPhotosFor(b);
     }
-    if (!onBuildings(this.tool, this.target)) return this.hud.hint(null);
+    if (!onBuildings(this.tool, this.target)) {
+      // LOAD-016 (and LOAD-021 for the capture tool): an area that cannot change yet says why.
+      const p = this.world.pieceAt(toI(wx), toI(wy));
+      const loading = !!p && (stillLoading(p, this.world.loading) || (this.tool.type === "capture" && !!p.feature && this.world.loading.has(p.feature)));
+      return this.hud.hint(loading ? `${p!.name ?? "This area"} is still loading` : null, sx, sy);
+    }
     const b = this.buildingHit(wx, wy);
     const g = b && this.world.guessOf(b);
     if (!g) return this.hud.hint(null);
@@ -625,10 +714,15 @@ export class App {
     this.dirty = true;
   }
 
-  /** CAM-004 */
+  /** CAM-008: all the loaded land. */
   private fitArea() {
     if (!this.world) return;
-    const f = this.world.features.frame;
+    const land = this.world.atoms.filter((a) => !a.bridge);
+    const f = land.length
+      ? land.map((a) => a.bbox).reduce((p, q) => ({
+        minX: Math.min(p.minX, q.minX), minY: Math.min(p.minY, q.minY), maxX: Math.max(p.maxX, q.maxX), maxY: Math.max(p.maxY, q.maxY),
+      }))
+      : this.world.features.frame;
     this.camera.fit({ minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) }, this.anims.dur(600), performance.now());
     this.dirty = true;
   }
@@ -1092,6 +1186,12 @@ export class App {
       this.camera.nudge(ax * v, ay * v);
     }
     const moving = this.camera.update(dt, now);
+    this.takeLand();
+    this.wantLand(now);
+    this.followHash(now);
+    // LOAD-012: said quietly, never drawn on the map, where it would show the edge of a download.
+    const loading = this.inFlight.size > 0 || this.arrived.length > 0;
+    if (loading !== this.landLoading) this.hud.busy((this.landLoading = loading));
     // SNAP-105: the freeform preview catches up every frame, time-boxed so a long stroke never stalls one.
     let preview = 0;
     if (this.stroke?.previewPending) {

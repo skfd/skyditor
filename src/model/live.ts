@@ -6,7 +6,7 @@
 // Blocks already in the world are never rebuilt or touched (LOAD-013): a new block is only ever what is left of
 // a candidate after the loaded land is taken out of it.
 import {
-  type Shape, area, bbox, bboxOverlap, components, contains, containsDisc, difference, intersect, isEmpty, offset, rect, toM, union,
+  type BBox, type Shape, area, bbox, bboxOverlap, components, contains, containsDisc, difference, intersect, isEmpty, offset, rect, toM, union,
 } from "../geo/clip";
 import { type Tile, TileGrid, tileKey } from "../geo/tiles";
 import { buildLattice } from "../lattice/build";
@@ -132,7 +132,6 @@ export class LiveMap {
       if (out > SOME_LAND) world.loading.add(a.id);
       else world.loading.delete(a.id);
     }
-    world.waiting = this.waiting;
     return { world, atoms, joined };
   }
 
@@ -145,10 +144,15 @@ export class LiveMap {
     return this.grid.around(view, 0).filter((t) => !this.tiles.has(tileKey(t))).slice(0, MAX_AREA_TILES);
   }
 
-  /** LOAD-015: every named residential area that is not loaded whole; their rest loads before other land. */
-  namedLoading(): string[] {
+  /**
+   * LOAD-015: the named residential areas not loaded whole, reaching into `near` (integer units) when given; their
+   * rest loads before other land. Only areas near the view count, or each would pull in the next one.
+   */
+  namedLoading(near?: BBox): string[] {
     const w = this.world;
     if (!w || !this.store) return [];
-    return this.store.areas.filter((a) => w.loading.has(a.id) && a.klass.cls === "paintable" && a.klass.whole).map((a) => a.id);
+    return this.store.areas
+      .filter((a) => w.loading.has(a.id) && a.klass.cls === "paintable" && a.klass.whole && (!near || bboxOverlap(bbox(a.shape), near)))
+      .map((a) => a.id);
   }
 }

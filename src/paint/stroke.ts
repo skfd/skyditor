@@ -9,7 +9,7 @@ import { TUNE } from "../tuning";
 import { distToSegment, samplesOf } from "./samples";
 import {
   type Freeform, type Target, type Tool, applyRegion, changes, claimWhole, freeformIn, isUnit, onBuildings, rejects,
-  settleForContext, settles, strokeShape, toolKind, unitLimit, wholeAs,
+  settleForContext, settles, stillLoading, strokeShape, toolKind, unitLimit, wholeAs,
 } from "./snap";
 
 export type StrokeEvent =
@@ -109,8 +109,9 @@ export class Stroke {
       // DISP-005: disputed context rejects only once the stroke can no longer be a settling tap (DISP-004).
       const [sx, sy] = this.trail[0];
       const mayTap = settles(this.tool, p) && Math.hypot(bx - sx, by - sy) <= this.tapMove;
-      // NAME-003: a tool that would split a named residential area rejects like protected land.
-      if ((p && p.kind === "CTX" && !mayTap) || rejects(this.tool, p) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
+      // NAME-003: a tool that would split a named residential area rejects like protected land. LOAD-015: so
+      // does any paint on one still loading; a tap rejects here too, at its first dab.
+      if ((p && p.kind === "CTX" && !mayTap) || rejects(this.tool, p, this.world.loading) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
         this.rejected = true;
         events.push({ type: "reject", at: [bx, by] });
       }
@@ -124,7 +125,7 @@ export class Stroke {
       if (atom.bridge) continue; // CAP-008: street land is never painted; end() gives it back instead
       this.dirty.add(atom);
       for (const p of atom.pieces) {
-        if (!isUnit(p, this.limit) || !changes(this.tool, p)) continue;
+        if (!isUnit(p, this.limit) || !changes(this.tool, p, this.world.loading)) continue; // LOAD-015: never charged
         if (p.whole && this.wholesDone.has(p.source!)) continue; // NAME-002: already claimed whole
         if (p.bbox.maxX < box.minX || p.bbox.minX > box.maxX || p.bbox.maxY < box.minY || p.bbox.minY > box.maxY) continue;
         const s = samplesOf(p);
@@ -256,7 +257,8 @@ export class Stroke {
       this.densityDone.add(p);
       const tier = KINDS[p.kind].tier;
       // DENS-004 / DISP-005: disputed context is rejected like any other non-residential land.
-      if (tier === undefined) {
+      // LOAD-015: so is a named residential area still loading.
+      if (tier === undefined || stillLoading(p, this.world.loading)) {
         if (!this.rejected) events.push({ type: "reject", at: [x, y] });
         this.rejected = true;
         continue;
@@ -398,7 +400,7 @@ export class Stroke {
         this.preview.clear();
       } else {
         // SNAP-004: a tap claims the whole unit piece under it. CAP-008: never street land a capture took.
-        if (isTap && p && !this.world.atoms[p.atom].bridge && isUnit(p, this.limit) && changes(this.tool, p))
+        if (isTap && p && !this.world.atoms[p.atom].bridge && isUnit(p, this.limit) && changes(this.tool, p, this.world.loading))
           events.push(...this.claim(this.world.atoms[p.atom], p));
         // DISP-005: a press held on disputed context without moving is no tap, and changes nothing there.
         if (!isTap && !this.rejected && settles(this.tool, p)) {
@@ -431,7 +433,7 @@ export class Stroke {
   private settleBridges(): StrokeEvent[] {
     const events: StrokeEvent[] = [];
     const reached = (b: Atom, p: Piece) =>
-      (this.tool.type === "paint" || this.tool.type === "erase") && changes(this.tool, p) &&
+      (this.tool.type === "paint" || this.tool.type === "erase") && changes(this.tool, p, this.world.loading) &&
       !isEmpty(intersect(this.strokeShapeNear(b.bbox), b.shape));
     for (const [atom, pieces] of settleBridges(this.world, reached)) {
       this.snapshot(atom);
@@ -452,9 +454,10 @@ export class Stroke {
 
 /**
  * NAME-006: the whole named area `source` takes `kind` at once, outside any stroke: one undo step, and a claim
- * event per piece for the pop (FEEL-001). Null step when nothing changes.
+ * event per piece for the pop (FEEL-001). Null step when nothing changes, or while it is still loading (LOAD-015).
  */
 export function answerWhole(world: World, source: string, kind: Kind): { events: StrokeEvent[]; step: Step | null } {
+  if (world.loading.has(source)) return { events: [], step: null }; // LOAD-015
   const committed = commitWhole(wholeAs(world, source, kind), kind);
   const events: StrokeEvent[] = committed.flatMap((c) =>
     c.gone.map(([old, now]): StrokeEvent => {

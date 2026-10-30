@@ -188,8 +188,10 @@ once all of it is loaded. Until then the editor shall draw it as not loaded yet.
   Why: a block cut off at the edge of a download is a block that does not exist. Paint on it would stop at an
   edge nobody mapped, and joining it up later would move the user's paint under their hands.
 
-**LOAD-012** The editor shall draw land not loaded yet as plain faint ground with the streets already known
-on it, and while some of it in view is loading, show over it that it is loading.
+**LOAD-012** The editor shall draw land not loaded yet as plain ground with the streets and paths already
+known on it, and while land around the view is loading, say so quietly, off the map.
+  Why: anything drawn on land not loaded yet would follow the edge of a download, which is a straight line
+  nobody mapped.
   Trace: manual
 
 **LOAD-013** The editor shall keep every block it has loaded for the rest of the session, as it was, with
@@ -218,6 +220,7 @@ say that it is still loading.
 **LOAD-017** While the map shows the demo (LOAD-001) or a dropped file (LOAD-004), the editor shall load no
 more land.
   Why: the demo works offline, and a file is exactly what the user chose to open.
+  Trace: manual
 
 **LOAD-018** When the user picks a place from the search results, the editor shall show it at
 TUNE-START-ZOOM and load the land around it (LOAD-010), keeping the land already loaded and the user's
@@ -237,6 +240,7 @@ TUNE-START-ZOOM, and the demo uses `#demo`.
 **LOAD-020** If loading land around the view fails, then the editor shall say so briefly once, keep that
 land not loaded yet, and try it again after TUNE-LOAD-RETRY if it is still in view.
   Why: a busy server should neither interrupt painting nor be asked again at once.
+  Trace: manual
 
 **LOAD-021** The editor shall let an area capture another (CAP-007) only when both are loaded whole, and
 shall load the rest of a partly loaded area the capture tool points at before other land.

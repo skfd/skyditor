@@ -1,4 +1,4 @@
-// Smooth zoom towards the cursor and coasting pan (CAM-001..CAM-005).
+// Smooth zoom towards the cursor and coasting pan (CAM-001..CAM-003, CAM-008, CAM-009).
 import { TUNE } from "../tuning";
 
 export interface ViewBox {
@@ -23,7 +23,7 @@ export class Camera {
   private fly: { from: [number, number, number]; to: [number, number, number]; t0: number; dur: number } | null = null;
   width = 1;
   height = 1;
-  bounds: ViewBox = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+  bounds: ViewBox | null = null; // CAM-009: where the view centre must stay; none on a live map
 
   toScreen(x: number, y: number): [number, number] {
     return [(x - this.cx) * this.scale + this.width / 2, (y - this.cy) * this.scale + this.height / 2];
@@ -37,7 +37,7 @@ export class Camera {
     return { minX, minY, maxX, maxY };
   }
 
-  /** Whether the zoom is still easing towards its target, or flying (CAM-004). */
+  /** Whether the zoom is still easing towards its target, or flying (CAM-008). */
   get settling(): boolean {
     return this.fly !== null || this.scale !== this.tScale;
   }
@@ -71,14 +71,16 @@ export class Camera {
     this.vy = vyPx / this.scale;
   }
 
-  /** CAM-004: fly to fit a box, with an ease-in-out. */
+  /** CAM-008: fly to fit a box, with an ease-in-out. */
   fit(b: ViewBox, durMs: number, now: number) {
-    const s = clamp(
-      Math.min(this.width / (b.maxX - b.minX), this.height / (b.maxY - b.minY)) * 0.92,
-      TUNE.ZOOM_MIN,
-      TUNE.ZOOM_MAX,
-    );
-    const to: [number, number, number] = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, s];
+    const s = Math.min(this.width / (b.maxX - b.minX), this.height / (b.maxY - b.minY)) * 0.92;
+    this.flyTo((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, s, durMs, now);
+  }
+
+  /** LOAD-018 / LOAD-019: fly to a point at a zoom, with an ease-in-out. */
+  flyTo(x: number, y: number, scale: number, durMs: number, now: number) {
+    const to: [number, number, number] = [x, y, clamp(scale, TUNE.ZOOM_MIN, TUNE.ZOOM_MAX)];
+    const s = to[2];
     this.anchor = null;
     this.vx = this.vy = 0;
     this.tScale = s;
@@ -127,8 +129,9 @@ export class Camera {
     return moving;
   }
 
-  /** CAM-005 */
+  /** CAM-009 */
   private clampCentre() {
+    if (!this.bounds) return;
     this.cx = clamp(this.cx, this.bounds.minX, this.bounds.maxX);
     this.cy = clamp(this.cy, this.bounds.minY, this.bounds.maxY);
   }
