@@ -207,7 +207,7 @@ export class Hud {
   }
 
   /** HUD-003 */
-  private static MIX_ORDER: (Kind | "void")[] = [...TIERS, "RU", "COM", "RET", "IND", "CTX", "void"];
+  private static MIX_ORDER: (Kind | "void")[] = [...TIERS, "RU", "RM", "COM", "RET", "IND", "CTX", "void"];
   private buildMix() {
     const bar = $("#mix .bar");
     for (const k of Hud.MIX_ORDER) {

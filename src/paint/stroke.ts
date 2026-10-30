@@ -7,8 +7,8 @@ import { type Atom, type BuildingSet, type Piece, World, makePiece, normalize } 
 import { TUNE } from "../tuning";
 import { distToSegment, samplesOf } from "./samples";
 import {
-  type Freeform, type Target, type Tool, applyRegion, changes, claimWhole, freeformIn, isUnit, onBuildings, settleForContext,
-  settles, strokeShape, toolKind, unitLimit,
+  type Freeform, type Target, type Tool, applyRegion, changes, claimWhole, freeformIn, isUnit, onBuildings, rejects,
+  settleForContext, settles, strokeShape, toolKind, unitLimit, wholeAs,
 } from "./snap";
 
 export type StrokeEvent =
@@ -60,6 +60,8 @@ export class Stroke {
   private readonly before = new Map<Atom, Piece[]>(); // undo snapshots (PAINT-005)
   private readonly beforeB = new Map<BuildingSet, Building[]>(); // TYPE-011
   private readonly densityDone = new Set<Piece>();
+  private readonly wholes = new Map<string, { pieces: Piece[]; total: number }>(); // NAME-002: samples of each named area
+  private readonly wholesDone = new Set<string>(); // NAME-002: named areas this stroke has claimed
   private readonly buildingsDone = new Set<number>(); // geom ids touched by this stroke (TYPE-007, TYPE-008)
   private readonly dirty = new Set<Atom>();
   private rejected = false;
@@ -106,7 +108,8 @@ export class Stroke {
       // DISP-005: disputed context rejects only once the stroke can no longer be a settling tap (DISP-004).
       const [sx, sy] = this.trail[0];
       const mayTap = settles(this.tool, p) && Math.hypot(bx - sx, by - sy) <= this.tapMove;
-      if ((p && p.kind === "CTX" && !mayTap) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
+      // NAME-003: a tool that would split a named residential area rejects like protected land.
+      if ((p && p.kind === "CTX" && !mayTap) || rejects(this.tool, p) || (!onLand && contains(this.world.water, toI(bx), toI(by)))) {
         this.rejected = true;
         events.push({ type: "reject", at: [bx, by] });
       }
@@ -120,6 +123,7 @@ export class Stroke {
       this.dirty.add(atom);
       for (const p of atom.pieces) {
         if (!isUnit(p, this.limit) || !changes(this.tool, p)) continue;
+        if (p.named !== undefined && this.wholesDone.has(p.source!)) continue; // NAME-002: already claimed whole
         if (p.bbox.maxX < box.minX || p.bbox.minX > box.maxX || p.bbox.maxY < box.minY || p.bbox.minY > box.maxY) continue;
         const s = samplesOf(p);
         let cov = this.coverage.get(p);
@@ -135,7 +139,7 @@ export class Stroke {
           }
         }
         // SNAP-003
-        if (cov.count / cov.covered.length >= TUNE.CLAIM_COVERAGE) events.push(this.claim(atom, p));
+        if (this.charge(p) >= TUNE.CLAIM_COVERAGE) events.push(...this.claim(atom, p));
       }
     }
     return events;
@@ -145,7 +149,49 @@ export class Stroke {
     if (!this.before.has(atom)) this.before.set(atom, atom.pieces);
   }
 
-  private claim(atom: Atom, p: Piece): StrokeEvent {
+  /** NAME-002: the pieces of the named area `p` belongs to, and their sample count; null for any other piece. */
+  private whole(p: Piece) {
+    if (p.named === undefined || !p.source) return null;
+    let w = this.wholes.get(p.source);
+    if (!w) {
+      const pieces = this.world.wholeOf(p.source).map((x) => x.piece);
+      w = { pieces, total: pieces.reduce((n, q) => n + samplesOf(q).length / 2, 0) };
+      this.wholes.set(p.source, w);
+    }
+    return w;
+  }
+
+  /** SNAP-002: the covered fraction of a unit piece. NAME-002: a named area charges as one, over all its pieces. */
+  private charge(p: Piece): number {
+    const w = this.whole(p);
+    if (!w) {
+      const cov = this.coverage.get(p);
+      return cov ? cov.count / cov.covered.length : 0;
+    }
+    let n = 0;
+    for (const q of w.pieces) n += this.coverage.get(q)?.count ?? 0;
+    return w.total > 0 ? n / w.total : 0;
+  }
+
+  /** SNAP-005: each charging unit piece and its covered fraction; a named area's pieces all charge together (NAME-002). */
+  *charging(): Iterable<[Piece, number]> {
+    const seen = new Set<string>();
+    for (const [p, cov] of this.coverage) {
+      if (cov.count === 0) continue;
+      const w = this.whole(p);
+      if (!w) {
+        yield [p, cov.count / cov.covered.length];
+        continue;
+      }
+      if (seen.has(p.source!)) continue;
+      seen.add(p.source!);
+      const k = this.charge(p);
+      for (const q of w.pieces) yield [q, k];
+    }
+  }
+
+  private claim(atom: Atom, p: Piece): StrokeEvent[] {
+    if (p.named !== undefined && p.source) return this.claimNamed(p);
     this.snapshot(atom);
     const kind = toolKind(this.tool);
     atom.pieces = claimWhole(atom, p, kind);
@@ -153,7 +199,33 @@ export class Stroke {
     this.dirty.add(atom);
     const [cx, cy] = shapeCentroid(p.shape);
     const piece = kind === null ? null : pieceCovering(atom, p, kind);
-    return { type: "claim", piece, region: p.shape, prevKind: p.kind, at: [cx / TUNE.GEOM_SCALE, cy / TUNE.GEOM_SCALE], whole: true };
+    return [{ type: "claim", piece, region: p.shape, prevKind: p.kind, at: [cx / TUNE.GEOM_SCALE, cy / TUNE.GEOM_SCALE], whole: true }];
+  }
+
+  /** NAME-002: claims the whole named area `p` is part of, in every block it covers. */
+  private claimNamed(p: Piece): StrokeEvent[] {
+    const kind = toolKind(this.tool)!;
+    const source = p.source!;
+    this.wholesDone.add(source);
+    this.wholes.delete(source);
+    return this.replaceWhole(wholeAs(this.world, source, kind), kind, (q, now) => {
+      this.coverage.delete(q);
+      const [cx, cy] = shapeCentroid(q.shape);
+      return { type: "claim", piece: now, region: q.shape, prevKind: q.kind, at: [toM(cx), toM(cy)], whole: true };
+    });
+  }
+
+  /** NAME-001: commits the new piece lists of a named area's atoms, with one event per piece that changed. */
+  private replaceWhole(
+    changed: Map<Atom, Piece[]>,
+    kind: Kind,
+    event: (old: Piece, now: Piece | null) => StrokeEvent,
+  ): StrokeEvent[] {
+    for (const atom of changed.keys()) {
+      this.snapshot(atom);
+      this.dirty.add(atom);
+    }
+    return commitWhole(changed, kind).flatMap((c) => c.gone.map(([old, now]) => event(old, now)));
   }
 
   /** DISP-004 */
@@ -187,8 +259,21 @@ export class Stroke {
         continue;
       }
       const next = tier + dir;
+      const whole = p.named !== undefined && p.source ? this.world.wholeOf(p.source).map((w) => w.piece) : null;
+      if (whole) for (const q of whole) this.densityDone.add(q); // NAME-004: one step for the whole area
       if (next < 1 || next > 6) { // DENS-003: the ladder ends bump instead of wrapping
         events.push({ type: "bump", piece: p, at: [x, y] });
+        continue;
+      }
+      if (whole) {
+        // NAME-004: the whole named area moves one tier.
+        const kind = tierKind(next);
+        events.push(
+          ...this.replaceWhole(wholeAs(this.world, p.source!, kind), kind, (q, now) => {
+            if (now) this.densityDone.add(now);
+            return now ? { type: "tier", piece: now, prevKind: q.kind!, at: [x, y] } : { type: "bump", piece: q, at: [x, y] };
+          }),
+        );
         continue;
       }
       const atom = this.world.atoms[p.atom];
@@ -310,7 +395,7 @@ export class Stroke {
         this.preview.clear();
       } else {
         // SNAP-004: a tap claims the whole unit piece under it.
-        if (isTap && p && isUnit(p, this.limit) && changes(this.tool, p)) events.push(this.claim(this.world.atoms[p.atom], p));
+        if (isTap && p && isUnit(p, this.limit) && changes(this.tool, p)) events.push(...this.claim(this.world.atoms[p.atom], p));
         // DISP-005: a press held on disputed context without moving is no tap, and changes nothing there.
         if (!isTap && !this.rejected && settles(this.tool, p)) {
           this.rejected = true;
@@ -341,6 +426,39 @@ export class Stroke {
   private buildingSteps() {
     return [...this.beforeB].filter(([s, b]) => s.items !== b).map(([set, before]) => ({ set, before, after: set.items }));
   }
+}
+
+/**
+ * NAME-006: the whole named area `source` takes `kind` at once, outside any stroke: one undo step, and a claim
+ * event per piece for the pop (FEEL-001). Null step when nothing changes.
+ */
+export function answerWhole(world: World, source: string, kind: Kind): { events: StrokeEvent[]; step: Step | null } {
+  const committed = commitWhole(wholeAs(world, source, kind), kind);
+  const events: StrokeEvent[] = committed.flatMap((c) =>
+    c.gone.map(([old, now]): StrokeEvent => {
+      const [cx, cy] = shapeCentroid(old.shape);
+      return { type: "claim", piece: now, region: old.shape, prevKind: old.kind, at: [toM(cx), toM(cy)], whole: true };
+    }),
+  );
+  const atoms = committed.map((c) => ({ atom: c.atom, before: c.before, after: c.atom.pieces }));
+  return { events, step: atoms.length ? { atoms } : null };
+}
+
+/** NAME-001: puts a named area's new piece lists in place; returns each atom's old list and which pieces became which. */
+function commitWhole(changed: Map<Atom, Piece[]>, kind: Kind) {
+  const out: { atom: Atom; before: Piece[]; gone: [Piece, Piece | null][] }[] = [];
+  for (const [atom, pieces] of changed) {
+    const before = atom.pieces;
+    atom.pieces = pieces;
+    const gone = before
+      .filter((q) => q.named !== undefined && !pieces.includes(q))
+      .map((q): [Piece, Piece | null] => [
+        q,
+        pieces.find((n) => n.kind === kind && n.source === q.source && n.named !== undefined && overlaps(n, q.shape)) ?? null,
+      ]);
+    out.push({ atom, before, gone });
+  }
+  return out;
 }
 
 const overlaps = (p: Piece, region: Shape) => {

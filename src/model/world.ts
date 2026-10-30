@@ -1,7 +1,8 @@
 // The editable model: atoms (the snapping lattice) fully divided into pieces (OVL-001).
 import RBush from "rbush";
 import {
-  type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, expandBBox, shapeCentroid, toI, touches, union,
+  type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, expandBBox, interiorPoint, shapeCentroid, toI,
+  toM, touches, union,
 } from "../geo/clip";
 import type { AreaFeature, Features } from "../osm/features";
 import { type Building, type BuildingGeom, makeBuilding } from "./buildings";
@@ -21,6 +22,7 @@ export interface Piece {
   readonly modified: boolean; // IMP-008 / OVL-004
   readonly drawn: boolean; // CORR-002: freeform paint drew part of its outline, so it is never a unit piece
   readonly rival?: Rival; // IMP-012: set while the piece is disputed
+  readonly named?: string; // NAME-001: the name of the named residential area `source` it is part of
 }
 
 /** IMP-014: an area whose tags imply a landuse it does not carry. */
@@ -29,6 +31,13 @@ export interface TagIssue {
   readonly tagged: string; // what it is tagged as, e.g. "amenity=school"
   readonly missing: string; // the landuse tag it lacks
   readonly at: [number, number]; // m; a point well inside its land (REN-016)
+}
+
+/** NAME-005: a named residential area still unspecified, and where its badge goes. */
+export interface Quest {
+  readonly source: string; // the area's OSM element
+  readonly name: string;
+  readonly at: [number, number]; // m; a point well inside its biggest part
 }
 
 /** IMP-012: what the losing feature of a dispute said. */
@@ -56,7 +65,7 @@ export function makePiece(
   atom: Atom | number,
   kind: Kind | null,
   shape: Shape,
-  extra: { ctx?: CtxClass; source?: string; modified?: boolean; rival?: Rival; drawn?: boolean } = {},
+  extra: { ctx?: CtxClass; source?: string; modified?: boolean; rival?: Rival; drawn?: boolean; named?: string } = {},
 ): Piece {
   return {
     id: nextPieceId++,
@@ -70,12 +79,15 @@ export function makePiece(
     modified: extra.modified ?? false,
     rival: extra.rival,
     drawn: extra.drawn ?? false,
+    ...(extra.named !== undefined ? { named: extra.named } : {}),
   };
 }
 
 export const isProtected = (p: Piece) => p.kind === "CTX"; // PAINT-004
-// Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013).
-export const groupKey = (p: Piece) => `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}`;
+// Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013). A named area
+// merges only with itself, so it keeps its outline too and stays one place (NAME-001).
+export const groupKey = (p: Piece) =>
+  `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}|${p.named !== undefined ? p.source : ""}`;
 export const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land
 export const SOFT_LINE_HALF_WIDTH = 0.25; // m; just enough to separate cells; swallowed again by SNAP-103, or along fences filled by SNAP-112
 
@@ -120,6 +132,7 @@ export function normalize(atom: Atom, pieces: Piece[], merge = true): Piece[] {
               modified: cluster.some((p) => p.modified) || !sameSource,
               rival: biggest.rival,
               drawn: cluster.some((p) => p.drawn), // CORR-002
+              named: biggest.named,
             }),
           );
         }
@@ -347,6 +360,31 @@ export class World {
       if (contains(p.shape, x, y)) return p;
     }
     return null;
+  }
+
+  /** NAME-001: every piece of the named residential area `source`, with its atom. */
+  wholeOf(source: string): { atom: Atom; piece: Piece }[] {
+    const out: { atom: Atom; piece: Piece }[] = [];
+    for (const atom of this.atoms) for (const piece of atom.pieces) if (piece.named !== undefined && piece.source === source) out.push({ atom, piece });
+    return out;
+  }
+
+  /** NAME-005: the named residential areas still unspecified, each with its badge on its biggest part. */
+  quests(): Quest[] {
+    const biggest = new Map<string, Piece>();
+    for (const a of this.atoms)
+      for (const p of a.pieces) {
+        if (p.named === undefined || !p.source) continue;
+        const b = biggest.get(p.source);
+        if (!b || (p.kind === "RU" && (b.kind !== "RU" || p.area > b.area))) biggest.set(p.source, p);
+      }
+    const out: Quest[] = [];
+    for (const [source, p] of biggest) {
+      if (p.kind !== "RU") continue;
+      const [x, y] = interiorPoint(p.shape);
+      out.push({ source, name: p.named!, at: [toM(x), toM(y)] });
+    }
+    return out;
   }
 
   /** HUD-009 / HUD-010: every disputed piece, north to south, then west to east. */

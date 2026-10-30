@@ -918,6 +918,36 @@ body.dropping #drop {
   font-weight: 600;
   cursor: pointer;
 }
+/* NAME-006: one choice per tier, and mixed, each with its colour. */
+#issue .choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 2px 0 8px;
+}
+#issue .choices button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 5px;
+  border-radius: 7px;
+  background: rgba(59, 47, 39, 0.05);
+  color: inherit;
+  font-weight: 500;
+  text-align: left;
+}
+#issue .choices button::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--c);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+#issue .choices button:hover {
+  background: rgba(59, 47, 39, 0.11);
+}
 #issue button:hover {
   text-decoration: underline;
 }

@@ -750,9 +750,8 @@ export class Renderer {
     const px = 1 / s;
     const color = toolColor(tool);
     // SNAP-005: charging unit pieces — light and dashed, never mistakable for a claimed slab.
-    for (const [p, cov] of stroke.coverage) {
-      if (cov.count === 0) continue;
-      const k = Math.min(1, cov.count / cov.covered.length / TUNE.CLAIM_COVERAGE);
+    for (const [p, covered] of stroke.charging()) {
+      const k = Math.min(1, covered / TUNE.CLAIM_COVERAGE);
       const path = this.gfx(p).path;
       ctx.globalAlpha = 0.06 + 0.2 * k;
       ctx.fillStyle = tool.type === "erase" ? COLORS.eraser : color;

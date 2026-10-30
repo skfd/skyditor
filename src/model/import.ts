@@ -185,7 +185,7 @@ function splitDrift(atom: Atom, strip: Shape, a: Ranked, b: Ranked) {
 
 /** One imported fragment as pieces: its disputed parts (IMP-012) apart from the rest. */
 function piecesOf(atom: Atom, r: Ranked, frag: Shape): Piece[] {
-  const extra = { ctx: r.ctx, source: r.f.id };
+  const extra = { ctx: r.ctx, source: r.f.id, named: r.f.klass.cls === "paintable" ? r.f.klass.named : undefined }; // NAME-001
   const disputed: Piece[] = [];
   let rest = frag;
   for (const d of r.disputes) {
@@ -233,6 +233,7 @@ function snapImported(atom: Atom, pieces: Piece[]): Piece[] {
         source: best.source,
         modified: best.modified,
         rival: best.rival,
+        named: best.named,
       });
       land = land.map((p) => (p === best ? merged : p));
       changed = true;
@@ -248,5 +249,5 @@ const split = (atom: Atom, p: Piece) => {
   const comps = components(p.shape);
   return comps.length <= 1
     ? [p]
-    : comps.map((c) => makePiece(atom, p.kind, c, { source: p.source, modified: p.modified, rival: p.rival }));
+    : comps.map((c) => makePiece(atom, p.kind, c, { source: p.source, modified: p.modified, rival: p.rival, named: p.named }));
 };

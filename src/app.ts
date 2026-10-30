@@ -4,21 +4,21 @@ import { squareAround } from "./geo/project";
 import { type Building, paintable, statusOf } from "./model/buildings";
 import { describeGuess } from "./model/guess";
 import { History, type Step } from "./model/history";
-import { KINDS, type Kind } from "./model/kinds";
+import { KINDS, type Kind, TIERS } from "./model/kinds";
 import { type Stage, worldFromText } from "./model/load";
-import type { Piece, World } from "./model/world";
+import type { Piece, Quest, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
 import { IMAGERY, TileCache } from "./osm/imagery";
 import { type Photo, bestPhoto, photoLinks, searchPanoramax } from "./osm/photos";
 import { PhotoPanel } from "./ui/photos";
 import { type Target, type Tool, onBuildings } from "./paint/snap";
-import { Stroke, type StrokeEvent, changesBuilding } from "./paint/stroke";
+import { Stroke, type StrokeEvent, answerWhole, changesBuilding } from "./paint/stroke";
 import { Anims } from "./render/anim";
 import { Camera } from "./render/camera";
 import { COLORS, Renderer, buildingPath, pathOf } from "./render/renderer";
 import { TUNE } from "./tuning";
 import { Sound } from "./ui/audio";
-import { Badges } from "./ui/badges";
+import { Badges, osmLink } from "./ui/badges";
 import { Hud, TOOLS } from "./ui/hud";
 import { ICONS } from "./ui/icons";
 import { PerfMeter } from "./ui/perf";
@@ -433,6 +433,39 @@ export class App {
     this.badges.showMark([toM(b.geom.cx), toM(b.geom.cy)], [what, how, go], this.camera);
   }
 
+  /** NAME-006: the area's name, a choice of each tier and of mixed, and a link to the area in OSM. */
+  private questCard(q: Quest): Node[] {
+    const name = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = q.name; // from OSM data: never as HTML
+    name.append(strong);
+    const ask = document.createElement("p");
+    ask.textContent = "What kind of housing is this?";
+    const choices = document.createElement("div");
+    choices.className = "choices";
+    for (const k of [...TIERS, "RM"] as Kind[]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.style.setProperty("--c", KINDS[k].color);
+      b.textContent = KINDS[k].label;
+      b.addEventListener("click", () => this.answer(q, k));
+      choices.append(b);
+    }
+    const link = osmLink(q.source);
+    return link ? [name, ask, choices, link] : [name, ask, choices];
+  }
+
+  /** NAME-006: the whole named area takes the answer, as one undo step, with the pop. */
+  private answer(q: Quest, kind: Kind) {
+    this.badges.close();
+    if (!this.world || this.stroke) return;
+    const { events, step } = answerWhole(this.world, q.source, kind);
+    if (!step) return;
+    this.history.push(step);
+    this.syncHistory();
+    this.handle(events, q.at);
+  }
+
   /**
    * CORR-006: an eyedropper while Alt is held, a hand on an unsure building's mark while the brush acts on land
    * (TYPE-015), else the brush. Both are system cursors set on the body, so the brush is not drawn under them.
@@ -587,7 +620,7 @@ export class App {
         if (b && statusOf(b) === "typed" && paintable(b.look) && TOOLS.some((t) => t.id === b.look)) this.selectTool(b.look);
         return;
       }
-      // PAINT-008
+      // PAINT-008: unspecified and mixed residential (NAME-007) have no tile, so nothing changes.
       const p = this.world.pieceAt(toI(wx), toI(wy));
       if (p && p.kind && p.kind in KINDS && TOOLS.some((t) => t.id === p.kind)) this.selectTool(p.kind);
       return;
@@ -882,6 +915,7 @@ export class App {
     if (!loaded && this.toDecide > 0 && d === 0) this.hud.toast("Every building is decided");
     this.toDecide = d;
     this.hud.setToDecide(d);
+    this.badges.setQuests(this.world.quests(), (q) => this.questCard(q)); // NAME-005
   }
 
   // ---------- frame loop ----------

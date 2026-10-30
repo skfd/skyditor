@@ -3,7 +3,7 @@ import {
   type Ring, type Shape, area, bbox, bufferLines, closing, components, difference, expandBBox, intersect, isEmpty,
   narrowParts, offset, simplify, toI, touches, union,
 } from "../geo/clip";
-import type { Kind, PaintKind } from "../model/kinds";
+import { type Kind, type PaintKind, tierOf } from "../model/kinds";
 import { type Atom, type Piece, SOFT_LINE_HALF_WIDTH, type World, isProtected, makePiece, normalize } from "../model/world";
 import { TUNE } from "../tuning";
 import { straighten } from "./straighten";
@@ -27,12 +27,16 @@ export const toolKind = (t: Tool): Kind | null => (t.type === "paint" ? t.kind :
 export const unitLimit = (radiusM: number) =>
   Math.min(TUNE.UNIT_ABS_MAX, TUNE.UNIT_FACTOR * Math.PI * radiusM * radiusM);
 
-/** SNAP-001 / CORR-002: whether `p` is all-or-nothing for a brush with this unit limit. */
-export const isUnit = (p: Piece, limit: number) => !p.drawn && p.area <= limit;
+/** SNAP-001 / CORR-002: whether `p` is all-or-nothing for a brush with this unit limit. NAME-002: a named area always is. */
+export const isUnit = (p: Piece, limit: number) => p.named !== undefined || (!p.drawn && p.area <= limit);
 
-/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002). */
+/** NAME-003: a tool that would split or wipe out a named residential area; only a tier may change one. */
+export const rejects = (tool: Tool, p: Piece | null) =>
+  !!p && p.named !== undefined && (tool.type === "erase" || (tool.type === "paint" && tierOf(tool.kind) === undefined));
+
+/** Whether a paint/erase tool would change this piece at all (PAINT-004, PAINT-007, DISP-002, NAME-003). */
 export function changes(tool: Tool, p: Piece): boolean {
-  if (isProtected(p)) return false;
+  if (isProtected(p) || rejects(tool, p)) return false;
   if (tool.type === "paint") return p.kind !== tool.kind || !!p.rival;
   if (tool.type === "erase") return p.kind !== null;
   return false;
@@ -68,6 +72,7 @@ const remake = (atom: Atom, p: Piece, change: { modified?: boolean; rival?: unde
     modified: change.modified ?? p.modified,
     rival: "rival" in change ? change.rival : p.rival,
     drawn: p.drawn,
+    named: p.named,
   });
 
 /** SNAP-101: the trail (as one or more runs) buffered by the brush radius, then smoothed. */
@@ -165,8 +170,23 @@ export function freeformIn(world: World, atom: Atom, stroke: Shape, tool: Tool, 
 export function claimWhole(atom: Atom, piece: Piece, kind: Kind | null): Piece[] {
   const rest = atom.pieces.filter((p) => p !== piece);
   if (kind === null) return normalize(atom, rest);
-  const claimed = makePiece(atom, kind, piece.shape, { source: piece.source, modified: !!piece.source });
+  const claimed = makePiece(atom, kind, piece.shape, { source: piece.source, modified: !!piece.source, named: piece.named });
   return normalize(atom, [...rest, claimed]);
+}
+
+/**
+ * NAME-001: gives every piece of the named residential area `source` the kind `kind`, in every block it covers.
+ * Returns the new piece list of each atom that changes.
+ */
+export function wholeAs(world: World, source: string, kind: Kind): Map<Atom, Piece[]> {
+  const out = new Map<Atom, Piece[]>();
+  for (const { atom, piece } of world.wholeOf(source)) {
+    if (piece.kind === kind && !piece.rival) continue;
+    const rest = (out.get(atom) ?? atom.pieces).filter((p) => p !== piece);
+    out.set(atom, [...rest, makePiece(atom, kind, piece.shape, { source, modified: true, named: piece.named })]);
+  }
+  for (const [atom, pieces] of out) out.set(atom, normalize(atom, pieces));
+  return out;
 }
 
 /**
@@ -183,7 +203,7 @@ export function applyRegion(atom: Atom, ff: Freeform, kind: Kind | null): { piec
       if (Math.abs(area(rest) - p.area) < 0.01) return [p];
       // DISP-001: what the region leaves of a disputed piece stays disputed. CORR-002: its outline is drawn now.
       return components(rest).map((c) =>
-        makePiece(atom, p.kind, c, { ctx: p.ctx, source: p.source, modified: !!p.source, rival: p.rival, drawn: true }),
+        makePiece(atom, p.kind, c, { ctx: p.ctx, source: p.source, modified: !!p.source, rival: p.rival, drawn: true, named: p.named }),
       );
     });
   const build = (take: Shape) => {
@@ -194,8 +214,9 @@ export function applyRegion(atom: Atom, ff: Freeform, kind: Kind | null): { piec
   let pieces = build(region);
   // SNAP-107
   const tool: Tool = kind === null ? { type: "erase" } : { type: "paint", kind: kind as PaintKind };
+  // NAME-002: a named area is never a sliver; it changes whole or not at all.
   const slivers = pieces.filter(
-    (p) => changes(tool, p) && p.area < TUNE.SLIVER_AREA && touches(p.shape, region, 0.1),
+    (p) => changes(tool, p) && p.named === undefined && p.area < TUNE.SLIVER_AREA && touches(p.shape, region, 0.1),
   );
   if (slivers.length === 0) return { pieces, region };
   const grown = union(region, ...slivers.map((p) => p.shape));

@@ -103,6 +103,8 @@ has been absorbed into a rewritten requirement, it may be retired.
 | **Guessed building** | An untyped building whose footprint, neighbours and addresses agree on one look (§17). |
 | **Unsure building** | An untyped building they do not agree on. It carries the looks they allow as candidates. |
 | **Target** | What the brush acts on: land or buildings. |
+| **Named residential area** | A `landuse=residential` area with a name: one place, painted whole (NAME-001). |
+| **Mixed** | Residential land the user has said holds several kinds of housing (NAME-006). It has no tier. |
 
 ---
 
@@ -406,7 +408,52 @@ or unspecified residential, and the two are in different families: residential (
 business (commercial and retail), or industrial.
   Why: a house among flats is ordinary mixed housing, and offices above shops are ordinary business land.
   A factory among houses, or houses on industrial land, says the landuse is wrong. Civic and unknown
-  buildings, void and context land say nothing either way.
+  buildings, void and context land say nothing either way. Mixed land (NAME-006) is residential.
+
+### Named residential areas
+
+A named housing complex is often several kinds of housing side by side. OSM says that with one named
+`landuse=residential` and typed buildings, not with typed areas drawn inside it.
+
+**NAME-001** The editor shall treat each `landuse=residential` area with a `name=*` as a *named residential
+area*: one place whose land changes kind all at once or not at all. A `place=neighbourhood` counts only
+through a `landuse=residential` on the same feature; on its own it stays ignored (IMP-001).
+  Why: a named complex is one place. A stroke that splits it invents a boundary nobody mapped, and typed
+  parts drawn inside it stack identical landuse, which OSM validators flag.
+
+**NAME-002** While a paint stroke with a tier is active, the editor shall treat a named residential area as
+one unit piece, whatever its size and across every block it covers: it charges as one (SNAP-002, SNAP-005),
+it is claimed whole once TUNE-CLAIM-COVERAGE of all of it is covered (SNAP-003) or when tapped anywhere
+(SNAP-004), and freeform paint stops at its edge (SNAP-102, SNAP-107).
+  Why: a whole complex changing because a stroke brushed past its corner would be a surprise. A tap, or a
+  stroke over most of it, is a decision.
+
+**NAME-003** If a stroke with commercial, retail, industrial or the eraser reaches a named residential area,
+then the editor shall leave the area unchanged and play the reject feedback (FEEL-004), at most once per
+stroke.
+  Why: another kind on part of it would split it, and on all of it would wipe out a place by brushing past.
+  A complex that is not housing at all is fixed in OSM.
+
+**NAME-004** When a density step (DENS-002) reaches a named residential area that has a tier, the editor
+shall move all of it one tier.
+
+**NAME-005** The editor shall mark each named residential area that is unspecified residential (KIND-004)
+with a question-mark badge in the amber of REN-016, at a point well inside its biggest part, kept at a
+constant screen size, and with no other mark. The badge goes once the area has a tier or is mixed, and
+comes back with undo.
+  Why: a named area without a type is a question one click can answer, not an error in the map.
+
+**NAME-006** When the user presses that badge, the editor shall show next to it the area's name, a choice
+of each tier (R1–R6) and of *mixed*, and a link that opens the area on openstreetmap.org in a new tab.
+Choosing one gives the whole area that kind as one undo step, with the pop (FEEL-001). Pressing anywhere
+else closes it.
+  Why: OSM has no `residential=*` value for "several kinds of housing" (Q-011), and leaving the tag off
+  reads as "not yet known". Mixed is an answer, so it must stop looking like an open question.
+
+**NAME-007** The editor shall draw mixed land flat and solid in its own residential colour, without the
+hatch of KIND-004, and offer mixed only through NAME-006: never as a palette tile or a paint tool, and never
+read from a tag on import (Q-011).
+  Why: mixed is settled, so it is not hatched; it is not a step on the ladder, so it has no height.
 
 ---
 
@@ -439,7 +486,7 @@ change a tool makes to exclusive context.
 that piece alone, unless it is disputed (DISP-002). It is not a claim.
 
 **PAINT-008** When the user Alt-clicks a piece, the editor shall select that piece's kind as the current
-tool. For unspecified residential, or an empty spot, nothing changes.
+tool. For unspecified residential, mixed (NAME-006), or an empty spot, nothing changes.
   Trace: manual
 
 **PAINT-009** If the cursor enters exclusive context or water during a paint or eraser stroke, then the
@@ -576,9 +623,9 @@ the editor shall move that piece one tier up (or down), once per piece per strok
 **DENS-003** If a density step would go above R6 or below R1, then the editor shall leave the tier as it
 is and play the *bump* feedback (FEEL-005).
 
-**DENS-004** If a density tool touches unspecified residential or a non-residential landuse piece, then
-the editor shall leave it alone and play the *reject* feedback (FEEL-004), at most once per stroke. Void is
-ignored silently.
+**DENS-004** If a density tool touches unspecified residential, mixed (NAME-006) or a non-residential
+landuse piece, then the editor shall leave it alone and play the *reject* feedback (FEEL-004), at most once
+per stroke. Void is ignored silently.
 
 **DENS-005** The editor shall never split a piece with a density tool.
 
@@ -787,8 +834,8 @@ OSM tags it stands for.
   Trace: manual
 
 **HUD-003** The editor shall show a *district mix* bar: the share of the area's land held by each kind
-(R1–R6, unspecified residential, commercial, retail, industrial, exclusive context, void). Each segment
-moves smoothly to its new value after every change.
+(R1–R6, unspecified residential, mixed, commercial, retail, industrial, exclusive context, void). Each
+segment moves smoothly to its new value after every change.
   Why: like a city-builder's zoning meter — it tells you what the district is made of.
   Trace: manual
 
@@ -1116,3 +1163,8 @@ also offer the neighbourhood style where that is the local habit, or leave such 
 **Q-010** Should the loader fetch address and entrance nodes for TYPE-002? Today only addresses tagged on the
 building way itself count. Tagged nodes make area downloads bigger and address practice differs by city.
 Measure on the demo area first.
+
+**Q-011** What should mixed land (NAME-006) write when output arrives? OSM has no established value:
+`residential=mixed` has 50 uses against 10.8 million `landuse=residential` (taginfo, October 2026), and
+semicolon lists such as `single_family;terrace` a few dozen together. Leaving `residential=*` off says
+"not yet known", not "mixed". Until this is decided, no tag is read as mixed (NAME-007).

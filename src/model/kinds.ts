@@ -5,8 +5,8 @@ import { TUNE } from "../tuning";
 
 export type TierKind = "R1" | "R2" | "R3" | "R4" | "R5" | "R6";
 export type PaintKind = TierKind | "COM" | "RET" | "IND";
-/** RU = unspecified residential (KIND-004); CTX = exclusive context (IMP-002). */
-export type Kind = PaintKind | "RU" | "CTX";
+/** RU = unspecified residential (KIND-004); RM = mixed (NAME-006); CTX = exclusive context (IMP-002). */
+export type Kind = PaintKind | "RU" | "RM" | "CTX";
 
 export const TIERS: TierKind[] = ["R1", "R2", "R3", "R4", "R5", "R6"];
 export const PAINT_KINDS: PaintKind[] = [...TIERS, "COM", "RET", "IND"];
@@ -34,12 +34,14 @@ export const KINDS: Record<Kind, KindDef> = {
   RET: { id: "RET", label: "Retail", key: "W", tags: { landuse: "retail" }, color: "#c46fd0", lift: TUNE.LIFT_NONRES, pitch: 14 },
   IND: { id: "IND", label: "Industrial", key: "E", tags: { landuse: "industrial" }, color: "#8b92a3", lift: TUNE.LIFT_NONRES, pitch: -5 },
   RU: { id: "RU", label: "Residential (unspecified)", tags: { landuse: "residential" }, color: "#d6ccbb", lift: 0, pitch: 0 },
+  // NAME-007: settled but off the ladder, so flat; what it writes is Q-011.
+  RM: { id: "RM", label: "Mixed housing", tags: { landuse: "residential" }, color: "#f7d9b2", lift: 0, pitch: 3 },
   CTX: { id: "CTX", label: "Other land", tags: {}, color: "#cfd8c0", lift: 0, pitch: 0 },
 };
 
 export const tierOf = (k: Kind | null) => (k ? KINDS[k].tier : undefined);
 export const tierKind = (t: number) => TIERS[Math.max(1, Math.min(6, t)) - 1];
-export const isResidential = (k: Kind | null) => k === "RU" || (!!k && KINDS[k].tier !== undefined);
+export const isResidential = (k: Kind | null) => k === "RU" || k === "RM" || (!!k && KINDS[k].tier !== undefined);
 
 // REN-015: context colour classes. The first four are the context a city is full of, each its own colour.
 export type CtxClass = "park" | "education" | "cemetery" | "construction" | "green" | "wood" | "farm" | "grey" | "civic";
@@ -56,7 +58,7 @@ export const CTX_COLORS: Record<CtxClass, string> = {
 };
 
 export type AreaClass =
-  | { cls: "paintable"; kind: PaintKind | "RU" }
+  | { cls: "paintable"; kind: PaintKind | "RU"; named?: string } // named: NAME-001
   | { cls: "exclusive"; ctx: CtxClass; label: string; implied?: true } // implied: by an amenity (IMP-013)
   | { cls: "overlay"; ctx: CtxClass }
   | { cls: "water" };
@@ -67,7 +69,8 @@ export function classifyArea(tags: Tags): AreaClass | null {
   if (isWaterArea(tags)) return { cls: "water" }; // LAT-008
   if (lu === "residential") {
     const t = RESIDENTIAL_TIER[tags.residential ?? ""]; // KIND-005
-    return { cls: "paintable", kind: t ?? "RU" }; // KIND-004
+    const name = tags.name?.trim();
+    return { cls: "paintable", kind: t ?? "RU", ...(name ? { named: name } : {}) }; // KIND-004, NAME-001
   }
   if (lu === "commercial") return { cls: "paintable", kind: "COM" };
   if (lu === "retail") return { cls: "paintable", kind: "RET" };
@@ -158,7 +161,7 @@ export function agree(a: Kind, b: Kind): boolean {
 
 /** BLD-007: residential, business or industrial; null when the kind says nothing about buildings. */
 function family(k: Kind | BuildingLook | null): "res" | "biz" | "ind" | null {
-  if (k === "RU" || (k && k in KINDS && KINDS[k as Kind].tier !== undefined)) return "res";
+  if (k === "RU" || k === "RM" || (k && k in KINDS && KINDS[k as Kind].tier !== undefined)) return "res";
   if (k === "COM" || k === "RET") return "biz";
   if (k === "IND") return "ind";
   return null;

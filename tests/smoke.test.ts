@@ -53,7 +53,7 @@ describe("the app mounts", () => {
     expect($("#start")!.classList.contains("show")).toBe(true);
   });
 
-  it("HUD-001 / KIND-001 / DENS-001 / TYPE-007 / KIND-007: the palette has the ladder, the business kinds, density, agree and the eraser", () => {
+  it("HUD-001 / KIND-001 / DENS-001 / TYPE-007 / KIND-007 / NAME-007: the palette has the ladder, the business kinds, density, agree and the eraser, and no mixed", () => {
     const tiles = $$("#palette button.tile");
     expect(tiles.map((t) => t.dataset.tool)).toEqual([
       "R1", "R2", "R3", "R4", "R5", "R6", "COM", "RET", "IND", "UP", "DOWN", "AGREE", "ERASE",
