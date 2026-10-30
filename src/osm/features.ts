@@ -88,10 +88,11 @@ const isAreaish = (t: Tags) =>
     t["area:highway"] || t.area === "yes" ||
     (t.natural && t.natural !== "coastline" && t.natural !== "tree_row") || t.waterway === "riverbank");
 
-export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds): Features {
+/** `proj` is the live map's fixed projection (LOAD-013); without one, the data's own bounds centre it. */
+export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds, projection?: Projection): Features {
   const bounds = boundsOverride ?? dataBounds(osm);
   if (!bounds) throw new Error("The data has no nodes");
-  const proj = Projection.centredOn(bounds);
+  const proj = projection ?? Projection.centredOn(bounds);
   const frame: BBox = {
     minX: toI(proj.x(bounds.minLon)),
     maxX: toI(proj.x(bounds.maxLon)),

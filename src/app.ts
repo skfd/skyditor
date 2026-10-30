@@ -1,6 +1,7 @@
 // Glue: input, the frame loop, and turning model events into feedback.
 import { area, toI, toM } from "./geo/clip";
-import { squareAround } from "./geo/project";
+import { type Projection, squareAround } from "./geo/project";
+import { TileGrid } from "./geo/tiles";
 import { type Building, paintable, statusOf } from "./model/buildings";
 import { describeGuess } from "./model/guess";
 import { type CapturePlan, applyCapture, planCapture } from "./model/capture";
@@ -113,14 +114,14 @@ export class App {
 
   // ---------- loading ----------
 
-  private async load(getText: () => Promise<string>, place: string, hash: string) {
+  private async load(getText: () => Promise<string>, place: string, hash: string, proj?: Projection) {
     if (this.loadingBusy) return;
     this.loadingBusy = true;
     const stage = (s: Stage) => this.hud.loading(s);
     try {
       stage("fetching");
       const text = await getText();
-      const { world, report } = await worldFromText(text, stage);
+      const { world, report } = await worldFromText(text, stage, undefined, proj);
       if (world.atoms.length === 0) throw new Error("No land found in this area");
       this.setWorld(world, place);
       history.replaceState(null, "", hash || location.pathname + location.search);
@@ -151,7 +152,9 @@ export class App {
     this.hud.showStart(false);
     const side = Number(store.get("side")) || TUNE.AREA_SIDE;
     const b = squareAround(lat, lon, side); // LOAD-002
-    void this.load(() => fetchArea(b), name, `#map=${lat.toFixed(5)}/${lon.toFixed(5)}`); // LOAD-003, LOAD-009
+    // LOAD-013: the map's projection is fixed where it began, so land loaded later lines up with it.
+    const grid = TileGrid.at(lat, lon);
+    void this.load(() => fetchArea(b), name, `#map=${lat.toFixed(5)}/${lon.toFixed(5)}`, grid.proj); // LOAD-003, LOAD-009
   }
 
   private loadFile(file: File) {

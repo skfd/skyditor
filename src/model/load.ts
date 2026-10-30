@@ -2,7 +2,7 @@
 import { buildLattice } from "../lattice/build";
 import { extractFeatures, type Features } from "../osm/features";
 import { parseOsm } from "../osm/parse";
-import type { LonLatBounds } from "../geo/project";
+import type { LonLatBounds, Projection } from "../geo/project";
 import { importLanduse } from "./import";
 import { World } from "./world";
 
@@ -21,11 +21,12 @@ export async function worldFromText(
   text: string,
   onStage: (s: Stage) => void = () => {},
   bounds?: LonLatBounds,
+  proj?: Projection,
 ): Promise<{ world: World; report: LoadReport }> {
   const t0 = performance.now();
   onStage("reading");
   await tick();
-  const features = extractFeatures(parseOsm(text), bounds);
+  const features = extractFeatures(parseOsm(text), bounds, proj);
   onStage("blocks");
   await tick();
   return finish(features, onStage, t0);
