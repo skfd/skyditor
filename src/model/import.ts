@@ -20,9 +20,17 @@ interface Ranked {
   disputes: { shape: Shape; rival: Rival }[]; // IMP-012: parts it holds that another feature disagrees about
 }
 
-export function importLanduse(world: World, areas: AreaFeature[]): { pieces: number; dropped: number } {
-  world.overlay = areas.filter((a) => a.klass.cls === "overlay");
-  world.originals.push(...areas.filter((a) => a.klass.cls === "paintable"));
+/**
+ * `only`: the atoms that just loaded (LOAD-011). Only they get pieces; atoms loaded before keep theirs, with the
+ * user's changes (LOAD-013). Overlaps are still measured over all loaded land, so both sides of an area that
+ * loaded in two goes are judged alike.
+ */
+export function importLanduse(world: World, areas: AreaFeature[], only?: Set<Atom>): { pieces: number; dropped: number } {
+  const known = (list: AreaFeature[]) => new Set(list.map((a) => a.id));
+  const overlay = known(world.overlay), originals = known(world.originals);
+  world.overlay.push(...areas.filter((a) => a.klass.cls === "overlay" && !overlay.has(a.id)));
+  world.originals.push(...areas.filter((a) => a.klass.cls === "paintable" && !originals.has(a.id)));
+  const live = (atom: Atom) => !only || only.has(atom);
 
   const ranked: Ranked[] = [];
   for (const f of areas) {
@@ -41,7 +49,7 @@ export function importLanduse(world: World, areas: AreaFeature[]): { pieces: num
     });
   }
   ranked.sort((a, b) => a.land - b.land || a.f.area - b.f.area);
-  resolveOverlaps(world, ranked);
+  resolveOverlaps(world, ranked, live);
 
   // Each feature keeps what it did not lose. Smaller ones go first, so round-off never books land twice.
   let taken: Shape = [];
@@ -65,7 +73,7 @@ export function importLanduse(world: World, areas: AreaFeature[]): { pieces: num
     const footprint = footprints[i];
     if (isEmpty(footprint)) return;
     // IMP-005
-    for (const atom of world.atomsIn(bbox(footprint))) {
+    for (const atom of world.atomsIn(bbox(footprint)).filter(live)) {
       for (const frag of components(intersect(atom.shape, footprint))) {
         // IMP-006
         if (!keepable(frag)) {
@@ -84,7 +92,9 @@ export function importLanduse(world: World, areas: AreaFeature[]): { pieces: num
     atom.pieces = snapImported(atom, normalize(atom, pieces, false));
     count += pieces.length;
   }
-  world.issues = missingLanduse(world, ranked);
+  const issues = missingLanduse(world, only ? ranked.filter((r) => world.atomsIn(r.box).some(live)) : ranked);
+  const fresh = new Set(issues.map((i) => i.source));
+  world.issues = [...world.issues.filter((i) => !fresh.has(i.source)), ...issues];
   return { pieces: count, dropped };
 }
 
@@ -120,7 +130,7 @@ function missingLanduse(world: World, ranked: Ranked[]): TagIssue[] {
 const keepable = (s: Shape) => area(s) >= TUNE.IMPORT_MIN_FRAGMENT && containsDisc(s, TUNE.ATOM_MIN_RADIUS);
 
 /** CORR-001, IMP-010..IMP-012: decides, pair by pair, who keeps each overlap. `ranked` is smallest first. */
-function resolveOverlaps(world: World, ranked: Ranked[]) {
+function resolveOverlaps(world: World, ranked: Ranked[], live: (atom: Atom) => boolean) {
   for (let i = 0; i < ranked.length; i++) {
     const a = ranked[i];
     for (let j = i + 1; j < ranked.length; j++) {
@@ -134,7 +144,7 @@ function resolveOverlaps(world: World, ranked: Ranked[]) {
       for (const atom of world.atomsIn(bbox(overlap))) {
         const shape = intersect(atom.shape, overlap);
         if (isEmpty(shape)) continue;
-        parts.push({ atom, shape });
+        if (live(atom)) parts.push({ atom, shape });
         inLand += area(shape);
       }
       if (inLand < 0.5) continue;

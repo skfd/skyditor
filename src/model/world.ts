@@ -4,7 +4,7 @@ import {
   type BBox, type Ring, type Shape, area, bbox, bufferLines, components, contains, difference, expandBBox, interiorPoint, intersect,
   offset, shapeCentroid, toI, toM, touches, union,
 } from "../geo/clip";
-import type { AreaFeature, Features } from "../osm/features";
+import type { AreaFeature, BuildingFeature, Features, MinorLine } from "../osm/features";
 import { type Building, type BuildingGeom, makeBuilding } from "./buildings";
 import { type Guess, guess } from "./guess";
 import type { CtxClass, Kind } from "./kinds";
@@ -242,9 +242,9 @@ export interface BuildingSet {
 }
 
 export class World {
-  readonly atoms: Atom[];
+  readonly atoms: Atom[] = [];
   readonly bridges: Atom[] = []; // CAP-008, also in `atoms`
-  readonly totalLand: number;
+  totalLand = 0;
   private readonly index = new RBush<AtomBox>();
   private readonly geoms: BuildingGeom[] = [];
   private readonly buildingIndex = new RBush<BuildingGeom>();
@@ -257,40 +257,80 @@ export class World {
   issues: TagIssue[] = []; // IMP-014, render only
   readonly originals: AreaFeature[] = []; // IMP-009, render only
 
+  /** `buildings` are the ones to show; on a live map that is fewer than it has fetched (LOAD-011). */
   constructor(
     readonly features: Features,
-    readonly streets: Shape,
-    readonly water: Shape,
+    public streets: Shape,
+    public water: Shape,
     atomShapes: Shape[],
+    buildings: BuildingFeature[] = features.buildings,
   ) {
-    this.atoms = atomShapes.map((shape, id) => {
-      const atom: Atom = { id, shape, area: area(shape), bbox: bbox(shape), pieces: [] };
+    this.addAtoms(atomShapes);
+    this.addBuildings(buildings);
+    this.addMinorLines(features.minorLines);
+  }
+
+  /** LOAD-011 / LOAD-013: new atoms join after the ones already there, which stay as they are. */
+  addAtoms(shapes: Shape[]): Atom[] {
+    const added = shapes.map((shape) => {
+      const atom: Atom = { id: this.atoms.length, shape, area: area(shape), bbox: bbox(shape), pieces: [] };
       atom.pieces = [makePiece(atom, null, shape)];
+      this.atoms.push(atom);
       return atom;
     });
-    this.index.load(this.atoms.map((a) => ({ ...a.bbox, atom: a })));
-    this.totalLand = this.atoms.reduce((s, a) => s + a.area, 0);
-    // SNAP-109; BLD-006: the footprint only, never the look.
-    this.geoms = features.buildings.map((b, id) => {
+    this.index.load(added.map((a) => ({ ...a.bbox, atom: a })));
+    this.totalLand += added.reduce((s, a) => s + a.area, 0);
+    return added;
+  }
+
+  /**
+   * SNAP-109; BLD-006: the footprint only, never the look. Each building joins the set of the atom it stands in.
+   * Returns the ones that joined a set that already existed (LOAD-013: undo must learn about them).
+   */
+  addBuildings(bs: BuildingFeature[]): { set: BuildingSet; items: Building[] }[] {
+    const start = this.geoms.length;
+    const geoms = bs.map((b, k): BuildingGeom => {
+      const id = start + k;
       const shape = union([floatRing(b.ring)]);
       const [cx, cy] = shapeCentroid(shape);
       return { ...bbox(shape), id, source: b.source, ring: b.ring, shape, area: area(shape), cx, cy, atom: this.atomAt(cx, cy)?.id ?? -1, cluster: id, clusterSize: 1 };
     });
-    this.buildingIndex.load(this.geoms);
+    this.geoms.push(...geoms);
+    this.buildingIndex.load(geoms);
     this.clusterBuildings();
-    for (const [i, b] of features.buildings.entries()) {
-      const g = this.geoms[i];
-      const set = this.sets.get(g.atom) ?? { atom: g.atom, items: [] };
-      set.items.push(makeBuilding(g, b.tags, { look: b.look }));
-      this.sets.set(g.atom, set);
+    this.guesses.clear(); // TYPE-002: a new neighbour can change a cluster
+    const byAtom = new Map<number, Building[]>();
+    bs.forEach((b, k) => {
+      const g = geoms[k];
+      const list = byAtom.get(g.atom) ?? [];
+      list.push(makeBuilding(g, b.tags, { look: b.look }));
+      byAtom.set(g.atom, list);
+    });
+    const joined: { set: BuildingSet; items: Building[] }[] = [];
+    for (const [atom, items] of byAtom) {
+      const set = this.sets.get(atom);
+      if (!set) this.sets.set(atom, { atom, items });
+      else {
+        set.items = [...set.items, ...items]; // replaced, never mutated: undo holds the old arrays
+        joined.push({ set, items });
+      }
     }
-    // SNAP-108
+    return joined;
+  }
+
+  /** SNAP-108 */
+  addMinorLines(lines: MinorLine[]) {
     this.softIndex.load(
-      features.minorLines.map((l) => {
+      lines.map((l) => {
         const line = floatRing(l.pts);
         return { ...bbox([line]), line, fence: !!l.fence };
       }),
     );
+  }
+
+  /** The point a building stands at, as addBuildings places it. */
+  static buildingCentre(b: BuildingFeature): [number, number] {
+    return shapeCentroid(union([floatRing(b.ring)]));
   }
 
   /** TYPE-002: footprints that share a wall (within TUNE-GUESS-TOUCH) form one cluster. */

@@ -32,6 +32,7 @@ export interface BuildingFeature {
   look: BuildingLook | null; // BLD-001
 }
 export interface MinorLine {
+  source: string; // "way/123", so a line loaded twice counts once (LOAD-013)
   pts: Float32Array; // x,y metres
   major: boolean;
   fence?: boolean; // a fence, wall or hedge rather than a way (SNAP-108)
@@ -88,8 +89,13 @@ const isAreaish = (t: Tags) =>
     t["area:highway"] || t.area === "yes" ||
     (t.natural && t.natural !== "coastline" && t.natural !== "tree_row") || t.waterway === "riverbank");
 
-/** `proj` is the live map's fixed projection (LOAD-013); without one, the data's own bounds centre it. */
-export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds, projection?: Projection): Features {
+/**
+ * `proj` is the live map's fixed projection (LOAD-013); without one, the data's own bounds centre it. `style` is
+ * the street style the map settled on with its first land (LAT-009); without one, this data decides.
+ */
+export function extractFeatures(
+  osm: OsmData, boundsOverride?: LonLatBounds, projection?: Projection, style?: StreetStyle,
+): Features {
   const bounds = boundsOverride ?? dataBounds(osm);
   if (!bounds) throw new Error("The data has no nodes");
   const proj = projection ?? Projection.centredOn(bounds);
@@ -140,7 +146,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds, pro
     // LAT-001: a private street divides lots like a service road.
     if (bc && PRIVATE_LOCAL.has(bc) && t.access === "private") {
       const pts = partialCoords(w);
-      if (pts.length >= 2) f.minorLines.push({ pts: new Float32Array(pts.flat()), major: true });
+      if (pts.length >= 2) f.minorLines.push({ source: `way/${w.id}`, pts: new Float32Array(pts.flat()), major: true });
       continue;
     }
     if (bc) {
@@ -158,7 +164,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds, pro
     if (t.highway && MINOR_HIGHWAY.has(t.highway) && !(t.tunnel && t.tunnel !== "no")) {
       const pts = partialCoords(w);
       if (pts.length >= 2) {
-        f.minorLines.push({ pts: new Float32Array(pts.flat()), major: t.highway === "service" });
+        f.minorLines.push({ source: `way/${w.id}`, pts: new Float32Array(pts.flat()), major: t.highway === "service" });
         if (isSidewalk(t)) f.sidewalks.push(toRing(pts));
       }
       continue;
@@ -166,7 +172,7 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds, pro
     // SNAP-108: fences, walls and hedges divide blocks too. A closed one may also be an area, so read on.
     if (t.barrier && LOT_BARRIER.has(t.barrier)) {
       const pts = partialCoords(w);
-      if (pts.length >= 2) f.minorLines.push({ pts: new Float32Array(pts.flat()), major: false, fence: true });
+      if (pts.length >= 2) f.minorLines.push({ source: `way/${w.id}`, pts: new Float32Array(pts.flat()), major: false, fence: true });
     }
     if (!isClosed(w) || !isAreaish(t)) continue;
     const pts = coords(w);
@@ -207,8 +213,30 @@ export function extractFeatures(osm: OsmData, boundsOverride?: LonLatBounds, pro
     }
     addArea(`relation/${r.id}`, r.tags, intRings);
   }
-  f.style = streetStyle(f);
+  f.style = style ?? streetStyle(f);
   return f;
+}
+
+/**
+ * LOAD-013: adds what a newly loaded tile brought to the map's features, counting each OSM element once.
+ * Returns what was new. Street areas and sidewalks only shape a tile's own blocks, so they are not kept.
+ */
+export function mergeFeatures(into: Features, add: Features): Pick<Features, "barriers" | "areas" | "buildings" | "minorLines"> {
+  const fresh = <T>(have: T[], more: T[], key: (x: T) => string) => {
+    const known = new Set(have.map(key));
+    const out = more.filter((x) => !known.has(key(x)));
+    have.push(...out);
+    return out;
+  };
+  const f = into.frame, g = add.frame;
+  into.frame = { minX: Math.min(f.minX, g.minX), minY: Math.min(f.minY, g.minY), maxX: Math.max(f.maxX, g.maxX), maxY: Math.max(f.maxY, g.maxY) };
+  into.report.skippedRings += add.report.skippedRings;
+  return {
+    barriers: fresh(into.barriers, add.barriers, (b) => b.id),
+    areas: fresh(into.areas, add.areas, (a) => a.id),
+    buildings: fresh(into.buildings, add.buildings, (b) => b.source),
+    minorLines: fresh(into.minorLines, add.minorLines, (l) => l.source),
+  };
 }
 
 function evenOdd(rings: Ring[]): Shape {

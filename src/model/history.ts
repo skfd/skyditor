@@ -36,6 +36,19 @@ export class History {
     return s;
   }
 
+  /**
+   * LOAD-013: buildings that loaded into a set some steps already hold. No step changed them, so they belong on
+   * both sides of each step, or undoing one would make them vanish.
+   */
+  include(set: BuildingSet, items: Building[]) {
+    for (const s of [...this.done, ...this.undone])
+      for (const b of s.buildings ?? [])
+        if (b.set === set) {
+          b.before = [...b.before, ...items];
+          b.after = [...b.after, ...items];
+        }
+  }
+
   get canUndo() {
     return this.done.length > 0;
   }

@@ -1,13 +1,14 @@
 // Glue: input, the frame loop, and turning model events into feedback.
 import { area, toI, toM } from "./geo/clip";
-import { type Projection, squareAround } from "./geo/project";
-import { TileGrid } from "./geo/tiles";
+import { squareAround } from "./geo/project";
+import { type Tile, TileGrid } from "./geo/tiles";
 import { type Building, paintable, statusOf } from "./model/buildings";
 import { describeGuess } from "./model/guess";
 import { type CapturePlan, applyCapture, planCapture } from "./model/capture";
 import { History, type Step } from "./model/history";
 import { KINDS, type Kind, TIERS } from "./model/kinds";
-import { type Stage, worldFromText } from "./model/load";
+import { type Grown, LiveMap } from "./model/live";
+import { type LoadReport, type Stage, worldFromText } from "./model/load";
 import type { Piece, Quest, World } from "./model/world";
 import { fetchArea, searchPlaces } from "./osm/fetch";
 import { IMAGERY, TileCache } from "./osm/imagery";
@@ -92,6 +93,7 @@ export class App {
   private lastDecide: [number, number] | null = null; // TYPE-012: where the last jump went
   private lastFrame = performance.now();
   private loadingBusy = false;
+  private live: LiveMap | null = null; // LOAD-010: the map grows as land loads; null for the demo or a file (LOAD-017)
   private readonly badges = new Badges(); // REN-016 / HUD-012
   private readonly labels = new Labels(); // NAME-008
   private readonly perf = new PerfMeter(); // HUD-013
@@ -114,34 +116,52 @@ export class App {
 
   // ---------- loading ----------
 
-  private async load(getText: () => Promise<string>, place: string, hash: string, proj?: Projection) {
-    if (this.loadingBusy) return;
+  /** LOAD-007 / LOAD-008: the first land of a place, the demo or a file. */
+  private async load(
+    make: (stage: (s: Stage) => void) => Promise<{ world: World; report?: LoadReport }>,
+    place: string,
+    hash: string,
+    live: LiveMap | null = null,
+  ) {
+    if (this.loadingBusy) return false;
     this.loadingBusy = true;
     const stage = (s: Stage) => this.hud.loading(s);
     try {
-      stage("fetching");
-      const text = await getText();
-      const { world, report } = await worldFromText(text, stage, undefined, proj);
-      if (world.atoms.length === 0) throw new Error("No land found in this area");
+      const { world, report } = await make(stage);
+      this.live = live;
       this.setWorld(world, place);
       history.replaceState(null, "", hash || location.pathname + location.search);
-      this.hud.toast(`${report.atoms} blocks · ${report.pieces} landuse pieces · ${Math.round(report.ms)} ms`);
-      if (report.skippedRings) console.info(`Skipped ${report.skippedRings} incomplete multipolygon rings`);
+      if (report) {
+        this.hud.toast(`${report.atoms} blocks · ${report.pieces} landuse pieces · ${Math.round(report.ms)} ms`);
+        if (report.skippedRings) console.info(`Skipped ${report.skippedRings} incomplete multipolygon rings`);
+      }
+      return true;
     } catch (e) {
       // LOAD-008: the current area, if any, stays as it was.
       console.error(e);
       this.hud.toast(`Couldn't load: ${(e as Error).message}`, "error");
       if (!this.world) this.hud.showStart(true);
+      return false;
     } finally {
       this.hud.loading(null);
       this.loadingBusy = false;
     }
   }
 
+  /** The demo or a file: one fixed area (LOAD-017). */
+  private loadText(getText: () => Promise<string>, place: string, hash: string) {
+    return this.load(async (stage) => {
+      stage("fetching");
+      const loaded = await worldFromText(await getText(), stage);
+      if (loaded.world.atoms.length === 0) throw new Error("No land found in this area");
+      return loaded;
+    }, place, hash);
+  }
+
   private loadDemo() {
     this.hud.showStart(false);
     // LOAD-001
-    void this.load(async () => {
+    void this.loadText(async () => {
       const res = await fetch("fixtures/demo-tallinn.json");
       if (!res.ok) throw new Error(`demo data missing (HTTP ${res.status})`);
       return res.text();
@@ -150,17 +170,62 @@ export class App {
 
   private loadAround(lat: number, lon: number, name: string) {
     this.hud.showStart(false);
-    const side = Number(store.get("side")) || TUNE.AREA_SIDE;
-    const b = squareAround(lat, lon, side); // LOAD-002
-    // LOAD-013: the map's projection is fixed where it began, so land loaded later lines up with it.
-    const grid = TileGrid.at(lat, lon);
-    void this.load(() => fetchArea(b), name, `#map=${lat.toFixed(5)}/${lon.toFixed(5)}`, grid.proj); // LOAD-003, LOAD-009
+    // LOAD-013: one projection and tile grid for the whole map, fixed where it began.
+    const live = new LiveMap(TileGrid.at(lat, lon));
+    const half = (Number(store.get("side")) || TUNE.AREA_SIDE) / 2;
+    const [first, ...rest] = live.grid.around({ minX: -half, minY: -half, maxX: half, maxY: half }, 0); // LOAD-010
+    const hash = `#map=${lat.toFixed(5)}/${lon.toFixed(5)}`; // LOAD-009
+    void this.load(async (stage) => {
+      stage("fetching");
+      const text = await fetchArea(live.fetchBounds(first)); // LOAD-003
+      stage("blocks");
+      await new Promise((r) => setTimeout(r, 0));
+      return { world: live.add(first, text).world };
+    }, name, hash, live).then((ok) => {
+      if (ok) void this.loadMore(live, rest);
+    });
+  }
+
+  /** LOAD-010: more land, TUNE-LOAD-PARALLEL tiles at a time, while this is still the map shown. */
+  private async loadMore(live: LiveMap, tiles: Tile[]) {
+    const queue = [...tiles];
+    let failed = false;
+    const worker = async () => {
+      for (let t = queue.shift(); t && this.live === live; t = queue.shift()) {
+        try {
+          const text = await fetchArea(live.fetchBounds(t)); // LOAD-003
+          if (this.live === live) this.grew(live.add(t, text));
+        } catch (e) {
+          console.error(e);
+          if (!failed) this.hud.toast(`Couldn't load more of the map: ${(e as Error).message}`, "error");
+          failed = true;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: TUNE.LOAD_PARALLEL }, worker));
+  }
+
+  /** LOAD-013: new blocks joined the map. Nothing already loaded changes, undo included. */
+  private grew(g: Grown) {
+    const world = g.world;
+    for (const j of g.joined) this.history.include(j.set, j.items);
+    this.renderer?.setWorld(world);
+    const f = world.features.frame;
+    this.camera.bounds = { minX: toM(f.minX), minY: toM(f.minY), maxX: toM(f.maxX), maxY: toM(f.maxY) };
+    this.badges.set(world.issues);
+    this.areaCache = null;
+    // FEEL-007: the new blocks' landuse pops in.
+    const now = performance.now();
+    for (const a of g.atoms)
+      for (const p of a.pieces) if (p.kind !== null && p.kind !== "CTX") this.anims.pop(p, now, { appear: true, delay: 60 });
+    this.updateMix(true);
+    this.dirty = true;
   }
 
   private loadFile(file: File) {
     this.hud.showStart(false);
     // LOAD-004
-    void this.load(() => file.text(), file.name, "");
+    void this.loadText(() => file.text(), file.name, "");
   }
 
   /** LOAD-009 */
