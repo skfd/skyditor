@@ -5,6 +5,7 @@ import {
   offset, shapeCentroid, toI, toM, touches, union,
 } from "../geo/clip";
 import type { AreaFeature, BuildingFeature, Features, MinorLine } from "../osm/features";
+import { Source } from "../osm/source";
 import { type Building, type BuildingGeom, makeBuilding } from "./buildings";
 import { type Guess, guess } from "./guess";
 import type { CtxClass, Kind } from "./kinds";
@@ -258,6 +259,8 @@ export class World {
   overlay: AreaFeature[] = []; // IMP-003, render only
   issues: TagIssue[] = []; // IMP-014, render only
   readonly originals: AreaFeature[] = []; // IMP-009, render only
+  readonly source = new Source(); // OUT-001: the OSM elements this map came from
+  loaded: Shape = []; // OUT-004: where land has been loaded (the tiles' frames, or the file's), integer units
 
   /** `buildings` are the ones to show; on a live map that is fewer than it has fetched (LOAD-011). */
   constructor(

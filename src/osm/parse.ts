@@ -20,9 +20,12 @@ export interface OsmRelation {
 export interface OsmData {
   bounds: LonLatBounds | null;
   nodes: Map<number, [number, number]>; // id -> [lon, lat]
+  nodeTags: Map<number, Tags>; // OUT-004: only tagged nodes; a tagged node is never deleted with its way
   ways: Map<number, OsmWay>;
   relations: OsmRelation[];
 }
+
+export const emptyOsm = (): OsmData => ({ bounds: null, nodes: new Map(), nodeTags: new Map(), ways: new Map(), relations: [] });
 
 export function parseOsm(text: string): OsmData {
   const t = text.trimStart();
@@ -32,14 +35,16 @@ export function parseOsm(text: string): OsmData {
 }
 
 export function parseOsmJson(doc: any): OsmData {
-  const data: OsmData = { bounds: null, nodes: new Map(), ways: new Map(), relations: [] };
+  const data = emptyOsm();
   if (doc.bounds) {
     const b = doc.bounds;
     data.bounds = { minLat: +b.minlat, minLon: +b.minlon, maxLat: +b.maxlat, maxLon: +b.maxlon };
   }
   for (const e of doc.elements ?? []) {
-    if (e.type === "node") data.nodes.set(e.id, [e.lon, e.lat]);
-    else if (e.type === "way") data.ways.set(e.id, { id: e.id, nodes: e.nodes ?? [], tags: e.tags ?? {} });
+    if (e.type === "node") {
+      data.nodes.set(e.id, [e.lon, e.lat]);
+      if (e.tags && Object.keys(e.tags).length) data.nodeTags.set(e.id, e.tags);
+    } else if (e.type === "way") data.ways.set(e.id, { id: e.id, nodes: e.nodes ?? [], tags: e.tags ?? {} });
     else if (e.type === "relation")
       data.relations.push({
         id: e.id,
@@ -66,7 +71,7 @@ function attrs(s: string): Record<string, string> {
 
 /** A small streaming-free scanner. OSM XML is flat and regular enough that a full XML parser is not needed. */
 export function parseOsmXml(xml: string): OsmData {
-  const data: OsmData = { bounds: null, nodes: new Map(), ways: new Map(), relations: [] };
+  const data = emptyOsm();
   const b = /<bounds\b([^>]*)\/?>/.exec(xml);
   if (b) {
     const a = attrs(b[1]);
@@ -84,8 +89,10 @@ export function parseOsmXml(xml: string): OsmData {
         const ta = attrs(t[1]);
         tags[ta.k] = ta.v;
       }
-    if (m[1] === "node") data.nodes.set(id, [Number(a.lon), Number(a.lat)]);
-    else if (m[1] === "way")
+    if (m[1] === "node") {
+      data.nodes.set(id, [Number(a.lon), Number(a.lat)]);
+      if (Object.keys(tags).length) data.nodeTags.set(id, tags);
+    } else if (m[1] === "way")
       data.ways.set(id, { id, tags, nodes: [...body.matchAll(/<nd\b[^>]*\bref\s*=\s*["'](-?\d+)["']/g)].map((x) => Number(x[1])) });
     else
       data.relations.push({

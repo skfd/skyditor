@@ -64,7 +64,8 @@ export class LiveMap {
   add(t: Tile, text: string): Grown {
     this.tiles.add(tileKey(t));
     const bounds = this.grid.fetchBounds(t, this.opts.margin - TRUST);
-    const f = extractFeatures(parseOsm(text), bounds, this.grid.proj, this.store?.style); // LAT-009: decided once
+    const osm = parseOsm(text);
+    const f = extractFeatures(osm, bounds, this.grid.proj, this.store?.style); // LAT-009: decided once
     const lattice = buildLattice(f);
     this.trusted = union(this.trusted, rect(f.frame));
 
@@ -78,6 +79,8 @@ export class LiveMap {
       world.streets = union(world.streets, lattice.streets);
       world.water = union(world.water, lattice.water);
     }
+    world.source.add(osm); // OUT-001
+    world.loaded = this.trusted;
 
     // LOAD-013: what is new of each candidate block; LOAD-011: it joins the land still waiting.
     const parts: Shape[] = [];
@@ -105,6 +108,7 @@ export class LiveMap {
         minX: Math.min(p.minX, q.minX), minY: Math.min(p.minY, q.minY), maxX: Math.max(p.maxX, q.maxX), maxY: Math.max(p.maxY, q.maxY),
       }));
       importLanduse(world, this.store.areas.filter((a) => bboxOverlap(bbox(a.shape), box)), new Set(atoms));
+      world.source.snapshot(atoms); // OUT-002
     }
 
     // LOAD-011: a building shows with its block; one standing in no block shows once no waiting block holds it.
