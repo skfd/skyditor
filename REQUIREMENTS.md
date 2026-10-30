@@ -81,10 +81,11 @@ has been absorbed into a rewritten requirement, it may be retired.
 
 | Term | Meaning |
 |------|---------|
-| **Area** | The rectangular extent of OSM data that is loaded into one session. |
+| **Loaded land** | The blocks loaded so far in one session. It grows as the user moves around the map (LOAD-010). The demo and a dropped file are fixed rectangles (LOAD-017). |
+| **Not loaded yet** | Land around the loaded land that the editor has not loaded, or has loaded only part of a block of (LOAD-011). |
 | **Barrier** | A linear OSM feature that splits land into blocks: drivable roads, railways, rivers and canals (§4). |
 | **Street space** | The land the barriers take up, out to the property line, or to the kerb where the area is mapped that way (LAT-003, LAT-009). It is never paintable. |
-| **Atom** | One connected piece of land left over when street space and water are removed from the area. In a city, roughly a *block*. Atoms are the coarse snapping lattice. |
+| **Atom** | One connected piece of land left over when street space and water are removed from the loaded land. In a city, roughly a *block*. Atoms are the coarse snapping lattice. |
 | **Piece** | A connected region inside one atom with one landuse value (or none). Every atom is fully divided into pieces. |
 | **Void** | A piece with no landuse. |
 | **Kind** | The landuse value of a piece: a paintable kind (§5), an exclusive context kind (§6), or void. |
@@ -143,9 +144,8 @@ keyboard. Keys are shortcuts, never the only way to do something.
 
 **LOAD-001** The editor shall offer a bundled demo area that loads without network access.
 
-**LOAD-002** When the user picks a place from the search results, the editor shall load a square area of
-side TUNE-AREA-SIDE centred on that place.
-  Trace: manual
+~~**LOAD-002** When the user picks a place from the search results, the editor shall load a square area of
+side TUNE-AREA-SIDE centred on that place.~~ Retired: the map is no longer one square. LOAD-018 replaces it.
 
 **LOAD-003** When loading an area by bounding box, the editor shall first query the Overpass API and, if
 that fails, query the OSM API 0.6 `map` call.
@@ -160,18 +160,88 @@ included.
 **LOAD-006** If a multipolygon ring cannot be closed, then the editor shall skip that ring, keep loading,
 and count the skipped ring in the load report.
 
-**LOAD-007** While an area is loading, the editor shall show the current loading stage (fetching,
-reading, building blocks, reading landuse).
+**LOAD-007** While the first land of a place, the demo or a file is loading, the editor shall show the
+current loading stage (fetching, reading, building blocks, reading landuse). Land loaded after that loads
+quietly (LOAD-012).
   Trace: manual
 
-**LOAD-008** If loading fails, then the editor shall show a short reason and return to the start screen,
-without changing any area that was already loaded.
+**LOAD-008** If loading the first land of a place, the demo or a file fails, then the editor shall show a
+short reason and return to the start screen, without changing any map that was already loaded.
   Trace: manual
 
-**LOAD-009** When the page URL contains `#map=<lat>/<lon>`, the editor shall load the area centred there,
-and it shall keep that fragment updated with the loaded area's centre. The demo area uses `#demo`.
-  Why: repeatable dev sessions and shareable places.
+~~**LOAD-009** When the page URL contains `#map=<lat>/<lon>`, the editor shall load the area centred there,
+and it shall keep that fragment updated with the loaded area's centre. The demo area uses `#demo`.~~
+Retired: the link follows the view now, not one area. LOAD-019 replaces it.
+
+### Moving around
+
+The map loads as the user moves, the way a slippy map does. What the user sees is blocks arriving whole,
+never a tile or the edge of a download.
+
+**LOAD-010** While the map shows live OSM data and the zoom is closer than TUNE-LOAD-ZOOM, the editor shall
+load the land in view and within TUNE-LOAD-AHEAD around it as the user moves the map, nearest the view centre
+first.
+  Why: a city is not a square. The user goes where the work is, and the map follows.
+
+**LOAD-011** The editor shall show a block with its landuse and buildings, and let the user paint it, only
+once all of it is loaded. Until then the editor shall draw it as not loaded yet.
+  Why: a block cut off at the edge of a download is a block that does not exist. Paint on it would stop at an
+  edge nobody mapped, and joining it up later would move the user's paint under their hands.
+
+**LOAD-012** The editor shall draw land not loaded yet as plain faint ground with the streets already known
+on it, and while some of it in view is loading, show over it that it is loading.
   Trace: manual
+
+**LOAD-013** The editor shall keep every block it has loaded for the rest of the session, as it was, with
+the user's changes and undo history, however much more land loads.
+  Why: loading happens while the user works, so it must never move paint, take a change back or reach into
+  undo. There is no output in M0 (NG-001), so dropping land would drop the user's work.
+
+**LOAD-014** If a block is still not whole once its loaded part reaches TUNE-BLOCK-WAIT across, then the
+editor shall show it, cut along the edge of the land loaded so far; the rest of it becomes a block of its
+own when it loads.
+  Why: fields between country roads can be kilometres across. Waiting for all of one would leave nothing to
+  paint for a long time. The cut is a known M0 limit (Q-013).
+
+**LOAD-015** While part of a named residential area (NAME-001) is not loaded yet, the editor shall leave the
+area unchanged by strokes, taps and density steps, playing the reject feedback (FEEL-004) at most
+once per stroke, show its badge (NAME-005) only once it is loaded whole, and load the rest of it before
+other land.
+  Why: a named area changes whole or not at all. Changing the part that is loaded would leave it half
+  changed when the rest arrives. Its whole outline comes with the first land that touches it, so the rest
+  can be fetched straight away, and the wait is short.
+
+**LOAD-016** While the user points at a named residential area that is not loaded whole, the editor shall
+say that it is still loading.
+  Trace: manual
+
+**LOAD-017** While the map shows the demo (LOAD-001) or a dropped file (LOAD-004), the editor shall load no
+more land.
+  Why: the demo works offline, and a file is exactly what the user chose to open.
+
+**LOAD-018** When the user picks a place from the search results, the editor shall show it at
+TUNE-START-ZOOM and load the land around it (LOAD-010), keeping the land already loaded and the user's
+changes where the map is live and began within TUNE-LOAD-REACH of the place, and otherwise starting a new
+map there.
+  Why: searching for a street nearby is moving around, not starting over. One map stays true to the ground
+  only so far from where it began.
+  Trace: manual
+
+**LOAD-019** When the page URL contains `#map=<zoom>/<lat>/<lon>`, the editor shall show that place at that
+zoom, in the zoom levels openstreetmap.org links use, and load around it; while a live map is shown, it
+shall keep that fragment updated with the view's centre and zoom. `#map=<lat>/<lon>` opens at
+TUNE-START-ZOOM, and the demo uses `#demo`.
+  Why: repeatable dev sessions, and links that open where the user was looking.
+  Trace: manual
+
+**LOAD-020** If loading land around the view fails, then the editor shall say so briefly once, keep that
+land not loaded yet, and try it again after TUNE-LOAD-RETRY if it is still in view.
+  Why: a busy server should neither interrupt painting nor be asked again at once.
+
+**LOAD-021** The editor shall let an area capture another (CAP-007) only when both are loaded whole, and
+shall load the rest of a partly loaded area the capture tool points at before other land.
+  Why: a capture joins two areas whole (CAP-005). Joining the loaded parts would leave the rest arriving
+  later as an area of its own.
 
 ---
 
@@ -211,13 +281,14 @@ land anyone paints, then the editor shall discard it.
 **LAT-007** The editor shall not split an atom along a dead-end barrier that ends inside it. The dead end
 only becomes a notch in the atom.
 
-**LAT-009** If the existing landuse of the loaded area keeps most of the separately mapped sidewalks along
-its edges inside it, over at least TUNE-STYLE-EVIDENCE of sidewalk, then the editor shall stop street space
-at the kerb instead: a typical kerb width for each class (TUNE-HALFWIDTH), or half its tagged `width`, with
-sidewalks left as minor ways (SNAP-108).
+**LAT-009** If the existing landuse of the first land loaded in a session keeps most of the separately
+mapped sidewalks along its edges inside it, over at least TUNE-STYLE-EVIDENCE of sidewalk, then the editor
+shall stop street space at the kerb instead, for the whole session: a typical kerb width for each class
+(TUNE-HALFWIDTH), or half its tagged `width`, with sidewalks left as minor ways (SNAP-108).
   Why: Berlin, Vilnius and Kyiv map landuse to the kerb, with the sidewalk inside (Q-008). An editor that
   pulls every edit to the property line fights the local mappers. A city keeps one style, and one 600 m
-  square of careful landuse decides it.
+  square of careful landuse decides it. Deciding once keeps the blocks loaded later built the same way as
+  the ones already loaded (LOAD-013).
 
 **LAT-008** The editor shall treat as water the lakes, ponds, reservoirs, basins and river surfaces mapped
 as areas (tags in `src/osm/classes.ts`). Coastline handling is out of scope for M0.
@@ -746,12 +817,12 @@ holding Space, the editor shall pan the map. After release, it shall coast to a 
 **CAM-003** When the user presses an arrow key, the editor shall pan the map smoothly in that direction.
   Trace: manual
 
-**CAM-004** When an area finishes loading, or the user presses `F` or the fit button (HUD-006), the editor shall move the camera to fit
-the whole area.
-  Trace: manual
+~~**CAM-004** When an area finishes loading, or the user presses `F` or the fit button (HUD-006), the editor shall move the camera to fit
+the whole area.~~ Retired: a live map has no whole area to fit when it starts (LOAD-018). CAM-008 replaces it.
 
-**CAM-005** The editor shall keep the zoom within its limits (TUNE-ZOOM-MIN, TUNE-ZOOM-MAX), and keep the
-view centre within the area.
+~~**CAM-005** The editor shall keep the zoom within its limits (TUNE-ZOOM-MIN, TUNE-ZOOM-MAX), and keep the
+view centre within the area.~~ Retired: on a live map, moving past the loaded land is how more of it loads
+(LOAD-010). CAM-009 replaces it.
 
 **INP-001** When the user presses `[` or `]`, presses a brush size button (HUD-006), or turns the wheel
 while holding Shift, the editor shall shrink or grow the brush within its limits (TUNE-BRUSH-MIN,
@@ -775,6 +846,13 @@ release, it shall coast to a stop (TUNE-PAN-*).~~ Retired: the map does not resp
 
 **CAM-007** When the user presses the zoom-in or zoom-out button (HUD-006), the editor shall zoom by
 TUNE-ZOOM-STEP towards the centre of the view, with smooth motion.
+
+**CAM-008** When the demo or a dropped file finishes loading, or the user presses `F` or the fit button
+(HUD-006), the editor shall move the camera to fit all the loaded land.
+  Trace: manual
+
+**CAM-009** The editor shall keep the zoom within its limits (TUNE-ZOOM-MIN, TUNE-ZOOM-MAX), and, while the
+map shows the demo or a dropped file (LOAD-017), keep the view centre within its area.
 
 ---
 
@@ -926,7 +1004,7 @@ eraser and the capture tool (CAP-001).
 OSM tags it stands for.
   Trace: manual
 
-**HUD-003** The editor shall show a *district mix* bar: the share of the area's land held by each kind
+**HUD-003** The editor shall show a *district mix* bar: the share of the loaded land held by each kind
 (R1–R6, unspecified residential, mixed, commercial, retail, industrial, exclusive context, void). Each
 segment moves smoothly to its new value after every change.
   Why: like a city-builder's zoning meter — it tells you what the district is made of.
@@ -1266,3 +1344,7 @@ semicolon lists such as `single_family;terrace` a few dozen together. Leaving `r
 gesture that drags from one area into its neighbour, or a choice on the area's card. Until output exists (§15)
 it changes little the user can see: touching areas of one kind are drawn as one surface (REN-004).~~
 Answered: the capture tool (CAP-001 to CAP-009).
+
+**Q-013** Should a block cut by LOAD-014 be joined up once the rest of it loads, with the user's changes and
+undo history carried across? It shows in rural and edge-of-town areas. Count how often blocks in the replay
+squares reach TUNE-BLOCK-WAIT before deciding.

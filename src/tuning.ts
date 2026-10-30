@@ -6,6 +6,14 @@ export const TUNE = {
   // Geometry and loading
   GEOM_SCALE: 100, // TUNE-GEOM-SCALE: integer units per metre (1 cm resolution)
   AREA_SIDE: 1200, // TUNE-AREA-SIDE: side of a searched area, m
+  TILE_SIDE: 600, // TUNE-TILE-SIDE: side of one loaded tile of the live map, m (LOAD-010)
+  LOAD_MARGIN: 200, // TUNE-LOAD-MARGIN: land fetched past a tile's edge so the blocks crossing it close, m (LOAD-011)
+  LOAD_AHEAD: 300, // TUNE-LOAD-AHEAD: land loaded past the edge of the view, m
+  LOAD_ZOOM: 0.8, // TUNE-LOAD-ZOOM: farthest zoom out at which land loads, px/m
+  LOAD_PARALLEL: 2, // TUNE-LOAD-PARALLEL: tiles fetched at once
+  LOAD_RETRY: 30_000, // TUNE-LOAD-RETRY: wait before fetching land that failed again, ms
+  LOAD_REACH: 20_000, // TUNE-LOAD-REACH: farthest a searched place may lie from where the live map began and keep it, m
+  BLOCK_WAIT: 1500, // TUNE-BLOCK-WAIT: widest a block's loaded part may grow before it is shown cut, m (LOAD-014)
   HALFWIDTH: {
     // TUNE-HALFWIDTH: kerb-style street space half-width per barrier class, m; `width=*` overrides with width ÷ 2
     motorway: 12, trunk: 10, primary: 9, secondary: 8, tertiary: 7, unclassified: 5,
@@ -113,6 +121,7 @@ export const TUNE = {
   ZOOM_MIN: 0.08, // TUNE-ZOOM-MIN: farthest zoom out, px/m
   ZOOM_MAX: 12, // TUNE-ZOOM-MAX: closest zoom in, px/m
   ZOOM_STEP: 1.6, // TUNE-ZOOM-STEP: zoom factor per zoom button press
+  START_ZOOM: 1.5, // TUNE-START-ZOOM: zoom when a searched place opens, px/m (about OSM zoom 17 at 60° N)
   ZOOM_HALFLIFE: 70, // TUNE-ZOOM-HALFLIFE: zoom smoothing half-life, ms
   PAN_HALFLIFE: 160, // TUNE-PAN-HALFLIFE: pan coasting half-life, ms
 };
