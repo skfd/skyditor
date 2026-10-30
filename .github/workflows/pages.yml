@@ -27,11 +27,6 @@ jobs:
       - run: npm test
       - run: npm run trace
       - run: npm run build
-      # DEV-001: the test-server page, built apart, served at /dev/
-      - run: npx vite build --outDir dist/dev
-        env:
-          VITE_OSM_SERVER: dev
-          VITE_OSM_CLIENT_ID: ${{ vars.OSM_DEV_CLIENT_ID }}
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist

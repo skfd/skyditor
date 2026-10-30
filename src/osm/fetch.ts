@@ -1,8 +1,8 @@
-// Network access to public OSM services (LOAD-003, LOAD-018, DEV-001).
+// Network access to public OSM services (LOAD-003, LOAD-018).
 import type { LonLatBounds } from "../geo/project";
-import { SERVER, type Server } from "./server";
 
 const OVERPASS = "https://overpass-api.de/api/interpreter";
+const OSM_API = "https://api.openstreetmap.org/api/0.6/map";
 
 export function overpassQuery(b: LonLatBounds): string {
   const bb = `${b.minLat},${b.minLon},${b.maxLat},${b.maxLon}`;
@@ -31,13 +31,10 @@ async function withTimeout(url: string, init: RequestInit, ms: number) {
   }
 }
 
-/**
- * LOAD-003: Overpass first, then the OSM API `map` call. Returns the raw document text.
- * DEV-001: the test server is not indexed by Overpass, so its page asks its API alone.
- */
-export async function fetchArea(b: LonLatBounds, server: Server = SERVER): Promise<string> {
+/** LOAD-003: Overpass first, then the OSM API `map` call. Returns the raw document text. */
+export async function fetchArea(b: LonLatBounds): Promise<string> {
   const errors: string[] = [];
-  if (server.id === "main") try {
+  try {
     const res = await withTimeout(OVERPASS, { method: "POST", body: new URLSearchParams({ data: overpassQuery(b) }) }, 70_000);
     if (res.ok) {
       const text = await res.text();
@@ -49,7 +46,7 @@ export async function fetchArea(b: LonLatBounds, server: Server = SERVER): Promi
     errors.push(`Overpass: ${(e as Error).message}`);
   }
   try {
-    const url = `${server.api}/api/0.6/map?bbox=${b.minLon},${b.minLat},${b.maxLon},${b.maxLat}`;
+    const url = `${OSM_API}?bbox=${b.minLon},${b.minLat},${b.maxLon},${b.maxLat}`;
     const res = await withTimeout(url, {}, 60_000);
     if (res.ok) return res.text();
     errors.push(`OSM API: HTTP ${res.status}${res.status === 400 ? " (area has too many nodes)" : ""}`);

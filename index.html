@@ -19,9 +19,6 @@
         <span class="name">Skyditor</span>
         <span id="place" class="place"></span>
         <button id="btn-place" class="ghost" title="Choose another place">Change</button>
-        <!-- DEV-001 / AUTH-001: the test-server page only -->
-        <span id="server-tag" class="server-tag" hidden>test server</span>
-        <button id="btn-login" class="ghost" hidden>Log in</button>
       </div>
       <div class="pill right">
         <!-- HUD-009 / HUD-010 -->
@@ -41,9 +38,6 @@
         <!-- JOSM-001 / JOSM-003 -->
         <button id="btn-josm" class="ghost out" title="Open the changes in JOSM (K)" disabled>JOSM</button>
         <button id="btn-save" class="ghost out" title="Save the changes as an .osm file" disabled>Save</button>
-        <!-- UPL-001 / SEED-001: the test-server page only -->
-        <button id="btn-seed" class="ghost out" title="Copy this view from OpenStreetMap to the test server" hidden>Copy from OSM</button>
-        <button id="btn-upload" class="ghost out" title="Upload the changes to the test server" hidden disabled>Upload</button>
         <button id="btn-help" class="icon" title="Keys (H)">?</button>
       </div>
     </header>
@@ -126,8 +120,6 @@
         <div class="hero" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <h1>Skyditor</h1>
         <p class="sub">Paint the city's landuse. It snaps into place.</p>
-        <!-- DEV-001 -->
-        <p class="sub server-note" id="server-note" hidden>This is the <b>test server</b> page: it reads and writes <a href="https://master.apis.dev.openstreetmap.org/" target="_blank" rel="noopener">master.apis.dev.openstreetmap.org</a>, which has its own accounts and its own, mostly empty, map. Log in, copy a view from OpenStreetMap, paint, upload.</p>
         <button id="btn-demo" class="primary">Play the demo district</button>
         <div class="or">or load a real place</div>
         <form id="search">
@@ -140,18 +132,6 @@
       </div>
     </section>
 
-    <!-- UPL-001 -->
-    <section id="upload" role="dialog" aria-label="Upload">
-      <div class="card">
-        <button class="close ghost" title="Cancel">×</button>
-        <h2>Upload to the test server</h2>
-        <p class="what"></p>
-        <textarea placeholder="What did you change, in a line?" rows="2" maxlength="255"></textarea>
-        <p class="left" hidden></p>
-        <p class="actions"><button class="ghost cancel" type="button">Cancel</button><button class="primary go" type="button">Upload</button></p>
-        <p class="status" hidden></p>
-      </div>
-    </section>
     <section id="loading">
       <div class="card">
         <div class="spinner" aria-hidden="true"><i></i><i></i><i></i></div>

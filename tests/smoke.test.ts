@@ -104,8 +104,8 @@ describe("the app mounts", () => {
     expect(josm.title).toContain("(K)");
     expect($("#help")!.textContent).toContain("JOSM");
     expect($("#help")!.textContent).not.toContain("toy");
-    // NG-007 / DEV-001: no upload, copy or login on the main page.
-    for (const id of ["btn-upload", "btn-seed", "btn-login", "server-tag"]) expect($(`#${id}`)!.hidden).toBe(true);
+    // NG-007: no upload button on the main page.
+    expect($("#btn-upload")).toBeNull();
   });
 });
 
