@@ -784,6 +784,12 @@ spikes, stripes or motion.
   Why: a missing tag is a gap, not a contradiction. It should be easy to spot, and much quieter than a
   dispute (REN-013).
 
+**REN-017** While the view is zooming, the editor shall keep the map moving smoothly, even if it is a little
+soft, and shall show it sharp again once the zoom comes to rest.
+  Why: during a zoom the eye follows the motion, not the detail. Drawing every frame of it sharp costs more
+  than some machines can draw at full frame rate (REN-008).
+  Trace: manual
+
 ### 14.2 Feel
 
 **FEEL-001** When a piece is claimed, the editor shall play the *pop*: the slab rises from the ground to its
