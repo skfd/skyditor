@@ -104,8 +104,8 @@ function fold(by: Map<Kind, Shape>): Map<Kind, Shape> {
   const out = new Map<Kind, Shape>();
   for (const [k, s] of by) {
     const tags = KINDS[k].tags;
-    const same = ([...out.keys()] as Kind[]).find((o) => KINDS[o].tags.landuse === tags.landuse && KINDS[o].tags.residential === tags.residential);
-    const key = same ?? k;
+    // The first kind writing the same tags, in both worlds alike: whichever kind a world meets first would not do.
+    const key = (Object.keys(KINDS) as Kind[]).find((o) => KINDS[o].tags.landuse === tags.landuse && KINDS[o].tags.residential === tags.residential) ?? k;
     out.set(key, out.has(key) ? union(out.get(key)!, s) : s);
   }
   return out;

@@ -1,7 +1,7 @@
 // Edits a mapper might make on a loaded square, deterministic for the square, so the output can be checked
 // (bench/output/check.ts) and read back (bench/output/roundtrip.ts). Every fourth imported area is left alone
 // on purpose: the check wants areas that must not be written.
-import { type Shape, area, bbox, components, interiorPoint, isEmpty, toM, union } from "../../src/geo/clip";
+import { type Shape, area, bbox, components, interiorPoint, intersect, isEmpty, toM, union } from "../../src/geo/clip";
 import { type Kind, type PaintKind, tierOf } from "../../src/model/kinds";
 import type { World } from "../../src/model/world";
 import { type Tool } from "../../src/paint/snap";
@@ -28,6 +28,7 @@ const EMPTY_BLOCK = 2000; // m²; empty land this big gets painted
 export function editWorld(world: World): Edited {
   const edits: Edit[] = [];
   const regions: Shape[] = [];
+  const before = world.atoms.map((a) => a.pieces);
   const features = [...world.source.importedLand]
     .map(([feature, land]) => ({ feature, land, kind: world.source.importedKind.get(feature)! }))
     .filter((f) => area(f.land) >= MIN_AREA)
@@ -93,6 +94,16 @@ export function editWorld(world: World): Edited {
     regions.push(...changed);
     edits.push({ feature: `block/${atom.id}`, what: "paint", tool: describe(tool), rejected, changed: changed.reduce((s, c) => s + area(c), 0) });
   }
+  // Land of an area whose kind the edits changed, also where no event reported it (a named area stepped whole,
+  // NAME-004): pieces are replaced, never changed, so a piece that is new holds all of it. Land that passed to
+  // another area counts only where a stroke claimed it, so the check still sees an area changed by no stroke.
+  world.atoms.forEach((a, i) => {
+    const was = new Set(before[i] ?? []);
+    for (const p of a.pieces) {
+      if (was.has(p)) continue;
+      for (const q of before[i] ?? []) if (q.kind !== p.kind && q.feature === p.feature) regions.push(intersect(p.shape, q.shape));
+    }
+  });
   return { edits, painted: regions.length ? union(...regions) : [] };
 }
 
