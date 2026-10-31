@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { checkChanges, formatProblems } from "../bench/output/check";
 import { rect, toI, union } from "../src/geo/clip";
 import { applyCapture, planCapture } from "../src/model/capture";
 import { isProtected } from "../src/model/world";
@@ -16,7 +17,7 @@ type World = Awaited<ReturnType<Sketch["world"]>>;
 const box = (x0: number, y0: number, x1: number, y1: number) => rect({ minX: toI(x0), minY: toI(y0), maxX: toI(x1), maxY: toI(y1) });
 
 /** Paints an exact rectangle of `kind` (or erases, null) in the block holding (x, y), as a snapped stroke would. */
-function fill(w: World, kind: "R2" | "COM" | "R5" | null, x0: number, y0: number, x1: number, y1: number) {
+function fill(w: World, kind: "R1" | "R2" | "COM" | "R5" | null, x0: number, y0: number, x1: number, y1: number) {
   const block = atomAt(w, (x0 + x1) / 2, (y0 + y1) / 2);
   const eligible = union(...block.pieces.filter((p) => !isProtected(p)).map((p) => p.shape)); // PAINT-004
   block.pieces = applyRegion(block, { region: box(x0, y0, x1, y1), eligible }, kind).pieces;
@@ -241,6 +242,62 @@ describe("what is written", () => {
     expect(rel.members.map((m) => m.role).sort()).toEqual(["inner", "outer"]);
     const innerWay = c.create.ways.find((x) => x.id === rel.members.find((m) => m.role === "inner")!.ref)!;
     expect(innerWay.nodes.every((n) => n > 0)).toBe(true); // OUT-003: the park's own nodes
+  });
+
+  it("OUT-010: a slit narrower than round-off is closed, so the land is written with a hole rather than as one ring running back along itself", async () => {
+    const w = await new Sketch(300).grid(200).world();
+    // A frame around a hole, the frame cut through on the right by a slit 1 cm wide.
+    const region = union(box(-90, -90, 90, -50), box(-90, 50, 90, 90), box(-90, -50, -50, 50), box(50, -50, 90, 0), box(50, 0.01, 90, 50));
+    const block = atomAt(w, 0, -70);
+    const eligible = union(...block.pieces.filter((p) => !isProtected(p)).map((p) => p.shape));
+    block.pieces = applyRegion(block, { region, eligible }, "COM").pieces;
+    const c = computeChanges(w);
+    expect(formatProblems(checkChanges(w, c, null))).toBe("");
+    expect(c.create.relations.length).toBe(1);
+    expect(c.create.relations[0].members.map((m) => m.role).sort()).toEqual(["inner", "outer"]);
+  });
+
+  it("OUT-002: a way that is an area of its own and a multipolygon's hole is written once, by its own area", async () => {
+    const s = new Sketch(300).grid(200);
+    const outer = s.rect(-95, -95, 95, 95, {});
+    const shop = s.rect(-30, -30, 30, 30, { landuse: "retail", name: "Arcade" });
+    s.relation([{ way: outer, role: "outer" }, { way: shop, role: "inner" }], { landuse: "residential", residential: "rural" });
+    const w = await s.world();
+    expect(at(w, 0, 0)?.kind).toBe("RET");
+    fill(w, "COM", 20, -40, 40, 40); // across the shop's east edge: the shop shrinks and the hole grows
+    const c = computeChanges(w);
+    expect(formatProblems(checkChanges(w, c, null))).toBe("");
+    expect(c.modify.ways.filter((x) => x.id === shop).length).toBe(1);
+    expect(c.modify.ways.find((x) => x.id === shop)!.tags).toEqual({ landuse: "retail", name: "Arcade" });
+  });
+
+  it("OUT-004: a hole painted over goes, and its way with it", async () => {
+    const s = new Sketch(300).grid(200);
+    const outer = s.rect(-95, -95, 95, 95, {});
+    const inner = s.rect(-30, -30, 30, 30, {});
+    s.relation([{ way: outer, role: "outer" }, { way: inner, role: "inner" }], { landuse: "residential", residential: "rural" });
+    const w = await s.world();
+    expect(at(w, 0, 0)?.kind ?? null).toBe(null);
+    fill(w, "R1", -40, -40, 40, 40);
+    expect(at(w, 0, 0)?.feature).toBe(at(w, 60, 60)?.feature);
+    const c = computeChanges(w);
+    expect(formatProblems(checkChanges(w, c, null))).toBe("");
+    expect(c.delete.ways.map((x) => x.id)).toContain(inner);
+  });
+
+  it("CORR-007: erasing an area whose way is a hole in a wood keeps the way, without the area's tags", async () => {
+    const s = new Sketch(300).grid(200);
+    const wood = s.rect(-95, -95, 95, 95, {});
+    const houses = s.rect(-30, -30, 30, 30, { landuse: "residential", residential: "detached" });
+    s.relation([{ way: wood, role: "outer" }, { way: houses, role: "inner" }], { natural: "wood" });
+    const w = await s.world();
+    expect(at(w, 0, 0)?.kind).toBe("R2");
+    fill(w, null, -40, -40, 40, 40);
+    const c = computeChanges(w);
+    expect(c.counts.removed).toBe(1);
+    expect(c.delete.ways.map((x) => x.id)).not.toContain(houses);
+    expect(c.modify.ways.find((x) => x.id === houses)?.tags).toEqual({});
+    expect(formatProblems(checkChanges(w, c, null))).toBe("");
   });
 
   it("OUT-003: a street's node is never taken, even where the paint reaches it", async () => {

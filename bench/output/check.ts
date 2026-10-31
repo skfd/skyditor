@@ -27,6 +27,19 @@ export function checkChanges(world: World, c: Changes, painted: Shape | null): P
   const src = world.source;
   const proj = world.features.proj;
   const bad = (rule: string, element: string, detail: string) => out.push({ rule, element, detail });
+  /** A closed ring's node ids and positions: each node once, no crossing, some area (OUT-010). */
+  const ringProblems = (ids: number[], ring: Pt[], building: boolean, id: string) => {
+    const seen = new Set<number>();
+    for (const n of ids.slice(0, -1)) {
+      if (seen.has(n)) bad("geometry", id, `node ${n} visited twice`);
+      seen.add(n);
+    }
+    if (ids.length < 4 || ids[0] !== ids[ids.length - 1]) return;
+    const open = ring.slice(0, -1);
+    const cross = selfIntersection(open);
+    if (cross) bad("geometry", id, `self-intersects at (${(cross.X / 100).toFixed(1)}, ${(cross.Y / 100).toFixed(1)}) m`);
+    if (Math.abs(area([open])) < CRUMB && !building) bad("geometry", id, "no area");
+  };
 
   // Every node the file holds, by id, with its position in integer units.
   const nodes = new Map<number, Pt>();
@@ -79,6 +92,18 @@ export function checkChanges(world: World, c: Changes, painted: Shape | null): P
     }
   }
 
+  // The nodes each written way's area had before: an outline may keep a street node it had (OUT-003), also where
+  // a multipolygon's ring is written as a new way.
+  const had = new Map<number, Set<number>>();
+  for (const a of c.areas) {
+    const ref = refOf(a.feature.replace(/\+\w+$/, ""));
+    const ways = !ref ? [] : ref.type === "way" ? [src.ways.get(ref.id)] : (src.relations.get(ref.id)?.members ?? []).map((m) => (m.type === "way" ? src.ways.get(m.ref) : undefined));
+    const own = new Set(ways.flatMap((w) => w?.nodes ?? []));
+    for (const e of a.elements) if (e.type === "way") had.set(e.id, own);
+  }
+  // Untagged ways in a written multipolygon may be stretches of a ring (Q-014): their ring is checked there.
+  const members = new Set([...writtenRels.values()].flatMap((r) => r.members.filter((m) => m.type === "way").map((m) => m.ref)));
+
   // Ways: whole, closed, simple, and not on a street's nodes.
   const isBuilding = (w: OutWay) => !!w.tags.building;
   for (const w of writtenWays.values()) {
@@ -93,25 +118,24 @@ export function checkChanges(world: World, c: Changes, painted: Shape | null): P
         whole = false;
       } else ring.push(p);
       if (deletedNodes.has(n)) bad("OUT-004", id, `uses node ${n}, which is deleted`);
-      if (n > 0 && street.has(n) && !(before?.nodes.includes(n) ?? false)) bad("OUT-003", id, `takes street node ${n}`);
+      if (n > 0 && street.has(n) && !(before?.nodes.includes(n) ?? false) && !had.get(w.id)?.has(n)) bad("OUT-003", id, `takes street node ${n}`);
     }
-    if (w.nodes.length < 4) bad("geometry", id, `${w.nodes.length} nodes`);
-    if (w.nodes[0] !== w.nodes[w.nodes.length - 1]) bad("geometry", id, "not closed");
     for (let i = 1; i < w.nodes.length; i++) if (w.nodes[i] === w.nodes[i - 1]) bad("geometry", id, `node ${w.nodes[i]} twice in a row`);
-    const seen = new Set<number>();
-    for (const n of w.nodes.slice(0, -1)) {
-      if (seen.has(n)) bad("geometry", id, `node ${n} visited twice`);
-      seen.add(n);
-    }
-    if (whole && w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]) {
-      const open = ring.slice(0, -1);
-      const cross = selfIntersection(open);
-      if (cross) bad("geometry", id, `self-intersects at (${(cross.X / 100).toFixed(1)}, ${(cross.Y / 100).toFixed(1)}) m`);
-      if (Math.abs(area([open])) < CRUMB && !isBuilding(w)) bad("geometry", id, "no area");
+    if (members.has(w.id) && Object.keys(w.tags).length === 0) {
+      if (w.nodes.length < 2) bad("geometry", id, `${w.nodes.length} nodes`);
+    } else {
+      if (w.nodes.length < 4) bad("geometry", id, `${w.nodes.length} nodes`);
+      if (w.nodes[0] !== w.nodes[w.nodes.length - 1]) bad("geometry", id, "not closed");
+      if (whole) ringProblems(w.nodes, ring, isBuilding(w), id);
     }
     if (before) {
       if (isBuilding(w) && !sameNodes(before.nodes, w.nodes)) bad("TYPE-011", id, "a building's outline changed");
-      for (const [k, v] of Object.entries(before.tags)) if (!OWNED.has(k) && w.tags[k] !== v) bad("OUT-005", id, `tag ${k}=${v} lost or changed`);
+      // A way that gained a hole is the outer of a multipolygon now, and its tags are the relation's.
+      const moved = Object.keys(w.tags).length === 0 ? [...writtenRels.values()].find((r) => r.members.some((m) => m.type === "way" && m.ref === w.id && m.role === "outer")) : undefined;
+      const tags = moved?.tags ?? w.tags;
+      // CORR-007: a removed area's way that another feature still uses stays, with no tags.
+      const kept = Object.keys(w.tags).length === 0 && c.areas.some((a) => a.what === "removed" && a.elements.some((e) => e.type === "way" && e.id === w.id));
+      if (!kept) for (const [k, v] of Object.entries(before.tags)) if (!OWNED.has(k) && tags[k] !== v) bad("OUT-005", id, `tag ${k}=${v} lost or changed`);
       for (const k of Object.keys(w.tags)) if (!OWNED.has(k) && !(k in before.tags)) bad("OUT-005", id, `tag ${k} added`);
     }
   }
@@ -152,6 +176,10 @@ export function checkChanges(world: World, c: Changes, painted: Shape | null): P
       }
       return pts;
     };
+    for (const ring of [...outers.rings, ...inners.rings]) {
+      const pts = toRing(ring);
+      if (pts) ringProblems(ring, [...pts, pts[0]], false, id);
+    }
     const outerRings = outers.rings.map(toRing).filter((x): x is Pt[] => !!x);
     for (const ring of inners.rings) {
       const pts = toRing(ring);
@@ -175,6 +203,17 @@ export function checkChanges(world: World, c: Changes, painted: Shape | null): P
       if (deletedRels.has(r.id)) continue;
       const now = writtenRels.get(r.id) ?? r;
       if (now.members.some((m) => m.type === "way" && m.ref === w.id)) bad("OUT-004", `way/${w.id}`, `deleted but relation ${r.id} still uses it`);
+    }
+  }
+  // A way a rewritten relation let go of: untagged and in no relation any more, it must be deleted (OUT-004).
+  for (const r of c.modify.relations) {
+    const before = src.relations.get(r.id);
+    for (const m of before?.members ?? []) {
+      if (m.type !== "way" || deletedWays.has(m.ref)) continue;
+      const w = writtenWays.get(m.ref) ?? src.ways.get(m.ref);
+      if (!w || Object.keys(w.tags).length) continue;
+      const inRel = [...src.relations.values()].some((x) => !deletedRels.has(x.id) && (writtenRels.get(x.id) ?? x).members.some((mm) => mm.type === "way" && mm.ref === m.ref));
+      if (!inRel) bad("OUT-004", `way/${m.ref}`, `left untagged and unused by relation ${r.id}`);
     }
   }
   for (const w of c.delete.ways)

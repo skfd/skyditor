@@ -138,10 +138,14 @@ export interface Component {
   holes: Ring[];
 }
 
-/** Splits a shape into connected components (outer ring + its holes). */
-export function components(s: Shape): Shape[] {
+/**
+ * Splits a shape into connected components (outer ring + its holes). `strict` parts every ring that would pass
+ * through one point twice there, so no ring touches itself (OUT-010).
+ */
+export function components(s: Shape, strict = false): Shape[] {
   if (isEmpty(s)) return [];
   const c = new Clipper();
+  c.StrictlySimple = strict;
   c.AddPaths(s, PolyType.ptSubject, true);
   const tree = new ClipperLib.PolyTree();
   c.Execute(ClipType.ctUnion, tree, PolyFillType.pftNonZero, PolyFillType.pftNonZero);

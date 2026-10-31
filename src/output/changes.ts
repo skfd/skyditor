@@ -116,7 +116,8 @@ export function computeChanges(world: World, skip: ReadonlySet<string> = new Set
   const landsOf = (feature: string): Land[] => {
     const byKind = now.get(feature);
     if (!byKind) return [];
-    return [...byKind].map(([kind, shapes]) => ({ kind, shape: union(...shapes) })).sort((a, b) => area(b.shape) - area(a.shape));
+    // A kind holding less than CRUMB is round-off at a stroke's edge, not a second kind (OUT-002).
+    return [...byKind].map(([kind, shapes]) => ({ kind, shape: union(...shapes) })).filter((l) => area(l.shape) >= CRUMB).sort((a, b) => area(b.shape) - area(a.shape));
   };
   const originals = new Map(world.features.areas.map((a) => [a.id, a]));
   const land = union(...world.atoms.filter((a) => a.pieces.length).map((a) => a.shape)); // every block, bridges included
@@ -170,7 +171,7 @@ export function computeChanges(world: World, skip: ReadonlySet<string> = new Set
     const kind = lands[0]?.kind ?? importedKind;
     // What is left of an outline inside the loaded land but holding none of the area's land now is the lattice's
     // reading of it (street space, slivers), not land the user kept: a captured or erased area goes whole (OUT-006).
-    let out = components(r.out).filter((c) => !isEmpty(intersect(c, current)) || !inside(c, world.loaded)).flat();
+    let out = grouped(r.out).filter((c) => !isEmpty(intersect(c, current)) || !inside(c, world.loaded)).flat();
     // A second kind in the area becomes an area of its own, with the original's tags but its own kind.
     for (const extra of lands.slice(1)) {
       const others = union(...lands.filter((l) => l !== extra).map((l) => l.shape));
@@ -220,6 +221,8 @@ export function retag(tags: Tags, kind: Kind): Tags {
   return { ...out, ...KINDS[kind].tags };
 }
 
+const sameIds = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => n === b[i]);
+
 const sameTags = (a: Tags, b: Tags) => {
   const ka = Object.keys(a), kb = Object.keys(b);
   return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
@@ -231,22 +234,118 @@ const material = (s: Shape): Shape => components(s).filter((c) => area(c) >= CRU
 /**
  * OUT-010: an outline as OSM should get it: without the strips and holes narrower than 2 × SLIVER that dividing
  * street space leaves along a cut, and without the seams, spikes and doubled points within TIDY that integer
- * boolean ops leave behind. Rings that only touch at a point are parted. Original nodes dropped as nearly
- * collinear come back in `withOriginals`.
+ * boolean ops leave behind. A vertex within TIDY of another edge is put on it (close), and rings that then
+ * touch are parted there, so no ring crosses or touches itself once written as nodes. Crumbs and thin holes go
+ * last, since tidying can leave new ones. Original nodes dropped as nearly collinear come back in `withOriginals`.
  */
 const clean = (s: Shape): Shape => {
   if (isEmpty(s)) return s;
   const slivers = narrowParts(s, SLIVER);
   let out = slivers.length ? difference(s, union(...slivers)) : s;
-  const kept: Shape = [];
-  for (const [outer, ...holes] of components(out)) {
-    if (area([outer]) < CRUMB) continue;
-    kept.push(outer);
-    for (const h of holes) if (area([h]) >= CRUMB && !isEmpty(opening(union([h]), SLIVER, "miter"))) kept.push(h);
+  out = ClipperLib.Clipper.CleanPolygons(ClipperLib.Clipper.SimplifyPolygons(out, ClipperLib.PolyFillType.pftNonZero), toI(TIDY)).filter((r) => r.length >= 3);
+  // Tidying can make a ring cross itself; the union parts it there, and may leave a near touch where it rounds
+  // the crossing, which closing puts exactly on. A few rounds settle it.
+  for (let round = 0; round < 4; round++) {
+    out = components(out, true).flat();
+    const closed = close(out, ON_EDGE);
+    if (!closed) break;
+    out = closed;
   }
-  out = ClipperLib.Clipper.CleanPolygons(ClipperLib.Clipper.SimplifyPolygons(kept, ClipperLib.PolyFillType.pftNonZero), toI(TIDY)).filter((r) => r.length >= 3);
-  return material(union(out));
+  // Clipper can keep a vertex exactly on another edge of its ring however often it unions it. Put on that edge,
+  // the ring passes the point twice, and is split there into two rings that share it.
+  const rings = parts(out).flat();
+  return (close(rings, ON_EDGE) ?? rings)
+    .flatMap(split)
+    .filter((r) => area([r]) >= CRUMB && (ClipperLib.Clipper.Area(r) > 0 || !isEmpty(opening(union([r]), SLIVER, "miter"))));
 };
+
+/** A ring that passes a point twice, as the rings between the passes, each passing every point once. */
+function split(ring: Ring): Ring[] {
+  const seen = new Map<string, number>();
+  for (let i = 0; i < ring.length; i++) {
+    const j = seen.get(key(ring[i]));
+    if (j !== undefined) return [...split(ring.slice(j, i)), ...split([...ring.slice(i), ...ring.slice(0, j)])];
+    seen.set(key(ring[i]), i);
+  }
+  return ring.length >= 3 ? [ring] : [];
+}
+
+/**
+ * OUT-010: a shape's parts as written, each an outer ring and its holes, no ring touching itself; parts and
+ * holes under CRUMB and holes thinner than 2 × SLIVER left out. Parting rings can leave such a crumb, also
+ * when the shape was cleaned before, so the writer takes every shape through here.
+ */
+const parts = (s: Shape): Shape[] =>
+  components(s, true)
+    .filter(([outer]) => area([outer]) >= CRUMB)
+    .map(([outer, ...holes]) => [outer, ...holes.filter((h) => area([h]) >= CRUMB && !isEmpty(opening(union([h]), SLIVER, "miter")))]);
+
+/**
+ * Rings that `clean` made, grouped into parts (each outer ring with the holes inside it) without another
+ * boolean op: a union of rings already sound can round a vertex across an edge again (OUT-010).
+ */
+function grouped(s: Shape): Shape[] {
+  const outers = s.filter((r) => ClipperLib.Clipper.Area(r) > 0).sort((a, b) => ClipperLib.Clipper.Area(a) - ClipperLib.Clipper.Area(b));
+  const out = new Map<Ring, Ring[]>(outers.map((o) => [o, []]));
+  for (const h of s) {
+    if (ClipperLib.Clipper.Area(h) > 0) continue;
+    // The smallest outer ring with a vertex of the hole inside it, not on its edge.
+    const o = outers.find((o) => h.some((p) => ClipperLib.Clipper.PointInPolygon(p, o) === 1));
+    if (o) out.get(o)!.push(h);
+  }
+  return outers.map((o) => [o, ...out.get(o)!]);
+}
+
+/**
+ * OUT-010: the rings with every vertex that lies within `tol` of another vertex or of an edge it is not on
+ * moved onto it: a vertex onto the other, an edge through the vertex. Clipper keeps such a near touch as it is
+ * (it is within its rounding), but once written as nodes it is a crossing or a ring touching itself; put
+ * exactly on, the next union parts the rings there or drops the zero-width strip between them. Null when
+ * nothing is that close.
+ */
+function close(rings: Ring[], tol: number): Ring[] | null {
+  // Vertices onto vertices: each one within tol of an earlier one takes its place.
+  const at = new Map<string, Pt>();
+  const grid = new Map<string, Pt[]>();
+  const cell = (p: Pt) => `${Math.floor(p.X / (tol + 1))},${Math.floor(p.Y / (tol + 1))}`;
+  let moved = false;
+  for (const ring of rings)
+    for (const p of ring) {
+      if (at.has(key(p))) continue;
+      const cx = Math.floor(p.X / (tol + 1)), cy = Math.floor(p.Y / (tol + 1));
+      let to: Pt | undefined;
+      for (let dx = -1; dx <= 1 && !to; dx++)
+        for (let dy = -1; dy <= 1 && !to; dy++)
+          to = grid.get(`${cx + dx},${cy + dy}`)?.find((q) => Math.hypot(q.X - p.X, q.Y - p.Y) <= tol);
+      if (to) moved = true;
+      at.set(key(p), to ?? p);
+      if (!to) (grid.get(cell(p)) ?? grid.set(cell(p), []).get(cell(p))!).push(p);
+    }
+  let out = rings.map((r) => r.map((p) => at.get(key(p)) ?? p));
+  // Edges through vertices: a vertex within tol of an edge, between its ends, is put into it.
+  const verts = [...new Map(out.flat().map((p) => [key(p), p])).values()];
+  out = out.map((ring) => {
+    const res: Ring = [];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      res.push(a);
+      const minX = Math.min(a.X, b.X) - tol, maxX = Math.max(a.X, b.X) + tol, minY = Math.min(a.Y, b.Y) - tol, maxY = Math.max(a.Y, b.Y) + tol;
+      const dx = b.X - a.X, dy = b.Y - a.Y, len2 = dx * dx + dy * dy;
+      if (len2 === 0) continue;
+      const on: { t: number; p: Pt }[] = [];
+      for (const p of verts) {
+        if (p.X < minX || p.X > maxX || p.Y < minY || p.Y > maxY || key(p) === key(a) || key(p) === key(b)) continue;
+        const t = ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / len2;
+        if (t <= 0 || t >= 1) continue;
+        if (distToSegment(p, a, b) <= tol) on.push({ t, p });
+      }
+      if (on.length) moved = true;
+      for (const { p } of on.sort((x, y) => x.t - y.t)) res.push(p);
+    }
+    return res;
+  });
+  return moved ? out : null;
+}
 
 /**
  * OUT-002: land `taken` from an area reaches out into the street space its outline covers beyond the block's
@@ -481,7 +580,7 @@ class Writer {
 
   createArea(feature: string, kind: Kind, land: Shape, tags: Tags): AreaChange {
     const elements: Ref[] = [];
-    for (const comp of components(land)) {
+    for (const comp of grouped(land)) {
       const [outer, ...holes] = comp;
       const outerWay = this.newWay(this.ringNodes(outer, []), holes.length ? {} : tags, elements);
       if (holes.length) {
@@ -506,7 +605,7 @@ class Writer {
   /** OUT-002: an outline rewritten. `retagged` says whether the tags changed as well. */
   modifyArea(feature: string, ref: Ref, kind: Kind, out: Shape, tags: Tags, retagged: boolean): AreaChange | null {
     const elements: Ref[] = [];
-    const comps = components(out);
+    const comps = grouped(out);
     if (ref.type === "way") {
       const way = this.src.ways.get(ref.id)!;
       // The biggest part keeps the way; any other part is an area of its own with the same tags.
@@ -565,12 +664,15 @@ class Writer {
       }
       const ways = best ? ringWays(best).filter((w) => !used.has(w.id)) : [];
       const nodes = this.ringNodes(ring, best ?? []);
-      if (ways.length === 1) {
+      // A way that is an area of its own (tagged, or in another relation) keeps its outline for that area: where
+      // this ring leaves it, the ring is a new way (OUT-002), and the way is written once, by its own area.
+      const foreign = (w: OsmWay) => Object.keys(w.tags).length > 0 || [...this.src.relations.values()].some((r) => r.id !== id && r.members.some((m) => m.type === "way" && m.ref === w.id));
+      if (ways.length === 1 && (!foreign(ways[0]) || sameIds(nodes, ways[0].nodes))) {
         used.add(ways[0].id);
         members.push({ type: "way", ref: this.rewrite(ways[0], nodes, ways[0].tags, elements, false).id, role });
         return;
       }
-      if (ways.length === 0) {
+      if (ways.length <= 1) {
         members.push({ type: "way", ref: this.newWay(nodes, {}, elements).id, role });
         return;
       }
@@ -614,7 +716,7 @@ class Writer {
     }
     // Members that are not ways (rare) stay.
     for (const m of rel.members) if (m.type !== "way") members.push(m);
-    for (const w of memberWays) if (!used.has(w.id)) this.dropWay(w, elements);
+    for (const w of memberWays) if (!used.has(w.id)) this.dropWay(w, elements, false, id);
     const same = !retagged && members.length === rel.members.length && members.every((m, i) => m.ref === rel.members[i].ref && m.role === rel.members[i].role);
     if (!same) {
       this.modify.relations.push({ id, members, tags: { ...tags, type: "multipolygon" } });
@@ -627,7 +729,9 @@ class Writer {
     const elements: Ref[] = [];
     if (ref.type === "way") {
       const way = this.src.ways.get(ref.id)!;
-      this.dropWay(way, elements, true);
+      // CORR-007: a way another feature still draws its outline with stays, without the area's tags.
+      if (this.usedElsewhere(way.id)) this.rewrite(way, way.nodes, {}, elements);
+      else this.dropWay(way, elements, true);
     } else {
       const rel = this.src.relations.get(ref.id)!;
       this.delete.relations.push({ id: rel.id, members: rel.members, tags: rel.tags });
@@ -642,16 +746,20 @@ class Writer {
   }
 
   /** A way no area needs: deleted when it carries nothing of its own and no other element uses it. */
-  private dropWay(way: OsmWay, elements: Ref[], own = false) {
-    if (!own && (Object.keys(way.tags).length || this.usedElsewhere(way.id))) return;
+  private dropWay(way: OsmWay, elements: Ref[], own = false, from?: number) {
+    if (!own && (Object.keys(way.tags).length || this.usedElsewhere(way.id, from))) return;
     this.delete.ways.push({ id: way.id, nodes: way.nodes, tags: way.tags });
     this.removedWays.add(way.id);
     elements.push({ type: "way", id: way.id });
   }
 
-  private usedElsewhere(wayId: number): boolean {
-    for (const r of this.src.relations.values())
-      if (!this.removedRelations.has(r.id) && r.members.some((m) => m.type === "way" && m.ref === wayId)) return true;
+  /** Whether a relation other than `from` still has the way as a member, as written if it was rewritten. */
+  private usedElsewhere(wayId: number, from?: number): boolean {
+    for (const r of this.src.relations.values()) {
+      if (r.id === from || this.removedRelations.has(r.id)) continue;
+      const now = this.modify.relations.find((x) => x.id === r.id) ?? r;
+      if (now.members.some((m) => m.type === "way" && m.ref === wayId)) return true;
+    }
     return false;
   }
 

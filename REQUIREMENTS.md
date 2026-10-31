@@ -1269,7 +1269,7 @@ through them, give two areas that meet along one edge the same nodes, and never 
 
 **OUT-004** The editor shall write painted land that belongs to no OSM element as a new area: one closed way
 for each connected part, a multipolygon relation where a part has holes. An area whose land is all gone shall
-be deleted, together with the nodes no other element uses.
+be deleted, together with the nodes no other element uses. → see CORR-007
 
 **OUT-005** The editor shall write a changed area's kind as the tags KIND-001 names for it, replacing only
 `landuse=*` and `residential=*` and keeping every other tag; R6 writes `residential=apartments` (Q-002) and
@@ -1375,6 +1375,14 @@ place of the brush cursor; while the brush acts on land and the cursor rests on 
   as the mark and is pressed the same way, already showed a hand.
   Why: on a desktop the cursor says what a click will do before the user clicks.
   Trace: manual
+
+**CORR-007** (corrects OUT-004) When an area whose land is all gone is drawn by a way that another feature
+still uses for its own outline, the editor shall keep the way and take the area's tags off it, rather than
+delete it.
+  Observed: on real data (Gdańsk), erasing a residential area deleted its way, which a wood's multipolygon
+  still used as the edge of a hole. The wood would lose the hole, and OpenStreetMap refuses to delete a way a
+  relation still uses.
+  Why: an area going means its tags go. The line it was drawn with may be someone else's edge too.
 
 ---
 
