@@ -1,11 +1,13 @@
 // Output check on real data (bench/output/run.ts): loads each square or file, makes a mapper's edits, writes the
 // changes, checks them as JOSM's validator would, and reads the file back. Usage:
-//   node scripts/outcheck.mjs [files...] [--squares dir] [--list file] [--only a,b] [--limit n] [--svg] [--out dir]
+//   node scripts/outcheck.mjs [files...] [--squares dir] [--list file] [--only a,b] [--limit n] [--svg] [--out dir] [--jobs n]
+// --jobs runs the squares in n processes at once and reports them together.
 // With no files it runs the bundled fixtures: the demo district and the replay square. --squares runs the
 // replay squares of research/landuse-edges (work/squares, cut by grid.py), like scripts/replay.mjs.
 import { runnerImport } from "vite";
 import { gunzipSync } from "node:zlib";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,6 +57,30 @@ const svg = flag("svg");
 mkdirSync(out, { recursive: true });
 const { module } = await runnerImport(join(root, "bench/output/run.ts"));
 const results = [];
+const jobs = Math.min(Number(opt("jobs", 1)), inputs.length);
+if (jobs > 1) {
+  // Each process takes every jobs-th input and writes its results to a file of its own; the order is kept.
+  const own = args.filter((a, i) => !["--jobs", "--only", "--limit"].includes(a) && !["--jobs", "--only", "--limit"].includes(args[i - 1]) && !files.includes(a));
+  const parts = await Promise.all(
+    Array.from({ length: jobs }, (_, k) => {
+      const mine = inputs.filter((_, i) => i % jobs === k);
+      const part = join(out, `results.part${k}.json`);
+      const childArgs = mine.length && files.length ? [...mine.map((x) => x.file), ...own] : [...own, "--only", mine.map((x) => x.name).join(",")];
+      return new Promise((done, fail) => {
+        const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...childArgs, "--part", part], { stdio: ["ignore", "ignore", "inherit"] });
+        child.on("exit", (code) => (code === 0 ? done(part) : fail(new Error(`job ${k} exited with ${code}`))));
+      });
+    }),
+  );
+  const byName = new Map(parts.flatMap((p) => JSON.parse(readFileSync(p, "utf8"))).map((r) => [r.name, r]));
+  for (const p of parts) rmSync(p);
+  results.push(...inputs.map((x) => byName.get(x.name)).filter(Boolean));
+  writeFileSync(join(out, "results.json"), JSON.stringify(results, null, 1));
+  console.log(module.report(results));
+  process.stderr.write(`files in ${out}
+`);
+  process.exit(0);
+}
 for (const { name, file } of inputs) {
   if (!existsSync(file)) {
     process.stderr.write(`${name}: no file ${file}\n`);
@@ -70,6 +96,10 @@ for (const { name, file } of inputs) {
     process.stderr.write(`${name}: ${e.stack ?? e}\n`);
     results.push({ name, ms: {}, areas: 0, untouchedWrites: 0, edits: [], counts: { changed: 0, added: 0, removed: 0, buildings: 0 }, elements: { create: 0, modify: 0, delete: 0, context: 0 }, problems: [{ rule: "crash", element: name, detail: String(e.message ?? e) }], roundtrip: { byKind: [], painted_m2: 0, readback_m2: 0, overlap_m2: 0, iou: 0 }, xmlBytes: 0 });
   }
+}
+if (opt("part", null)) {
+  writeFileSync(opt("part"), JSON.stringify(results));
+  process.exit(0);
 }
 writeFileSync(join(out, "results.json"), JSON.stringify(results, null, 1));
 console.log(module.report(results));
