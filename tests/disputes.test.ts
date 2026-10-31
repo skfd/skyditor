@@ -164,6 +164,21 @@ describe("settling disputes", () => {
     expect(at(w, 0, 0)?.rival?.kind).toBe("R2");
   });
 
+  it("DISP-004: a dispute with one area survives a stroke beside a dispute with another; only a tap settles it", async () => {
+    // A park overlapped by two housing areas, one above the other: two disputes that touch along y = 0.
+    const s = new Sketch(300).grid(200);
+    s.rect(-95, -95, 20, 95, { leisure: "park" });
+    const south = s.rect(-30, -95, 95, 0, { landuse: "residential", residential: "detached" });
+    const north = s.rect(-30, 0, 95, 95, { landuse: "residential", residential: "detached" });
+    const w = await s.world();
+    expect(at(w, 0, -50)?.rival?.source).toBe(`way/${south}`);
+    expect(at(w, 0, 50)?.rival?.source).toBe(`way/${north}`);
+    paint(w, { type: "paint", kind: "COM" }, 8, [[60, -80], [60, -20]]); // the block is merged anew
+    expect(at(w, 60, -50)?.kind).toBe("COM");
+    expect(at(w, 0, -50)?.rival?.source).toBe(`way/${south}`);
+    expect(at(w, 0, 50)?.rival?.source).toBe(`way/${north}`);
+  });
+
   it("PAINT-004: undisputed context stays protected from taps", async () => {
     const w = await parkClash();
     const { events, step } = paint(w, { type: "paint", kind: "R2" }, 20, [[-70, 0]], true);

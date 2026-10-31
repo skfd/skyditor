@@ -118,10 +118,11 @@ export function makePiece(
 }
 
 export const isProtected = (p: Piece) => p.kind === "CTX"; // PAINT-004
-// Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013). A named area
-// merges only with itself, so it keeps its outline too and stays one place (NAME-001).
+// Disputed pieces never merge with undisputed ones, so a dispute keeps its own outline (REN-013), nor with a
+// dispute against another area, which would drop that dispute unsettled (DISP-004). A named area merges only
+// with itself, so it keeps its outline too and stays one place (NAME-001).
 export const groupKey = (p: Piece) =>
-  `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}` : ""}|${p.whole ? p.source : ""}`;
+  `${p.kind}|${p.ctx ?? ""}|${p.rival ? `${p.rival.kind}|${p.rival.ctx ?? ""}|${p.rival.source ?? ""}` : ""}|${p.whole ? p.source : ""}`;
 export const VOID_MIN_AREA = 0.5; // m²; cracks smaller than this are integer round-off, not land
 export const SOFT_LINE_HALF_WIDTH = 0.25; // m; just enough to separate cells; swallowed again by SNAP-103, or along fences filled by SNAP-112
 
