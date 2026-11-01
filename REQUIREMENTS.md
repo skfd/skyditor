@@ -1464,3 +1464,11 @@ where it matters.
 **Q-013** Should a block cut by LOAD-014 be joined up once the rest of it loads, with the user's changes and
 undo history carried across? It shows in rural and edge-of-town areas. Count how often blocks in the replay
 squares reach TUNE-BLOCK-WAIT before deciding.
+
+**Q-015** Two areas that overlap in OSM, of which the user changed one: the editor writes the changed area's
+own outline wherever the user did not change it (OUT-002), overlap included. When the change makes the area
+smaller than its neighbour, reading the file back gives the overlap to it instead (IMP-004), so land the user
+saw as the neighbour's comes back as this area's (Berlin square 1_4: about 4,800 m²). Decided 2026-10-31:
+leave OSM's overlaps alone and write only what the user changed; such cases are taken on one by one as they
+come up. In the output check on the 265 replay squares, 8 squares read back under 0.98 of the land painted,
+largely this way.
