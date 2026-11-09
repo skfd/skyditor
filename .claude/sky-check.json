@@ -1,0 +1,4 @@
+{
+  "command": "npm run typecheck; if ($LASTEXITCODE) { exit $LASTEXITCODE }; npm test",
+  "timeoutSeconds": 120
+}
