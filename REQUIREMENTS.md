@@ -1,5 +1,7 @@
 # Skyditor — Requirements
 
+<!-- kk-handoff: keep (a spec / deliverable by design, not a handoff) -->
+
 This file is the **primary source of truth** for Skyditor. Code follows from it, not the other way round.
 If the code and this file disagree, the code is wrong — or this file gets changed first, on purpose.
 
